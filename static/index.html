@@ -913,16 +913,15 @@
   <!-- GANTT EXCEL / CSV UPLOAD MODAL -->
   <div id="gantt-upload-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-      
-      <!-- Modal Header -->
+            <!-- Modal Header -->
       <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-        <div class="flex items-center space-x-2.5">
+        <div class="flex items-center space-x-3">
           <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
             <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-800 dark:text-white">Upload Gantt Chart (Excel / CSV)</h3>
-            <p class="text-xs text-slate-500">Import tasks, assignees, dates, and durations directly into your schedule</p>
+            <h3 class="text-base font-bold text-slate-800 dark:text-white">Import Tasks from Excel / CSV</h3>
+            <p class="text-xs text-slate-500">Upload ANY sheet (simple 1-column task list, 2-column table, or full Gantt schedule)</p>
           </div>
         </div>
         <button onclick="app.closeGanttUploadModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
@@ -936,13 +935,16 @@
         <!-- Drag & Drop Zone -->
         <div id="gantt-drop-zone" onclick="document.getElementById('gantt-file-input').click()"
           class="border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
-          <input type="file" id="gantt-file-input" accept=".xlsx,.xls,.csv" onchange="app.handleGanttFileChange(this.files[0])" class="hidden">
+          <input type="file" id="gantt-file-input" accept=".xlsx,.xls,.csv,.tsv" onchange="app.handleGanttFileChange(this.files[0])" class="hidden">
           <div class="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
             <i data-lucide="upload-cloud" class="w-6 h-6"></i>
           </div>
           <div>
-            <span class="font-bold text-slate-800 dark:text-white text-sm" id="gantt-drop-text">Click or drag & drop your Gantt file here</span>
-            <p class="text-slate-400 text-xs mt-0.5">Supports Microsoft Excel (.xlsx, .xls) and CSV spreadsheets</p>
+            <span class="font-bold text-slate-800 dark:text-white text-sm" id="gantt-drop-text">Click or drag & drop your Excel or CSV file here</span>
+            <p class="text-slate-400 text-xs mt-0.5">Supports Microsoft Excel (.xlsx, .xls) and CSV / TSV files</p>
+          </div>
+          <div class="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
+            <span>💡 Missing fields (dates, owners) will be set to <strong>"Not Declared"</strong> so you can fill them in the workspace!</span>
           </div>
         </div>
 
@@ -956,7 +958,7 @@
             <span id="gantt-file-size-label" class="text-[11px] text-emerald-600 font-mono">12 KB</span>
           </div>
           <p class="text-[11px] text-emerald-700 dark:text-emerald-400" id="gantt-preview-details">
-            Ready to parse and import tasks with assignees and timeline dates.
+            Ready to parse and import tasks into your workspace.
           </p>
         </div>
 
@@ -968,7 +970,7 @@
               <input type="radio" name="gantt_destination" value="current" checked onchange="app.toggleGanttDestOption(this.value)" class="text-blue-600 focus:ring-blue-500">
               <div class="flex-1 min-w-0">
                 <span class="font-semibold text-slate-800 dark:text-white block">Import into current project (<span id="gantt-active-project-name" class="text-blue-600">Active</span>)</span>
-                <span class="text-[11px] text-slate-400">Append tasks and create any missing team members automatically</span>
+                <span class="text-[11px] text-slate-400">Append tasks into your current active project sheet</span>
               </div>
             </label>
 
@@ -976,7 +978,7 @@
               <input type="radio" name="gantt_destination" value="new" onchange="app.toggleGanttDestOption(this.value)" class="text-blue-600 focus:ring-blue-500">
               <div class="flex-1 min-w-0">
                 <span class="font-semibold text-slate-800 dark:text-white block">Create as a new project</span>
-                <span class="text-[11px] text-slate-400">Set up a fresh standalone workspace from this Gantt sheet</span>
+                <span class="text-[11px] text-slate-400">Set up a fresh standalone workspace from this spreadsheet</span>
               </div>
             </label>
           </div>
@@ -990,15 +992,15 @@
 
         <!-- Download Sample Templates Hint -->
         <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500">
-          <span>Need a starting template?</span>
+          <span>Need a sample template?</span>
           <div class="flex space-x-2">
             <button type="button" onclick="app.downloadSampleGantt('xlsx')" class="text-blue-600 hover:underline font-semibold flex items-center space-x-1">
               <i data-lucide="download" class="w-3.5 h-3.5"></i>
-              <span>Excel (.xlsx)</span>
+              <span>Excel Template</span>
             </button>
             <button type="button" onclick="app.downloadSampleGantt('csv')" class="text-slate-600 dark:text-slate-400 hover:underline font-semibold flex items-center space-x-1">
               <i data-lucide="download" class="w-3.5 h-3.5"></i>
-              <span>CSV (.csv)</span>
+              <span>CSV Template</span>
             </button>
           </div>
         </div>
@@ -1012,7 +1014,7 @@
         </button>
         <button type="button" id="gantt-upload-submit-btn" onclick="app.submitGanttUpload()" class="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm shadow-emerald-500/20 flex items-center space-x-1.5 transition">
           <i data-lucide="upload" class="w-4 h-4"></i>
-          <span>Import Gantt Tasks</span>
+          <span>Import Tasks</span>
         </button>
       </div>
 

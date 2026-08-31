@@ -393,6 +393,42 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.request(f"/api/tasks/{task_b['id']}", method="DELETE")
         self.request(f"/api/tasks/{task_c['id']}", method="DELETE")
 
+    def test_13_universal_spreadsheet_import(self):
+        from app.gantt_parser import parse_gantt_file
+
+        # Test 1: Basic 1-column list of activity names
+        csv_1col = b"Reaction Step 1\nReaction Step 2\nReaction Step 3\n"
+        res1 = parse_gantt_file(csv_1col, "activities.csv")
+        self.assertEqual(len(res1["tasks"]), 3)
+        self.assertEqual(res1["tasks"][0]["title"], "Reaction Step 1")
+        self.assertIsNone(res1["tasks"][0]["start_date"])
+        self.assertIsNone(res1["tasks"][0]["due_date"])
+
+        # Test 2: Basic 2-column list (Activity, Owner)
+        csv_2col = b"Activity,Owner\nRaw Material Charging,Sri Vishnu\nYield Check,QA Lead\n"
+        res2 = parse_gantt_file(csv_2col, "steps.csv")
+        self.assertEqual(len(res2["tasks"]), 2)
+        self.assertEqual(res2["tasks"][0]["title"], "Raw Material Charging")
+        self.assertEqual(res2["tasks"][0]["assignee_name"], "Sri Vishnu")
+        self.assertIsNone(res2["tasks"][0]["start_date"])
+
+        # Test 3: Excel with custom headers
+        import openpyxl, io
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Deliverables", "Status", "Responsible Person"])
+        ws.append(["API Architecture Spec", "Done", "Elena"])
+        ws.append(["Database Migration", "In Progress", "Alex"])
+        buf = io.BytesIO()
+        wb.save(buf)
+
+        res3 = parse_gantt_file(buf.getvalue(), "project_tasks.xlsx")
+        self.assertEqual(len(res3["tasks"]), 2)
+        self.assertEqual(res3["tasks"][0]["title"], "API Architecture Spec")
+        self.assertEqual(res3["tasks"][0]["status"], "done")
+        self.assertEqual(res3["tasks"][0]["assignee_name"], "Elena")
+        self.assertIsNone(res3["tasks"][0]["start_date"])
+
 if __name__ == "__main__":
     unittest.main()
 

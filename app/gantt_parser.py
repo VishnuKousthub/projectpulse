@@ -11,43 +11,48 @@ AVATAR_COLORS = [
 
 HEADER_MAPPINGS = {
     "task_no": [
-        "task", "task no", "s.no", "task id", "item no", "no"
+        "task no", "task_no", "s.no", "sno", "s no", "sl no", "sl.no", "task id", "item no", "item_no", "no", "#", "id"
     ],
     "title": [
-        "activity / process step", "activity name", "process step", "activity",
-        "task name", "tasks", "title", "action item", "item", "name", "work item", "task title", "task_name"
+        "activity / process step", "activity name", "process step", "process", "activity",
+        "task name", "task_name", "tasks", "task", "action item", "action items", "action", "actions",
+        "work item", "work items", "work", "item name", "items", "item",
+        "title", "name", "deliverable", "deliverables", "step name", "steps", "step",
+        "scope", "feature", "features", "todo", "to-do", "to do", "topic", "job",
+        "milestone", "plan", "story", "user story", "requirement", "requirements",
+        "content", "objective", "objectives", "description"
     ],
     "assignee": [
         "task owner", "owner", "assignee", "assigned to", "assigned_to", "resource",
-        "resource name", "member", "person", "who", "lead", "assigned"
+        "resource name", "member", "person", "who", "lead", "assigned", "responsible person"
     ],
     "department": [
-        "responsible", "department", "dept", "team", "function", "group"
+        "responsible", "department", "dept", "team", "function", "group", "division"
     ],
     "start_date": [
         "start", "start date", "start_date", "begin", "begin date",
-        "from", "start time", "startdate", "planned start"
+        "from", "start time", "startdate", "planned start", "commence"
     ],
     "due_date": [
         "end", "end date", "end_date", "due date", "due_date", "finish",
-        "finish date", "to", "deadline", "target date", "duedate", "enddate", "planned finish"
+        "finish date", "to", "deadline", "target date", "duedate", "enddate", "planned finish", "target"
     ],
     "status": [
         "status", "state", "progress", "stage", "% complete", "percent complete",
-        "progress %", "completion", "task status"
+        "progress %", "completion", "task status", "condition"
     ],
     "priority": [
-        "priority", "severity", "urgency", "importance", "level"
+        "priority", "severity", "urgency", "importance", "level", "rank"
     ],
     "estimated_hours": [
         "estimated hours", "est hours", "est_hours", "estimated time",
-        "duration (hours)", "duration", "hours", "work", "days", "work (hours)", "effort"
+        "duration (hours)", "duration", "hours", "work", "days", "work (hours)", "effort", "time (hrs)"
     ],
     "sprint": [
-        "sprint", "phase", "milestone", "category", "wbs", "epic", "stream"
+        "sprint", "phase", "milestone", "category", "wbs", "epic", "stream", "stage name"
     ],
     "description": [
-        "remark", "remarks", "description", "notes", "details", "comments", "summary", "scope"
+        "remark", "remarks", "description", "notes", "details", "comments", "summary", "scope notes"
     ],
     "tags": [
         "tags", "tag", "labels", "keywords"
@@ -57,26 +62,34 @@ HEADER_MAPPINGS = {
 def normalize_header(header_str):
     if not header_str:
         return ""
-    return re.sub(r"[^a-z0-9% /_]+", " ", str(header_str).lower()).strip()
+    return re.sub(r"[^a-z0-9% /_#]+", " ", str(header_str).lower()).strip()
 
 def match_column_name(clean_header):
-    # Priority for title
+    if not clean_header:
+        return None
+    
+    # Check exact task_no / id first
+    if clean_header in HEADER_MAPPINGS["task_no"]:
+        return "task_no"
+
+    # Priority check for title / activity name
     for alias in HEADER_MAPPINGS["title"]:
         if clean_header == alias or clean_header.startswith(alias):
             return "title"
     
-    # Priority for assignee
+    # Priority check for assignee / owner
     for alias in HEADER_MAPPINGS["assignee"]:
         if clean_header == alias or clean_header.startswith(alias):
             return "assignee"
 
-    # Other mappings
+    # Check other mappings
     for canonical_field, aliases in HEADER_MAPPINGS.items():
-        if canonical_field in ("title", "assignee"):
+        if canonical_field in ("title", "assignee", "task_no"):
             continue
         for alias in aliases:
             if clean_header == alias or clean_header.startswith(alias):
                 return canonical_field
+
     return None
 
 def parse_date_value(val):
@@ -86,20 +99,26 @@ def parse_date_value(val):
         return val.strftime("%Y-%m-%d")
     
     val_str = str(val).strip()
-    if not val_str or val_str.lower() in ("none", "null", "n/a", "-"):
+    if not val_str or val_str.lower() in ("none", "null", "n/a", "-", "tbd", "undeclared", "not declared"):
         return None
 
     # Handle DD/MM/YYYY or DD-MM-YYYY
     m = re.search(r"(\d{1,2})[/-]+(\d{1,2})[/-]+(\d{4})", val_str)
     if m:
         d, mo, y = m.groups()
-        return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+        try:
+            return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+        except Exception:
+            pass
 
     # Handle YYYY-MM-DD
     m2 = re.search(r"(\d{4})[/-]+(\d{1,2})[/-]+(\d{1,2})", val_str)
     if m2:
         y, mo, d = m2.groups()
-        return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+        try:
+            return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+        except Exception:
+            pass
 
     return None
 
@@ -124,13 +143,13 @@ def normalize_status(val):
         except Exception:
             pass
 
-    if any(k in s for k in ["done", "complete", "finish", "closed"]):
+    if any(k in s for k in ["done", "complete", "finish", "closed", "pass", "resolved"]):
         return "done"
-    elif any(k in s for k in ["delay", "in progress", "progress", "active", "working", "ongoing", "started", "doing"]):
+    elif any(k in s for k in ["delay", "in progress", "progress", "active", "working", "ongoing", "started", "doing", "wip"]):
         return "in_progress"
-    elif any(k in s for k in ["review", "testing", "qa", "verify", "audit"]):
+    elif any(k in s for k in ["review", "testing", "qa", "verify", "audit", "hold", "pending review"]):
         return "in_review"
-    elif any(k in s for k in ["backlog", "future", "icebox"]):
+    elif any(k in s for k in ["backlog", "future", "icebox", "wishlist"]):
         return "backlog"
     return "todo"
 
@@ -178,13 +197,18 @@ def normalize_estimated_hours(val):
     return 0.0
 
 def parse_gantt_file(file_bytes, filename=""):
-    is_excel = filename.lower().endswith((".xlsx", ".xlsm", ".xltx")) or file_bytes[:4] == b"PK\x03\x04"
+    """
+    Universal Spreadsheet / Table Parser for ProjectPulse.
+    Accepts ANY Excel (.xlsx, .xlsm, .xls) or CSV / TSV file.
+    Supports basic 1-column task lists, simple 2-column tables, or complex Gantt schedules.
+    """
+    is_excel = filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xls")) or file_bytes[:4] == b"PK\x03\x04"
     
     if is_excel:
         wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
         target_sheet = None
         for sname in wb.sheetnames:
-            if any(k in sname.lower() for k in ["gantt", "production", "schedule", "plan"]):
+            if any(k in sname.lower() for k in ["gantt", "production", "schedule", "plan", "tasks", "activities", "sheet1"]):
                 target_sheet = wb[sname]
                 break
         if target_sheet is None:
@@ -197,12 +221,34 @@ def parse_gantt_file(file_bytes, filename=""):
 def _parse_excel_sheet(ws, wb=None):
     rows_raw = []
     for row in ws.iter_rows(values_only=True):
-        rows_raw.append(list(row))
+        row_list = list(row)
+        # Keep row if it has at least one non-empty cell
+        if any(c is not None and str(c).strip() != "" for c in row_list):
+            rows_raw.append(row_list)
 
     if not rows_raw:
-        raise ValueError("The uploaded Excel sheet is empty.")
+        raise ValueError("The uploaded Excel sheet contains no data.")
 
-    # 1. Extract Project Metadata
+    return _process_table_rows(rows_raw)
+
+def _parse_csv_text(file_bytes):
+    text = file_bytes.decode("utf-8-sig", errors="replace")
+    sample = text[:2048]
+    delimiter = "\t" if "\t" in sample and "," not in sample else (";" if ";" in sample and "," not in sample else ",")
+    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+    rows_raw = [row for row in reader if any(c.strip() for c in row)]
+
+    if not rows_raw:
+        raise ValueError("The uploaded CSV file is empty.")
+
+    return _process_table_rows(rows_raw)
+
+def _process_table_rows(rows_raw):
+    """
+    Intelligently extracts tasks, assignees, timelines, and metadata from raw rows.
+    Works for any table format (1 column, 2 columns, or full Gantt sheet).
+    """
+    # 1. Extract Project Metadata if present in top header banners
     project_metadata = {
         "project_name": None,
         "project_code": None,
@@ -247,43 +293,86 @@ def _parse_excel_sheet(ws, wb=None):
         row = rows_raw[idx]
         mapping = {}
         for col_idx, cell in enumerate(row):
+            if cell is None:
+                continue
             norm = normalize_header(cell)
             field = match_column_name(norm)
             if field and field not in mapping.values():
                 mapping[col_idx] = field
         
-        if ("title" in mapping.values() or "assignee" in mapping.values()) and len(mapping) >= 2:
-            if len(mapping) > len(best_header_map):
+        # If we match title or any 2 useful columns
+        if "title" in mapping.values():
+            if len(mapping) > len(best_header_map) or best_header_idx == -1:
                 best_header_idx = idx
                 best_header_map = mapping
+        elif len(mapping) >= 2 and len(mapping) > len(best_header_map):
+            best_header_idx = idx
+            best_header_map = mapping
 
-    if best_header_idx == -1 or not best_header_map:
-        best_header_idx = 0
-        best_header_map = {0: "title", 1: "assignee", 2: "start_date", 3: "due_date", 4: "status", 5: "priority"}
+    # 3. Fallback: If no recognized header row is found (e.g. raw list of activities)
+    if best_header_idx == -1 or not best_header_map or "title" not in best_header_map.values():
+        # Find which column contains descriptive text strings
+        max_cols = max(len(r) for r in rows_raw)
+        col_text_scores = [0] * max_cols
+        
+        for row in rows_raw:
+            for c_idx, cell in enumerate(row):
+                if cell is not None:
+                    c_str = str(cell).strip()
+                    # If string length > 2 and not just numbers or pure dates
+                    if len(c_str) > 2 and not re.match(r"^\d+(\.\d+)?$", c_str) and not parse_date_value(c_str):
+                        col_text_scores[c_idx] += 1
 
-    # 3. Detect Weekly Date Ranges
+        best_title_col = 0
+        if col_text_scores and max(col_text_scores) > 0:
+            best_title_col = col_text_scores.index(max(col_text_scores))
+
+        # Check if row 0 was a generic header or data
+        row0_val = str(rows_raw[0][best_title_col] or "").strip().lower() if len(rows_raw[0]) > best_title_col else ""
+        if any(row0_val == h for h in ["task", "tasks", "title", "activity", "name", "action", "items"]):
+            best_header_idx = 0
+            data_rows = rows_raw[1:]
+        else:
+            best_header_idx = -1
+            data_rows = rows_raw
+        
+        best_header_map = {best_title_col: "title"}
+        # If there are second or third columns, map assignee or date if detectable
+        if max_cols > 1:
+            for c_idx in range(max_cols):
+                if c_idx == best_title_col:
+                    continue
+                # Test sample values in this column
+                sample_vals = [r[c_idx] for r in data_rows[:10] if c_idx < len(r) and r[c_idx] is not None]
+                if any(parse_date_value(v) for v in sample_vals):
+                    if "start_date" not in best_header_map.values():
+                        best_header_map[c_idx] = "start_date"
+                    elif "due_date" not in best_header_map.values():
+                        best_header_map[c_idx] = "due_date"
+                elif "assignee" not in best_header_map.values() and any(isinstance(v, str) and len(v.strip()) > 1 for v in sample_vals):
+                    best_header_map[c_idx] = "assignee"
+    else:
+        data_rows = rows_raw[best_header_idx + 1:]
+
+    # 4. Detect Weekly Date Ranges in header rows
     week_ranges = {}
-    date_row_candidates = [best_header_idx - 1, best_header_idx - 2, best_header_idx + 1]
-    for d_idx in date_row_candidates:
-        if 0 <= d_idx < len(rows_raw):
-            row_d = rows_raw[d_idx]
-            for col_idx, cell in enumerate(row_d):
-                if cell and isinstance(cell, str) and "to" in cell.lower():
-                    parts = re.split(r"\s*to\s*", cell, flags=re.IGNORECASE)
-                    if len(parts) == 2:
-                        s_d = parse_date_value(parts[0])
-                        e_d = parse_date_value(parts[1])
-                        if s_d and e_d:
-                            week_ranges[col_idx] = (s_d, e_d)
+    if best_header_idx >= 0:
+        date_row_candidates = [best_header_idx - 1, best_header_idx - 2, best_header_idx + 1]
+        for d_idx in date_row_candidates:
+            if 0 <= d_idx < len(rows_raw):
+                row_d = rows_raw[d_idx]
+                for col_idx, cell in enumerate(row_d):
+                    if cell and isinstance(cell, str) and "to" in cell.lower():
+                        parts = re.split(r"\s*to\s*", cell, flags=re.IGNORECASE)
+                        if len(parts) == 2:
+                            s_d = parse_date_value(parts[0])
+                            e_d = parse_date_value(parts[1])
+                            if s_d and e_d:
+                                week_ranges[col_idx] = (s_d, e_d)
 
     tasks = []
     members_set = set()
     sprints_set = set()
-    data_rows = rows_raw[best_header_idx + 1:]
-
-    now = datetime.now()
-    default_start = now.strftime("%Y-%m-%d")
-    default_due = (now + timedelta(days=7)).strftime("%Y-%m-%d")
 
     title_col = None
     assignee_col = None
@@ -295,6 +384,7 @@ def _parse_excel_sheet(ws, wb=None):
     sprint_col = None
     start_col = None
     due_col = None
+    task_no_col = None
 
     for col_idx, field in best_header_map.items():
         if field == "title": title_col = col_idx
@@ -307,25 +397,42 @@ def _parse_excel_sheet(ws, wb=None):
         elif field == "sprint": sprint_col = col_idx
         elif field == "start_date": start_col = col_idx
         elif field == "due_date": due_col = col_idx
+        elif field == "task_no": task_no_col = col_idx
 
-    for order_idx, row in enumerate(data_rows):
-        if not row:
+    current_order_idx = 0
+
+    for row in data_rows:
+        if not row or not any(c is not None and str(c).strip() != "" for c in row):
             continue
 
         raw_title = row[title_col] if title_col is not None and title_col < len(row) else None
-        if not raw_title or str(raw_title).strip() == "" or str(raw_title).strip().lower() in ("total time", "summary", "kpi"):
+        
+        # If title column is empty, check if another column has title text
+        if not raw_title or str(raw_title).strip() == "":
+            for c_idx, cell in enumerate(row):
+                if cell is not None and str(cell).strip() != "":
+                    if c_idx != task_no_col and not parse_date_value(cell) and not re.match(r"^\d+(\.\d+)?$", str(cell).strip()):
+                        raw_title = cell
+                        break
+
+        if not raw_title or str(raw_title).strip() == "":
             continue
 
         title_str = str(raw_title).strip()
+        lower_title = title_str.lower()
+
+        # Skip summary, total, or page header lines
+        if lower_title in ("total time", "summary", "kpi", "total", "grand total", "sub total", "notes", "legend"):
+            continue
 
         # Assignee
         raw_assignee = row[assignee_col] if assignee_col is not None and assignee_col < len(row) else None
         assignee_str = str(raw_assignee).strip() if raw_assignee is not None else None
-        if assignee_str and assignee_str.lower() in ("unassigned", "n/a", "none", "-"):
+        if assignee_str and assignee_str.lower() in ("unassigned", "n/a", "none", "-", "tbd", "undeclared"):
             assignee_str = None
 
         if assignee_str:
-            sub_members = [m.strip() for m in re.split(r"[,&/]+", assignee_str) if m.strip() and m.strip().lower() not in ("pm team", "scm team", "qa", "qc")]
+            sub_members = [m.strip() for m in re.split(r"[,&/]+", assignee_str) if m.strip() and m.strip().lower() not in ("pm team", "scm team", "qa", "qc", "production team")]
             for sm in sub_members:
                 members_set.add(sm)
             members_set.add(assignee_str)
@@ -346,81 +453,54 @@ def _parse_excel_sheet(ws, wb=None):
             remark=desc_str
         )
 
-        # Dates from cells or weekly columns
+        # Dates: Parse explicitly if provided; otherwise KEEP AS NONE ("Not Declared")!
         start_date = parse_date_value(row[start_col]) if start_col is not None and start_col < len(row) else None
         due_date = parse_date_value(row[due_col]) if due_col is not None and due_col < len(row) else None
 
-        for c_idx in range(len(row)):
-            if c_idx in (title_col, assignee_col, dept_col, status_col, desc_col):
-                continue
-            cell_val = row[c_idx]
-            if cell_val is not None and str(cell_val).strip() != "":
-                if isinstance(cell_val, (datetime, date)):
-                    d_str = cell_val.strftime("%Y-%m-%d")
-                    if not start_date or d_str < start_date: start_date = d_str
-                    if not due_date or d_str > due_date: due_date = d_str
-                elif isinstance(cell_val, str):
-                    d_str = parse_date_value(cell_val)
-                    if d_str:
+        # Check other date cells or weekly timeline ranges if explicit dates were not found
+        if not start_date or not due_date:
+            for c_idx in range(len(row)):
+                if c_idx in (title_col, assignee_col, dept_col, status_col, desc_col, task_no_col):
+                    continue
+                cell_val = row[c_idx]
+                if cell_val is not None and str(cell_val).strip() != "":
+                    if isinstance(cell_val, (datetime, date)):
+                        d_str = cell_val.strftime("%Y-%m-%d")
                         if not start_date or d_str < start_date: start_date = d_str
                         if not due_date or d_str > due_date: due_date = d_str
+                    elif isinstance(cell_val, str):
+                        d_str = parse_date_value(cell_val)
+                        if d_str:
+                            if not start_date or d_str < start_date: start_date = d_str
+                            if not due_date or d_str > due_date: due_date = d_str
+                        elif c_idx in week_ranges:
+                            s_d, e_d = week_ranges[c_idx]
+                            if not start_date or s_d < start_date: start_date = s_d
+                            if not due_date or e_d > due_date: due_date = e_d
                     elif c_idx in week_ranges:
                         s_d, e_d = week_ranges[c_idx]
                         if not start_date or s_d < start_date: start_date = s_d
                         if not due_date or e_d > due_date: due_date = e_d
-                elif c_idx in week_ranges:
-                    s_d, e_d = week_ranges[c_idx]
-                    if not start_date or s_d < start_date: start_date = s_d
-                    if not due_date or e_d > due_date: due_date = e_d
-
-        if not start_date and not due_date:
-            start_date = default_start
-            due_date = default_due
-        elif start_date and not due_date:
-            try:
-                s_dt = datetime.strptime(start_date, "%Y-%m-%d")
-                due_date = (s_dt + timedelta(days=5)).strftime("%Y-%m-%d")
-            except Exception:
-                due_date = default_due
-        elif due_date and not start_date:
-            try:
-                d_dt = datetime.strptime(due_date, "%Y-%m-%d")
-                start_date = (d_dt - timedelta(days=5)).strftime("%Y-%m-%d")
-            except Exception:
-                start_date = default_start
 
         # Tags
         tags = []
         if dept_str:
             tags.append(dept_str.lower())
-        if project_metadata["project_code"]:
+        if project_metadata.get("project_code"):
             tags.append(project_metadata["project_code"].lower())
 
-        # Sprint / Phase
+        # Sprint / Phase (Keep None if not specified)
         sprint_name = None
         if sprint_col is not None and sprint_col < len(row) and row[sprint_col]:
-            sprint_name = str(row[sprint_col]).strip()
-        else:
-            if start_date:
-                try:
-                    s_dt = datetime.strptime(start_date, "%Y-%m-%d")
-                    # Group into phases
-                    if s_dt.month == 8:
-                        sprint_name = "Sprint 1: Procurement & SCM (Aug 2026)"
-                    elif s_dt.month == 9 and s_dt.day <= 15:
-                        sprint_name = "Sprint 2: Production & Reaction Steps (Sep 2026)"
-                    else:
-                        sprint_name = "Sprint 3: QC Analysis, QA & Batch Release (Sep-Oct 2026)"
-                except Exception:
-                    sprint_name = "Phase 1: Batch Execution"
-        
-        if sprint_name:
-            sprints_set.add(sprint_name)
+            sprint_val = str(row[sprint_col]).strip()
+            if sprint_val and sprint_val.lower() not in ("none", "null", "-", "n/a", "no sprint", "backlog"):
+                sprint_name = sprint_val
+                sprints_set.add(sprint_name)
 
-        # Estimated Hours
-        est_hours = 8.0
+        # Estimated Hours (0.0 if not provided)
+        est_hours = 0.0
         if est_col is not None and est_col < len(row):
-            est_hours = normalize_estimated_hours(row[est_col]) or 8.0
+            est_hours = normalize_estimated_hours(row[est_col]) or 0.0
 
         tasks.append({
             "title": title_str,
@@ -434,8 +514,9 @@ def _parse_excel_sheet(ws, wb=None):
             "sprint_name": sprint_name,
             "description": desc_str,
             "tags": tags,
-            "order_index": order_idx
+            "order_index": current_order_idx
         })
+        current_order_idx += 1
 
     return {
         "tasks": tasks,
@@ -444,86 +525,6 @@ def _parse_excel_sheet(ws, wb=None):
         "total_rows": len(tasks),
         "columns_detected": {v: k for k, v in best_header_map.items()},
         "metadata": project_metadata
-    }
-
-def _parse_csv_text(file_bytes):
-    text = file_bytes.decode("utf-8-sig", errors="replace")
-    sample = text[:2048]
-    delimiter = "\t" if "\t" in sample and "," not in sample else ","
-    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
-    rows_raw = [row for row in reader if any(c.strip() for c in row)]
-
-    if not rows_raw:
-        raise ValueError("The uploaded CSV is empty.")
-
-    best_header_idx = -1
-    best_header_map = {}
-    
-    for idx, row in enumerate(rows_raw[:15]):
-        mapping = {}
-        for col_idx, cell in enumerate(row):
-            norm = normalize_header(cell)
-            field = match_column_name(norm)
-            if field and field not in mapping.values():
-                mapping[col_idx] = field
-        
-        if ("title" in mapping.values() or "assignee" in mapping.values()) and len(mapping) >= 2:
-            if len(mapping) > len(best_header_map):
-                best_header_idx = idx
-                best_header_map = mapping
-
-    if best_header_idx == -1 or not best_header_map:
-        best_header_idx = 0
-        best_header_map = {0: "title", 1: "assignee", 2: "start_date", 3: "due_date", 4: "status", 5: "priority"}
-
-    tasks = []
-    members_set = set()
-    sprints_set = set()
-    data_rows = rows_raw[best_header_idx + 1:]
-    
-    now = datetime.now()
-    default_start = now.strftime("%Y-%m-%d")
-    default_due = (now + timedelta(days=7)).strftime("%Y-%m-%d")
-
-    for order_idx, row in enumerate(data_rows):
-        task_data = {
-            "title": "", "description": "", "assignee_name": None,
-            "start_date": default_start, "due_date": default_due,
-            "status": "todo", "priority": "medium", "estimated_hours": 8.0,
-            "sprint_name": None, "tags": [], "order_index": order_idx
-        }
-
-        for col_idx, field in best_header_map.items():
-            if col_idx < len(row):
-                cell_val = row[col_idx]
-                if field == "title": task_data["title"] = str(cell_val).strip()
-                elif field == "assignee":
-                    raw_a = str(cell_val).strip()
-                    if raw_a and raw_a.lower() not in ("unassigned", "none", "-"):
-                        task_data["assignee_name"] = raw_a
-                        members_set.add(raw_a)
-                elif field == "start_date": task_data["start_date"] = parse_date_value(cell_val) or default_start
-                elif field == "due_date": task_data["due_date"] = parse_date_value(cell_val) or default_due
-                elif field == "status": task_data["status"] = normalize_status(cell_val)
-                elif field == "priority": task_data["priority"] = normalize_priority(cell_val)
-                elif field == "estimated_hours": task_data["estimated_hours"] = normalize_estimated_hours(cell_val) or 8.0
-                elif field == "sprint":
-                    s_name = str(cell_val).strip()
-                    if s_name:
-                        task_data["sprint_name"] = s_name
-                        sprints_set.add(s_name)
-                elif field == "description": task_data["description"] = str(cell_val).strip()
-
-        if task_data["title"]:
-            tasks.append(task_data)
-
-    return {
-        "tasks": tasks,
-        "members_found": sorted(list(members_set)),
-        "sprints_found": sorted(list(sprints_set)),
-        "total_rows": len(tasks),
-        "columns_detected": {v: k for k, v in best_header_map.items()},
-        "metadata": {}
     }
 
 def generate_sample_gantt_csv():
