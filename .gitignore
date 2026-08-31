@@ -1,0 +1,17 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Temporary / Scratch files
+*.log
+.DS_Store
+Thumbs.db
+pulse.db

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: projectpulse
+    env: docker
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PROD
+        value: "1"
+      - key: DOCKER
+        value: "1"
+      - key: PROJECT_PULSE_DB
+        value: /app/data/project_pulse.db
+    disk:
+      name: projectpulse_data
+      mountPath: /app/data
+      sizeGB: 1

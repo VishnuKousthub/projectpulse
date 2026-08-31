@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProjectPulse - Modern Project Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- High-Res Vector SVG Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='9' fill='%230F172A'/%3E%3Cpath d='M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5' fill='none' stroke='%2338BDF8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='13.5' cy='9' r='2' fill='%23FFFFFF'/%3E%3Ccircle cx='18' cy='27' r='2' fill='%2338BDF8'/%3E%3C/svg%3E">
+</head>
+<body class="h-screen w-screen overflow-hidden flex bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+
+  <!-- ==================== SIDEBAR (FIXED / STICKY & ORGANIZED) ==================== -->
+  <aside id="sidebar" class="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col flex-shrink-0 sticky top-0 z-30 transition-all duration-300 border-r border-slate-800 select-none">
+    <!-- Brand Header with High-Tech Pulse Logo -->
+    <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800/80 flex-shrink-0 bg-slate-950/40">
+      <div class="flex items-center space-x-3 group cursor-pointer" onclick="app.switchView('kanban')" title="ProjectPulse OS">
+        
+        <!-- Modern 3D Holographic Pulse Emblem -->
+        <div class="relative flex items-center justify-center flex-shrink-0">
+          <div class="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-violet-600 opacity-40 blur-xs group-hover:opacity-80 transition duration-500"></div>
+          <div class="relative w-10 h-10 rounded-xl bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border border-white/20 p-1 shadow-xl flex items-center justify-center overflow-hidden">
+            <svg class="w-full h-full" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38BDF8" />
+                  <stop offset="50%" stop-color="#6366F1" />
+                  <stop offset="100%" stop-color="#A855F7" />
+                </linearGradient>
+                <linearGradient id="lineGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+                  <stop offset="0%" stop-color="#38BDF8" />
+                  <stop offset="35%" stop-color="#FFFFFF" />
+                  <stop offset="70%" stop-color="#67E8F9" />
+                  <stop offset="100%" stop-color="#C084FC" />
+                </linearGradient>
+                <filter id="logoGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="1.2" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+              <!-- Orbital Grid Ring -->
+              <circle cx="18" cy="18" r="14" stroke="url(#brandGrad)" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.35" />
+              <circle cx="18" cy="18" r="7" fill="url(#brandGrad)" opacity="0.2" />
+              <!-- Dynamic Pulse Wave -->
+              <path d="M4 18H10L13.5 9L18 27L22.5 13L25.5 18H32" 
+                    stroke="url(#lineGrad)" 
+                    stroke-width="2.6" 
+                    stroke-linecap="round" 
+                    stroke-linejoin="round" 
+                    filter="url(#logoGlow)" />
+              <!-- Glowing Nodes -->
+              <circle cx="13.5" cy="9" r="1.8" fill="#FFFFFF" />
+              <circle cx="18" cy="27" r="1.8" fill="#38BDF8" />
+              <circle cx="22.5" cy="13" r="1.5" fill="#C084FC" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Typography & Tagline -->
+        <div>
+          <div class="font-extrabold text-base tracking-tight leading-tight flex items-center">
+            <span class="text-white">Project</span>
+            <span class="bg-gradient-to-r from-sky-400 via-blue-400 to-indigo-300 bg-clip-text text-transparent font-black ml-0.5">Pulse</span>
+          </div>
+          <div class="flex items-center space-x-1.5 mt-0.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Enterprise OS</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Active Project Switcher -->
+    <div class="px-4 pt-3.5 pb-2.5 flex-shrink-0 border-b border-slate-800/60 bg-slate-900/50">
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Project</label>
+        <div class="flex items-center space-x-2">
+          <button onclick="app.openProjectModal(app.state.currentProjectId)" title="Manage / Edit / Delete Active Project" class="text-[11px] font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+            <i data-lucide="settings" class="w-3 h-3"></i>
+            <span>Manage</span>
+          </button>
+          <button onclick="app.openProjectModal()" title="Create New Project" class="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition">
+            <i data-lucide="plus" class="w-3 h-3"></i>
+            <span>New</span>
+          </button>
+        </div>
+      </div>
+      <div class="relative">
+        <select id="project-select" class="w-full bg-slate-800 text-slate-100 text-xs font-medium rounded-lg pl-3 pr-8 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer">
+          <!-- Populated dynamically -->
+        </select>
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none"></i>
+      </div>
+    </div>
+
+    <!-- Navigation Views & Categories -->
+    <nav class="flex-1 px-3 py-3 space-y-4 overflow-y-auto custom-scroll">
+      
+      <!-- Group 1: Core Views -->
+      <div class="space-y-1">
+        <div class="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <span>Core Views</span>
+          <span class="text-[9px] text-slate-600 font-mono">4</span>
+        </div>
+        
+        <button onclick="app.switchView('kanban')" id="nav-kanban" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="trello" class="w-4 h-4 text-blue-400"></i>
+          <span>Kanban Board</span>
+        </button>
+
+        <button onclick="app.switchView('gantt')" id="nav-gantt" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="gantt-chart" class="w-4 h-4 text-emerald-400"></i>
+          <span>Gantt & Timeline</span>
+        </button>
+
+        <button onclick="app.switchView('table')" id="nav-table" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="table-2" class="w-4 h-4 text-amber-400"></i>
+          <span>Table Grid</span>
+        </button>
+
+        <button onclick="app.switchView('calendar')" id="nav-calendar" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="calendar" class="w-4 h-4 text-purple-400"></i>
+          <span>Calendar View</span>
+        </button>
+      </div>
+
+      <!-- Group 2: Tracking & Execution -->
+      <div class="space-y-1 pt-1 border-t border-slate-800/60">
+        <div class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <span>Tracking & Execution</span>
+          <span class="text-[9px] text-slate-600 font-mono">3</span>
+        </div>
+
+        <button onclick="app.switchView('sprints')" id="nav-sprints" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="zap" class="w-4 h-4 text-cyan-400"></i>
+          <span>Sprints & Milestones</span>
+        </button>
+
+        <button onclick="app.switchView('timetracker')" id="nav-timetracker" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="clock" class="w-4 h-4 text-rose-400"></i>
+          <span>Time Tracker</span>
+        </button>
+
+        <button onclick="app.switchView('analytics')" id="nav-analytics" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="bar-chart-3" class="w-4 h-4 text-indigo-400"></i>
+          <span>Analytics Dashboard</span>
+        </button>
+      </div>
+
+      <!-- Group 3: Automation & Integrations -->
+      <div class="space-y-1 pt-1 border-t border-slate-800/60">
+        <div class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <span>Automation & Tools</span>
+        </div>
+
+        <button onclick="app.openNotificationsModal()" id="nav-notifications" class="nav-item w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <div class="flex items-center space-x-3">
+            <i data-lucide="mail" class="w-4 h-4 text-sky-400"></i>
+            <span>Outlook Alerts</span>
+          </div>
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        </button>
+
+        <button onclick="app.openGanttUploadModal()" class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
+          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
+          <span>Upload Gantt (Excel)</span>
+        </button>
+      </div>
+
+      <!-- Group 4: Projects Directory -->
+      <div class="space-y-1 pt-1 border-t border-slate-800/60">
+        <div class="px-3 pt-2 pb-1 flex items-center justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">All Projects</span>
+          <button onclick="app.openProjectModal()" title="Add Project" class="text-slate-400 hover:text-white transition">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+        <div id="projects-list-sidebar" class="space-y-0.5 max-h-36 overflow-y-auto">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+    </nav>
+
+    <!-- Sidebar Bottom Utilities -->
+    <div class="p-3 border-t border-slate-800 space-y-1.5 flex-shrink-0 bg-slate-950/60">
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <button onclick="app.toggleDarkMode()" class="flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white transition text-[11px] font-semibold">
+          <i data-lucide="moon" class="w-3.5 h-3.5 text-amber-300" id="theme-icon"></i>
+          <span id="theme-text">Dark Mode</span>
+        </button>
+        <button onclick="app.openImportExportModal()" title="Backup & Export" class="flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white transition text-[11px] font-semibold">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>Backup</span>
+        </button>
+      </div>
+
+      <div>
+        <button onclick="app.resetDemoData()" class="w-full text-[11px] font-semibold text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 px-2.5 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+          <span>Reset Demo Data</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN CONTENT WRAPPER ==================== -->
+  <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+    
+    <!-- TOP APP BAR (FIXED / STICKY HEADER WITH ORGANIZED ZONES) -->
+    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 flex-shrink-0 z-40 shadow-xs">
+      
+      <!-- ZONE 1: View Context & Search -->
+      <div class="flex items-center space-x-4 flex-1 max-w-xl">
+        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+
+        <div class="flex items-center space-x-2.5">
+          <div class="lg:hidden flex items-center space-x-1.5 font-extrabold text-sm flex-shrink-0">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-900 to-indigo-950 border border-white/20 p-0.5 flex items-center justify-center shadow-xs">
+              <svg class="w-full h-full" viewBox="0 0 36 36" fill="none">
+                <path d="M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5" stroke="#38BDF8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          <h1 id="view-title" class="text-base font-bold text-slate-800 dark:text-white whitespace-nowrap">
+            Kanban Board
+          </h1>
+        </div>
+
+        <!-- Global Search Input -->
+        <div class="relative flex-1 hidden md:block">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+          <input type="text" id="global-search" oninput="app.handleSearch(this.value)" placeholder="Search tasks, tags, assignees... (/)"
+            class="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition">
+          <span class="absolute right-2.5 top-2 px-1.5 py-0.2 bg-slate-200 dark:bg-slate-700 text-[10px] text-slate-500 rounded font-mono pointer-events-none">/</span>
+        </div>
+      </div>
+
+      <!-- ZONE 2 & 3: Live Widgets, Filter Controls & Action Hub -->
+      <div class="flex items-center space-x-2.5">
+        
+        <!-- Live Stopwatch Timer Widget -->
+        <div id="stopwatch-widget" class="hidden sm:flex items-center space-x-2 bg-slate-100/90 dark:bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+          <div id="timer-dot" class="w-2 h-2 rounded-full bg-slate-400"></div>
+          <span id="timer-display" class="font-mono font-bold text-slate-700 dark:text-slate-200">00:00:00</span>
+          <button id="timer-toggle-btn" onclick="app.toggleStopwatch()" class="text-blue-600 dark:text-blue-400 hover:underline font-bold text-[11px] ml-1">
+            Start
+          </button>
+        </div>
+
+        <!-- Vertical Divider -->
+        <div class="hidden md:block h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+
+        <!-- Filters Control Group -->
+        <div class="hidden md:flex items-center space-x-1.5 bg-slate-100/70 dark:bg-slate-800/70 p-1 rounded-lg border border-slate-200 dark:border-slate-700/80">
+          <!-- Member / Assignee Filter -->
+          <div class="relative">
+            <select id="filter-assignee" onchange="app.handleFilterChange()" class="bg-transparent text-slate-700 dark:text-slate-200 text-xs rounded-md pl-2 pr-6 py-1 focus:outline-none appearance-none cursor-pointer font-medium">
+              <option value="">All Assignees</option>
+            </select>
+            <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 absolute right-1.5 top-2 pointer-events-none"></i>
+          </div>
+
+          <div class="h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
+
+          <!-- Priority Filter -->
+          <div class="relative">
+            <select id="filter-priority" onchange="app.handleFilterChange()" class="bg-transparent text-slate-700 dark:text-slate-200 text-xs rounded-md pl-2 pr-6 py-1 focus:outline-none appearance-none cursor-pointer font-medium">
+              <option value="">All Priorities</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 absolute right-1.5 top-2 pointer-events-none"></i>
+          </div>
+        </div>
+
+        <!-- Vertical Divider -->
+        <div class="hidden lg:block h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+
+        <!-- Outlook Notifications Button -->
+        <button onclick="app.openNotificationsModal()" class="bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs transition" title="Outlook Alerts & Notifications">
+          <i data-lucide="mail" class="w-4 h-4 text-sky-500"></i>
+          <span class="hidden xl:inline">Outlook Alerts</span>
+        </button>
+
+        <!-- Upload Gantt Button -->
+        <button onclick="app.openGanttUploadModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs shadow-emerald-500/20 transition" title="Upload Excel / CSV Gantt Chart">
+          <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Upload Gantt</span>
+        </button>
+
+        <!-- New Task Primary Button -->
+        <button onclick="app.openTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs shadow-blue-500/30 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>New Task</span>
+        </button>
+
+      </div>
+    </header>
+
+    <!-- VIEW CONTAINERS AREA (SCROLLS INDEPENDENTLY) -->
+    <main class="app-main flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">
+      
+      <!-- 1. KANBAN BOARD VIEW -->
+      <section id="view-kanban-container" class="view-panel space-y-4">
+        
+        <!-- Kanban Overview & Interactive Control Toolbar -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            
+            <!-- Left: Board Summary & Segmented Progress -->
+            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h2 class="text-sm font-extrabold text-slate-800 dark:text-white">Workflow Pipeline</h2>
+                  <span id="kanban-total-badge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                    29 Activities
+                  </span>
+                </div>
+                <div class="text-[11px] text-slate-500 mt-0.5" id="kanban-progress-label">Drag cards to advance workflow status</div>
+              </div>
+            </div>
+
+            <!-- Right: Search, Swimlane Grouping & Add Task -->
+            <div class="flex flex-wrap items-center gap-2.5">
+              
+              <!-- Search within Kanban -->
+              <div class="relative w-48 sm:w-56">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2"></i>
+                <input type="text" id="kanban-search-input" oninput="app.handleKanbanFilter(this.value)" placeholder="Filter board cards..."
+                  class="w-full pl-8 pr-3 py-1 text-xs bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+
+              <!-- Swimlane Grouping -->
+              <div class="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                <i data-lucide="layers" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span class="text-slate-500 font-medium">Layout:</span>
+                <select id="kanban-swimlane-select" onchange="app.setKanbanSwimlane(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
+                  <option value="status">Standard Columns</option>
+                  <option value="sprint">Swimlanes: By Phase</option>
+                  <option value="priority">Swimlanes: By Priority</option>
+                </select>
+              </div>
+
+              <!-- Add Task Button -->
+              <button onclick="app.openTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs transition">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add Task</span>
+              </button>
+
+            </div>
+          </div>
+
+          <!-- Real-Time Segmented Workflow Progress Bar -->
+          <div class="space-y-1.5 pt-1">
+            <div class="flex h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60 p-0.5 space-x-0.5">
+              <div id="bar-backlog" class="bg-slate-400 h-full rounded-l-full transition-all duration-300" style="width: 20%;" title="Backlog"></div>
+              <div id="bar-todo" class="bg-blue-500 h-full transition-all duration-300" style="width: 20%;" title="To Do"></div>
+              <div id="bar-in_progress" class="bg-amber-500 h-full transition-all duration-300" style="width: 20%;" title="In Progress"></div>
+              <div id="bar-in_review" class="bg-purple-500 h-full transition-all duration-300" style="width: 20%;" title="In Review"></div>
+              <div id="bar-done" class="bg-emerald-500 h-full rounded-r-full transition-all duration-300" style="width: 20%;" title="Done"></div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold px-1">
+              <span id="label-backlog" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Backlog: 0</span>
+              <span id="label-todo" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> To Do: 0</span>
+              <span id="label-in_progress" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> In Progress: 0</span>
+              <span id="label-in_review" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span> In Review: 0</span>
+              <span id="label-done" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Done: 0</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Kanban Board Columns Container (Rendered dynamically based on layout) -->
+        <div id="kanban-board-render">
+          <!-- Populated dynamically -->
+        </div>
+
+      </section>
+
+      <!-- 2. GANTT / TIMELINE VIEW -->
+      <section id="view-gantt-container" class="view-panel hidden space-y-4">
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+          
+          <!-- Gantt Header & Controls Toolbar -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-700">
+            <div>
+              <div class="flex items-center space-x-2.5">
+                <h2 class="text-base font-bold text-slate-800 dark:text-white">Project Schedule & Timeline</h2>
+                <span id="gantt-tasks-count" class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold px-2 py-0.5 rounded-full">0 tasks</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5" id="gantt-timeline-range-label">Visual duration bars, assigned resources, milestones, and task deliverables</p>
+            </div>
+
+            <!-- Granularity / Scale Mode Switcher & Navigation -->
+            <div class="flex flex-wrap items-center gap-2.5">
+              
+              <!-- Timeline Scale Tabs (Weekly, Monthly, Yearly, Daily) -->
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+                <button type="button" id="gantt-scale-day" onclick="app.setGanttScale('day')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                  Daily
+                </button>
+                <button type="button" id="gantt-scale-week" onclick="app.setGanttScale('week')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition bg-blue-600 text-white shadow-xs font-bold">
+                  Weekly
+                </button>
+                <button type="button" id="gantt-scale-month" onclick="app.setGanttScale('month')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                  Monthly
+                </button>
+                <button type="button" id="gantt-scale-year" onclick="app.setGanttScale('year')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                  Yearly
+                </button>
+              </div>
+
+              <!-- Navigation Shift Buttons -->
+              <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-700/60 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                <button onclick="app.shiftGanttTimeline(-1)" title="Previous Window" class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
+                  <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <button onclick="app.resetGanttToToday()" class="px-2 py-0.5 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 rounded">
+                  Fit All
+                </button>
+                <button onclick="app.shiftGanttTimeline(1)" title="Next Window" class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <!-- Import & Template Buttons -->
+              <button onclick="app.openGanttUploadModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-sm transition">
+                <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>
+                <span>Import Excel</span>
+              </button>
+              <button onclick="app.downloadSampleGantt('xlsx')" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center space-x-1 transition" title="Download Excel Template">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Template</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Gantt Timeline Canvas / Table Render Container -->
+          <div id="gantt-timeline-render" class="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-800">
+            <!-- Rendered dynamically according to selected scale -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. TABLE GRID VIEW -->
+      <section id="view-table-container" class="view-panel hidden space-y-4">
+        
+        <!-- Table KPI Metrics Bar -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Activities Completed</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="table-stat-completed">0 / 0</div>
+              <div class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400" id="table-stat-percent">0% Done</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Work Hours</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="table-stat-hours">0h / 0h</div>
+              <div class="text-[11px] font-medium text-blue-600 dark:text-blue-400" id="table-stat-hours-sub">Est vs Actual Logged</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <i data-lucide="clock" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Workflows</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="table-stat-inprogress">0 In Progress</div>
+              <div class="text-[11px] font-medium text-amber-600 dark:text-amber-400" id="table-stat-todo">0 Pending / Review</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <i data-lucide="activity" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Urgent & High Priority</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="table-stat-critical">0 Activities</div>
+              <div class="text-[11px] font-medium text-rose-600 dark:text-rose-400" id="table-stat-overdue">0 Overdue Deadlines</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+              <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Table Container & Controls -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          
+          <!-- Table Toolbar -->
+          <div class="p-3.5 border-b border-slate-200 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-850/50">
+            
+            <!-- Left: Search & Filter within Table -->
+            <div class="flex items-center space-x-2.5 flex-1 min-w-[240px] max-w-md">
+              <div class="relative w-full">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5"></i>
+                <input type="text" id="table-search-input" oninput="app.handleTableFilter(this.value)" placeholder="Filter activities, assignees, tags..."
+                  class="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+            </div>
+
+            <!-- Right Controls: Sort Order & Add Activity -->
+            <div class="flex flex-wrap items-center gap-2.5">
+              
+              <!-- Sort By Selector -->
+              <div class="flex items-center space-x-1.5 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span class="text-slate-500 font-medium">Order:</span>
+                <select id="table-sort-by" onchange="app.setTableSortBy(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
+                  <option value="order">Process Sequence (#01 → #29)</option>
+                  <option value="date_asc">Start Date (Earliest First)</option>
+                  <option value="due_asc">Due Date (Earliest First)</option>
+                  <option value="priority">Priority (High to Low)</option>
+                  <option value="hours_desc">Est. Hours (High to Low)</option>
+                  <option value="title_asc">Title (A-Z)</option>
+                </select>
+              </div>
+
+              <!-- Add Task in Table -->
+              <button onclick="app.openTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add Activity</span>
+              </button>
+
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="overflow-x-auto min-h-[380px]">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[11px] font-bold border-b border-slate-200 dark:border-slate-700/80 shadow-xs select-none">
+                <tr>
+                  <th class="px-3.5 py-3 min-w-[320px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('order')">
+                      <span>Activity Name & Sequence</span>
+                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
+                    </div>
+                  </th>
+                  <th class="px-3.5 py-3 min-w-[130px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('status')">
+                      <span>Status</span>
+                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
+                    </div>
+                  </th>
+                  <th class="px-3.5 py-3 min-w-[120px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('priority')">
+                      <span>Priority</span>
+                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
+                    </div>
+                  </th>
+                  <th class="px-3.5 py-3 min-w-[180px]">Assignee / Role</th>
+                  <th class="px-3.5 py-3 min-w-[130px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('date_asc')">
+                      <span>Start Date</span>
+                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
+                    </div>
+                  </th>
+                  <th class="px-3.5 py-3 min-w-[130px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('due_asc')">
+                      <span>Due Date</span>
+                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
+                    </div>
+                  </th>
+                  <th class="px-3.5 py-3 min-w-[130px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('hours_desc')">
+                      <span>Hours (Est / Act)</span>
+                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
+                    </div>
+                  </th>
+                  <th class="px-3.5 py-3 text-right min-w-[90px]">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tasks-table-body" class="text-slate-700 dark:text-slate-200 divide-y divide-slate-100 dark:divide-slate-800">
+                <!-- Rendered dynamically sequentially without sprint grouping -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Table Footer Count -->
+          <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 font-medium">
+            <div id="table-summary-footer">Showing all activities</div>
+            <div class="flex items-center space-x-2 text-[11px]">
+              <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>All fields inline-editable & synced</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 4. CALENDAR VIEW -->
+      <section id="view-calendar-container" class="view-panel hidden space-y-4">
+        
+        <!-- Calendar KPI Metrics Bar -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Scheduled in Month</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="calendar-stat-total">0 Activities</div>
+              <div class="text-[11px] font-medium text-blue-600 dark:text-blue-400" id="calendar-stat-month-name">Current Month</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <i data-lucide="calendar" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Completed Deliverables</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="calendar-stat-done">0 / 0</div>
+              <div class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400" id="calendar-stat-percent">0% Completed</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <i data-lucide="check-circle" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active in Workflow</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="calendar-stat-inprogress">0 In Progress</div>
+              <div class="text-[11px] font-medium text-amber-600 dark:text-amber-400" id="calendar-stat-pending">0 Pending Deadlines</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <i data-lucide="clock" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Critical & Overdue</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="calendar-stat-overdue">0 Overdue</div>
+              <div class="text-[11px] font-medium text-rose-600 dark:text-rose-400" id="calendar-stat-critical">0 High / Urgent</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+              <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Calendar Card -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          
+          <!-- Calendar Header & Navigation Controls -->
+          <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-850/50">
+            
+            <!-- Left: Month Title & Navigation -->
+            <div class="flex items-center space-x-3">
+              <div class="flex items-center space-x-1.5 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+                <button onclick="app.prevCalendarPeriod()" title="Previous Period" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition">
+                  <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <button onclick="app.todayCalendarPeriod()" class="px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition">
+                  Today
+                </button>
+                <button onclick="app.nextCalendarPeriod()" title="Next Period" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition">
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <div>
+                <h2 id="calendar-month-year" class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>August 2026</span>
+                </h2>
+                <span id="calendar-header-badge" class="text-[11px] font-semibold text-slate-500">29 project deliverables</span>
+              </div>
+            </div>
+
+            <!-- Right: View Mode Switcher (Month Grid / Week / Agenda) & Add Task -->
+            <div class="flex flex-wrap items-center gap-2.5">
+              
+              <!-- Filter Dropdown (Status / Priority) -->
+              <div class="flex items-center space-x-1.5 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                <i data-lucide="filter" class="w-3.5 h-3.5 text-slate-400"></i>
+                <select id="calendar-filter-status" onchange="app.setCalendarFilter(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
+                  <option value="all">All Activities</option>
+                  <option value="in_progress">In Progress Only</option>
+                  <option value="todo">To Do Only</option>
+                  <option value="done">Completed Only</option>
+                  <option value="urgent">Urgent & High Only</option>
+                </select>
+              </div>
+
+              <!-- View Mode Tabs -->
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+                <button id="cal-mode-month" onclick="app.setCalendarMode('month')" class="px-2.5 py-1 rounded-lg transition bg-blue-600 text-white font-bold shadow-xs">
+                  Month
+                </button>
+                <button id="cal-mode-week" onclick="app.setCalendarMode('week')" class="px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                  Week
+                </button>
+                <button id="cal-mode-agenda" onclick="app.setCalendarMode('agenda')" class="px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                  Agenda
+                </button>
+              </div>
+
+              <!-- Quick Add Task -->
+              <button onclick="app.openTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs transition">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add Activity</span>
+              </button>
+
+            </div>
+          </div>
+
+          <!-- Calendar Render Body -->
+          <div id="calendar-grid-render" class="p-4 bg-slate-50/40 dark:bg-slate-900/40 min-h-[500px]">
+            <!-- Rendered dynamically according to selected mode (Month / Week / Agenda) -->
+          </div>
+
+          <!-- Selected Day Inspector Panel (Collapsible / Dynamic) -->
+          <div id="calendar-day-inspector" class="hidden p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all duration-200">
+            <!-- Populated dynamically when a day is clicked -->
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 5. SPRINTS & MILESTONES VIEW -->
+      <section id="view-sprints-container" class="view-panel hidden space-y-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-slate-800 dark:text-white">Sprint & Milestone Management</h2>
+            <p class="text-xs text-slate-500">Plan sprint cycles, set scope targets, and track milestones</p>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="app.openMilestoneModal()" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              + New Milestone
+            </button>
+            <button onclick="app.openSprintModal()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition">
+              + New Sprint
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 space-y-4" id="sprints-list-render"></div>
+          <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center justify-between">
+              <span>Project Milestones</span>
+              <i data-lucide="flag" class="w-4 h-4 text-amber-500"></i>
+            </h3>
+            <div id="milestones-list-render" class="space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. TIME TRACKER VIEW -->
+      <section id="view-timetracker-container" class="view-panel hidden space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-xl p-5 shadow-md flex flex-col justify-between border border-slate-800">
+            <div>
+              <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-300">Active Task Stopwatch</span>
+              <div class="mt-3 font-mono text-3xl font-black text-white" id="main-stopwatch-display">00:00:00</div>
+              <div class="mt-2 text-xs text-slate-300 truncate" id="main-stopwatch-task-name">No task selected</div>
+            </div>
+            <div class="mt-5 flex space-x-2">
+              <button onclick="app.toggleStopwatch()" id="main-stopwatch-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-xs font-bold py-2 rounded-lg transition">
+                Start Stopwatch
+              </button>
+              <button onclick="app.saveStopwatchLog()" class="bg-emerald-600 hover:bg-emerald-700 text-xs font-bold px-3 py-2 rounded-lg transition" title="Log Recorded Time">
+                Log Time
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <div>
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Project Total Time</span>
+              <div class="mt-2 text-3xl font-extrabold text-slate-800 dark:text-white" id="total-logged-hours-card">0.0h</div>
+              <p class="text-xs text-slate-400 mt-1">Recorded across all project tasks</p>
+            </div>
+            <div class="text-xs text-blue-600 font-semibold" id="est-vs-act-summary">0.0h / 0.0h estimated</div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+            <div>
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Manual Worklog</span>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">Log hours worked directly for any task and member</p>
+            </div>
+            <button onclick="app.openManualTimeLogModal()" class="w-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-xs font-semibold py-2 rounded-lg transition">
+              + Enter Worklog Entry
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-200 dark:border-slate-700">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Logged Work Hours Audit</h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-700/50 text-slate-500 uppercase font-semibold border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th class="px-4 py-3">Date</th>
+                  <th class="px-4 py-3">Task</th>
+                  <th class="px-4 py-3">Member</th>
+                  <th class="px-4 py-3">Hours</th>
+                  <th class="px-4 py-3">Notes</th>
+                  <th class="px-4 py-3 text-right">Delete</th>
+                </tr>
+              </thead>
+              <tbody id="timelogs-table-body" class="divide-y divide-slate-200 dark:divide-slate-700 text-slate-700 dark:text-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. ANALYTICS DASHBOARD VIEW -->
+      <section id="view-analytics-container" class="view-panel hidden space-y-6">
+        <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <span class="text-[11px] font-semibold text-slate-500 uppercase">Total Tasks</span>
+            <div class="text-2xl font-bold text-slate-800 dark:text-white mt-1" id="kpi-total-tasks">0</div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <span class="text-[11px] font-semibold text-amber-500 uppercase">In Progress</span>
+            <div class="text-2xl font-bold text-amber-600 mt-1" id="kpi-inprogress-tasks">0</div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <span class="text-[11px] font-semibold text-emerald-500 uppercase">Done Tasks</span>
+            <div class="text-2xl font-bold text-emerald-600 mt-1" id="kpi-done-tasks">0</div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <span class="text-[11px] font-semibold text-blue-500 uppercase">Completion Rate</span>
+            <div class="text-2xl font-bold text-blue-600 mt-1" id="kpi-completion-rate">0%</div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <span class="text-[11px] font-semibold text-rose-500 uppercase">Overdue Tasks</span>
+            <div class="text-2xl font-bold text-rose-600 mt-1" id="kpi-overdue-tasks">0</div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <span class="text-[11px] font-semibold text-purple-500 uppercase">Total Logged</span>
+            <div class="text-2xl font-bold text-purple-600 mt-1" id="kpi-total-hours">0h</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white">Sprint Burndown Chart</h3>
+                <span class="text-xs text-slate-400" id="burndown-sprint-title">Active Sprint</span>
+              </div>
+              <span class="text-xs text-slate-400">Ideal vs. Actual Remaining Hours</span>
+            </div>
+            <div class="h-64 w-full"><canvas id="burndownChart"></canvas></div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Priority Breakdown</h3>
+            <div class="h-64 w-full flex items-center justify-center"><canvas id="priorityChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Team Member Workload (Assigned Hours)</h3>
+            <div class="h-60 w-full"><canvas id="workloadChart"></canvas></div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Recent Project Activity</h3>
+            <div id="activity-stream-render" class="space-y-3 max-h-60 overflow-y-auto pr-1 text-xs"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- GANTT EXCEL / CSV UPLOAD MODAL -->
+  <div id="gantt-upload-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+            <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-white">Upload Gantt Chart (Excel / CSV)</h3>
+            <p class="text-xs text-slate-500">Import tasks, assignees, dates, and durations directly into your schedule</p>
+          </div>
+        </div>
+        <button onclick="app.closeGanttUploadModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+        
+        <!-- Drag & Drop Zone -->
+        <div id="gantt-drop-zone" onclick="document.getElementById('gantt-file-input').click()"
+          class="border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+          <input type="file" id="gantt-file-input" accept=".xlsx,.xls,.csv" onchange="app.handleGanttFileChange(this.files[0])" class="hidden">
+          <div class="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+            <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <span class="font-bold text-slate-800 dark:text-white text-sm" id="gantt-drop-text">Click or drag & drop your Gantt file here</span>
+            <p class="text-slate-400 text-xs mt-0.5">Supports Microsoft Excel (.xlsx, .xls) and CSV spreadsheets</p>
+          </div>
+        </div>
+
+        <!-- Detected File Info Preview -->
+        <div id="gantt-preview-box" class="hidden p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-emerald-800 dark:text-emerald-300 font-bold">
+              <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
+              <span id="gantt-file-name-label">filename.xlsx</span>
+            </div>
+            <span id="gantt-file-size-label" class="text-[11px] text-emerald-600 font-mono">12 KB</span>
+          </div>
+          <p class="text-[11px] text-emerald-700 dark:text-emerald-400" id="gantt-preview-details">
+            Ready to parse and import tasks with assignees and timeline dates.
+          </p>
+        </div>
+
+        <!-- Import Destination Settings -->
+        <div class="space-y-3 pt-1">
+          <label class="block font-bold text-slate-700 dark:text-slate-200">Import Destination</label>
+          <div class="space-y-2">
+            <label class="flex items-center space-x-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+              <input type="radio" name="gantt_destination" value="current" checked onchange="app.toggleGanttDestOption(this.value)" class="text-blue-600 focus:ring-blue-500">
+              <div class="flex-1 min-w-0">
+                <span class="font-semibold text-slate-800 dark:text-white block">Import into current project (<span id="gantt-active-project-name" class="text-blue-600">Active</span>)</span>
+                <span class="text-[11px] text-slate-400">Append tasks and create any missing team members automatically</span>
+              </div>
+            </label>
+
+            <label class="flex items-center space-x-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+              <input type="radio" name="gantt_destination" value="new" onchange="app.toggleGanttDestOption(this.value)" class="text-blue-600 focus:ring-blue-500">
+              <div class="flex-1 min-w-0">
+                <span class="font-semibold text-slate-800 dark:text-white block">Create as a new project</span>
+                <span class="text-[11px] text-slate-400">Set up a fresh standalone workspace from this Gantt sheet</span>
+              </div>
+            </label>
+          </div>
+
+          <!-- New Project Name input (visible when 'new' is selected) -->
+          <div id="gantt-new-project-input-container" class="hidden mt-2">
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">New Project Name *</label>
+            <input type="text" id="gantt-new-project-name" placeholder="e.g. Q3 Product Roadmap" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+          </div>
+        </div>
+
+        <!-- Download Sample Templates Hint -->
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500">
+          <span>Need a starting template?</span>
+          <div class="flex space-x-2">
+            <button type="button" onclick="app.downloadSampleGantt('xlsx')" class="text-blue-600 hover:underline font-semibold flex items-center space-x-1">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Excel (.xlsx)</span>
+            </button>
+            <button type="button" onclick="app.downloadSampleGantt('csv')" class="text-slate-600 dark:text-slate-400 hover:underline font-semibold flex items-center space-x-1">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>CSV (.csv)</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <button type="button" onclick="app.closeGanttUploadModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition">
+          Cancel
+        </button>
+        <button type="button" id="gantt-upload-submit-btn" onclick="app.submitGanttUpload()" class="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm shadow-emerald-500/20 flex items-center space-x-1.5 transition">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Import Gantt Tasks</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TASK MODAL (CREATE / EDIT / DETAILS) -->
+  <div id="task-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span id="task-modal-type-badge" class="px-2 py-0.5 text-[11px] font-bold rounded uppercase bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">Task</span>
+          <h3 id="task-modal-title" class="text-base font-bold text-slate-800 dark:text-white">Create New Task</h3>
+        </div>
+        <button onclick="app.closeTaskModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+        <input type="hidden" id="task-input-id">
+
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Title *</label>
+          <input type="text" id="task-input-title" placeholder="e.g. Implement WebSocket rate limiter"
+            class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+          <textarea id="task-input-description" rows="3" placeholder="Provide background context, technical specifications, or requirements..."
+            class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
+            <select id="task-input-status" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
+              <option value="backlog">Backlog</option>
+              <option value="todo">To Do</option>
+              <option value="in_progress">In Progress</option>
+              <option value="in_review">In Review</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority</label>
+            <select id="task-input-priority" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sprint</label>
+            <select id="task-input-sprint" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
+              <option value="">No Sprint (Backlog)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Assignee</label>
+            <select id="task-input-assignee" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div class="relative">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300">Start Date</label>
+              <button type="button" onclick="app.setTaskModalDateUndeclared('start')" class="text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-semibold transition" title="Clear and mark as Not Declared">Not Declared</button>
+            </div>
+            <div class="relative">
+              <input type="date" id="task-input-startdate" oninput="app.updateTaskModalDateBadges()" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+              <div id="task-startdate-undeclared-badge" onclick="document.getElementById('task-input-startdate').showPicker ? document.getElementById('task-input-startdate').showPicker() : document.getElementById('task-input-startdate').focus()" class="hidden absolute inset-0 bg-slate-50 dark:bg-slate-900 border border-dashed border-amber-300 dark:border-amber-700/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between cursor-pointer hover:bg-amber-50/50 transition">
+                <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <i data-lucide="calendar-off" class="w-3 h-3"></i>
+                  <span>Not Declared</span>
+                </span>
+                <span class="text-[9px] text-slate-400 font-medium">Pick date</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300">Due Date</label>
+              <button type="button" onclick="app.setTaskModalDateUndeclared('due')" class="text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-semibold transition" title="Clear and mark as Not Declared">Not Declared</button>
+            </div>
+            <div class="relative">
+              <input type="date" id="task-input-duedate" oninput="app.updateTaskModalDateBadges()" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+              <div id="task-duedate-undeclared-badge" onclick="document.getElementById('task-input-duedate').showPicker ? document.getElementById('task-input-duedate').showPicker() : document.getElementById('task-input-duedate').focus()" class="hidden absolute inset-0 bg-slate-50 dark:bg-slate-900 border border-dashed border-amber-300 dark:border-amber-700/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between cursor-pointer hover:bg-amber-50/50 transition">
+                <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <i data-lucide="calendar-off" class="w-3 h-3"></i>
+                  <span>Not Declared</span>
+                </span>
+                <span class="text-[9px] text-slate-400 font-medium">Pick date</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Est. Hours</label>
+            <input type="number" step="0.5" id="task-input-esthours" placeholder="0.0" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Act. Hours</label>
+            <input type="number" step="0.5" id="task-input-acthours" placeholder="0.0" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tags</label>
+            <input type="text" id="task-input-tags" placeholder="qc, batch, 1kg" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-bold text-slate-700 dark:text-slate-300">Subtask Checklist</span>
+            <span id="subtask-progress-count" class="text-[11px] text-slate-400 font-semibold">0 / 0</span>
+          </div>
+
+          <div id="subtasks-container" class="space-y-1.5 mb-2.5"></div>
+
+          <div class="flex space-x-2">
+            <input type="text" id="new-subtask-input" placeholder="Add a checklist item... (Press Enter)"
+              onkeydown="if(event.key==='Enter') { event.preventDefault(); app.handleAddSubtask(); }"
+              class="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <button type="button" onclick="app.handleAddSubtask()" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg font-semibold text-slate-700 dark:text-slate-200">
+              Add
+            </button>
+          </div>
+        </div>
+
+        <div id="task-details-footer-section" class="pt-2 border-t border-slate-200 dark:border-slate-700 hidden">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-700 dark:text-slate-300">Work Logs & Time Spent</span>
+            <span id="task-logged-total-badge" class="text-xs font-bold text-blue-600 dark:text-blue-400">Total: 0.0h</span>
+          </div>
+          <div id="task-timelogs-list" class="mt-2 space-y-1 text-[11px] text-slate-500 max-h-28 overflow-y-auto"></div>
+        </div>
+
+      </div>
+
+      <div class="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <button id="task-delete-btn" type="button" onclick="app.handleDeleteTask()" class="text-rose-600 hover:text-rose-700 text-xs font-semibold hidden flex items-center space-x-1">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete Task</span>
+        </button>
+        <div class="flex space-x-2 ml-auto">
+          <button type="button" onclick="app.closeTaskModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition">
+            Cancel
+          </button>
+          <button type="button" onclick="app.handleSaveTask()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition">
+            Save Task
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PROJECT MODAL (CREATE / EDIT / DELETE) -->
+  <div id="project-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <h3 id="project-modal-title" class="text-base font-bold text-slate-800 dark:text-white">Create New Project</h3>
+        <button onclick="app.closeProjectModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <input type="hidden" id="project-input-id">
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Project Name *</label>
+          <input type="text" id="project-input-name" placeholder="e.g. Mobile Client App 2.0" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+          <textarea id="project-input-description" rows="3" placeholder="Core mission and goals of this project..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></textarea>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Theme Accent Color</label>
+          <div class="flex items-center space-x-3">
+            <input type="color" id="project-input-color" value="#3B82F6" class="w-10 h-10 rounded cursor-pointer border-0 bg-transparent">
+            <span class="text-slate-500">Pick brand color</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
+        <button id="project-delete-btn" type="button" onclick="app.handleDeleteProjectFromModal()" class="hidden text-rose-600 hover:text-rose-700 text-xs font-semibold flex items-center space-x-1.5 transition px-2 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          <span>Delete Project</span>
+        </button>
+        <div class="flex space-x-2 ml-auto">
+          <button onclick="app.closeProjectModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+          <button id="project-submit-btn" onclick="app.handleSaveProject()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm">Save Project</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPRINT MODAL -->
+  <div id="sprint-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <h3 id="sprint-modal-title" class="text-base font-bold text-slate-800 dark:text-white">Create Sprint</h3>
+        <button onclick="app.closeSprintModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <input type="hidden" id="sprint-input-id">
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sprint Name *</label>
+          <input type="text" id="sprint-input-name" placeholder="Sprint 26: Core Refactor" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sprint Goal</label>
+          <textarea id="sprint-input-goal" rows="2" placeholder="Key deliverable objective..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
+            <input type="date" id="sprint-input-startdate" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">End Date</label>
+            <input type="date" id="sprint-input-enddate" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
+          <select id="sprint-input-status" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+            <option value="planning">Planning</option>
+            <option value="active">Active Sprint</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+        <button onclick="app.closeSprintModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 rounded-lg">Cancel</button>
+        <button onclick="app.handleSaveSprint()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Sprint</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MILESTONE MODAL -->
+  <div id="milestone-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <h3 class="text-base font-bold text-slate-800 dark:text-white">New Milestone</h3>
+        <button onclick="app.closeMilestoneModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Milestone Title *</label>
+          <input type="text" id="milestone-input-title" placeholder="Alpha Release to Beta Customers" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Due Date *</label>
+          <input type="date" id="milestone-input-duedate" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+        <button onclick="app.closeMilestoneModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+        <button onclick="app.handleSaveMilestone()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Milestone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANUAL TIME LOG MODAL -->
+  <div id="timelog-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <h3 class="text-base font-bold text-slate-800 dark:text-white">Log Work Hours</h3>
+        <button onclick="app.closeManualTimeLogModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Task *</label>
+          <select id="timelog-input-task" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Member</label>
+            <select id="timelog-input-member" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hours Worked *</label>
+            <input type="number" step="0.25" min="0.25" id="timelog-input-hours" placeholder="e.g. 2.5" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Work Date</label>
+          <input type="date" id="timelog-input-date" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Work Description / Summary</label>
+          <input type="text" id="timelog-input-desc" placeholder="Details of progress made..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+        <button onclick="app.closeManualTimeLogModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+        <button onclick="app.handleSaveTimeLog()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Record Log</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORT / EXPORT MODAL -->
+  <div id="import-export-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+        <h3 class="text-base font-bold text-slate-800 dark:text-white">Data Portability & Backup</h3>
+        <button onclick="app.closeImportExportModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+        <h4 class="font-bold text-xs text-slate-800 dark:text-white">Export Project Backup</h4>
+        <p class="text-xs text-slate-500">Download all tasks, sprints, members, and worklogs in JSON format.</p>
+        <button onclick="app.exportProjectJSON()" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center space-x-1.5 transition">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Download JSON Backup</span>
+        </button>
+      </div>
+
+      <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+        <h4 class="font-bold text-xs text-slate-800 dark:text-white">Import Project</h4>
+        <p class="text-xs text-slate-500">Restore a project from a previous JSON backup file.</p>
+        <input type="file" id="import-json-file" accept=".json" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-200 dark:file:bg-slate-700 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-300">
+        <button onclick="app.importProjectJSON()" class="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center space-x-1.5 transition">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Import Project File</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== OUTLOOK EMAIL NOTIFICATION INTEGRATION MODAL ==================== -->
+  <div id="notifications-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/50 flex-shrink-0">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+            <i data-lucide="mail" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              Microsoft Outlook & Email Alerts
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Automated deadline reminders, assignment alerts & weekly escalations</p>
+          </div>
+        </div>
+        <button onclick="app.closeNotificationsModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-slate-200 dark:border-slate-700 px-6 bg-slate-100/60 dark:bg-slate-900/40 text-xs font-semibold flex-shrink-0">
+        <button onclick="app.switchNotifTab('settings')" id="notif-tab-settings-btn" class="py-3 px-4 border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 font-bold flex items-center space-x-2">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+          <span>Outlook Settings & Rules</span>
+        </button>
+        <button onclick="app.switchNotifTab('outbox')" id="notif-tab-outbox-btn" class="py-3 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center space-x-2">
+          <i data-lucide="inbox" class="w-4 h-4"></i>
+          <span>Outbox & Notification Log</span>
+          <span id="notif-outbox-count-badge" class="bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.2 rounded-full text-[10px] font-bold">0</span>
+        </button>
+        <button onclick="app.switchNotifTab('members')" id="notif-tab-members-btn" class="py-3 px-4 border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center space-x-2">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span>Assignee Email Directory</span>
+        </button>
+      </div>
+
+      <!-- Modal Body Content (Scrollable) -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-5">
+        
+        <!-- ================= TAB 1: SETTINGS & RULES ================= -->
+        <div id="notif-tab-settings" class="space-y-5 text-xs">
+          
+          <!-- Master Mode Banner (Simulation vs Live SMTP) -->
+          <div class="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/60 dark:bg-indigo-950/30 flex items-start justify-between">
+            <div class="space-y-1 pr-4">
+              <div class="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+                <i data-lucide="shield-check" class="w-4 h-4 text-indigo-600 dark:text-indigo-400"></i>
+                <span>Outbox Delivery Mode</span>
+              </div>
+              <p class="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                <strong>Simulation & Sandbox Mode:</strong> Formats all HTML emails and logs them in the in-app Outbox log with full live previews without requiring external SMTP credentials. Switch to <strong>Live Outlook / SMTP</strong> to send real emails to assignees' inboxes.
+              </p>
+            </div>
+            <div class="flex items-center space-x-2 flex-shrink-0 pt-1">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="notif-input-simulation" class="sr-only peer" onchange="app.handleSimulationToggle()">
+                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+              <span id="notif-mode-label" class="text-xs font-bold text-slate-700 dark:text-slate-300">Simulation</span>
+            </div>
+          </div>
+
+          <!-- SMTP Connection Config -->
+          <div class="bg-white dark:bg-slate-900/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+            <h4 class="font-bold text-slate-800 dark:text-white flex items-center justify-between">
+              <span>Microsoft Outlook / SMTP Connection</span>
+              <span id="notif-smtp-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">Default: Outlook O365</span>
+            </h4>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Provider Preset</label>
+                <select id="notif-input-provider" onchange="app.handleProviderChange(this.value)" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+                  <option value="outlook">Microsoft Outlook / Office 365 (smtp.office365.com)</option>
+                  <option value="hotmail">Outlook.com / Live / Hotmail (smtp-mail.outlook.com)</option>
+                  <option value="custom">Custom SMTP Server</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sender Email / User *</label>
+                <input type="email" id="notif-input-user" placeholder="e.g. notifications@company.com" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+              </div>
+
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Password / App Password</label>
+                <input type="password" id="notif-input-pass" placeholder="••••••••" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sender Display Name</label>
+                <input type="text" id="notif-input-sendername" placeholder="ProjectPulse Notifications" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">SMTP Host</label>
+                <input type="text" id="notif-input-host" placeholder="smtp.office365.com" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">SMTP Port & Security</label>
+                <div class="flex items-center space-x-2">
+                  <input type="number" id="notif-input-port" placeholder="587" class="w-20 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
+                  <label class="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300 cursor-pointer text-[11px]">
+                    <input type="checkbox" id="notif-input-tls" checked class="rounded border-slate-300 text-blue-600">
+                    <span>STARTTLS</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Test Email Dispatcher -->
+            <div class="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
+              <div class="flex items-center space-x-2 w-full sm:w-auto">
+                <input type="email" id="notif-input-testemail" placeholder="Recipient test email..." class="w-full sm:w-64 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white text-xs">
+                <button onclick="app.sendTestEmail()" class="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition flex items-center space-x-1">
+                  <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                  <span>Send Test Email</span>
+                </button>
+              </div>
+              <span class="text-[11px] text-slate-400">Verifies connection and delivers styled test preview</span>
+            </div>
+          </div>
+
+          <!-- Notification Trigger Rules Checklist -->
+          <div class="bg-white dark:bg-slate-900/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+            <h4 class="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+              <i data-lucide="bell-ring" class="w-4 h-4 text-blue-500"></i>
+              <span>Automated Notification Rules (5 Scenarios)</span>
+            </h4>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              
+              <!-- Rule 1: 1 Day Before Due Date -->
+              <label class="flex items-start space-x-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100/50 transition">
+                <input type="checkbox" id="notif-rule-duesoon" checked class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-white">1) 1 Day Before Due Date</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400">Triggers a reminder to the assignee that activity is due tomorrow.</div>
+                </div>
+              </label>
+
+              <!-- Rule 2: On Due Date -->
+              <label class="flex items-start space-x-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100/50 transition">
+                <input type="checkbox" id="notif-rule-duetoday" checked class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-white">2) On Due Date (Action Required)</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400">Triggers a priority alert on due date stating that activity is pending.</div>
+                </div>
+              </label>
+
+              <!-- Rule 3: 1 Day After & Recurring Weekly -->
+              <label class="flex items-start space-x-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100/50 transition">
+                <input type="checkbox" id="notif-rule-overdue" checked class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <div class="w-full">
+                  <div class="font-bold text-slate-800 dark:text-white">3) Overdue Alert & Recurring Weekly</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400 mb-1.5">Triggers on next day of due date, then recurs weekly if still pending.</div>
+                  <div class="flex items-center space-x-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                    <span class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Weekly Escalation Day:</span>
+                    <select id="notif-input-recurringday" class="px-2 py-0.5 text-[11px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded">
+                      <option value="monday" selected>Every Monday</option>
+                      <option value="tuesday">Every Tuesday</option>
+                      <option value="wednesday">Every Wednesday</option>
+                      <option value="thursday">Every Thursday</option>
+                      <option value="friday">Every Friday</option>
+                      <option value="saturday">Every Saturday</option>
+                      <option value="sunday">Every Sunday</option>
+                    </select>
+                  </div>
+                </div>
+              </label>
+
+              <!-- Rule 4: Activity Assigned -->
+              <label class="flex items-start space-x-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100/50 transition">
+                <input type="checkbox" id="notif-rule-assigned" checked class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-white">4) Activity Assigned to User</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400">Triggers immediately when an activity is assigned or reassigned.</div>
+                </div>
+              </label>
+
+              <!-- Rule 5: Activity Completed -->
+              <label class="flex items-start space-x-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/40 cursor-pointer hover:bg-slate-100/50 transition md:col-span-2">
+                <input type="checkbox" id="notif-rule-completed" checked class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-white">5) Activity Completed (Done)</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400">Triggers an alert to the assignee and team when activity status becomes Done.</div>
+                </div>
+              </label>
+
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ================= TAB 2: OUTBOX & SENT LOGS ================= -->
+        <div id="notif-tab-outbox" class="space-y-4 text-xs hidden">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="font-bold text-slate-800 dark:text-white">Dispatched Notifications Audit Log</h4>
+              <p class="text-slate-500 text-[11px]">Real-time history of all email notifications sent via Outlook or Simulated in sandbox.</p>
+            </div>
+            <button onclick="app.runManualNotificationCheck()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3.5 py-2 rounded-lg flex items-center space-x-1.5 shadow-xs transition">
+              <i data-lucide="zap" class="w-4 h-4"></i>
+              <span>⚡ Run Due Date Checks Now</span>
+            </button>
+          </div>
+
+          <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            <div class="overflow-x-auto max-h-[360px] overflow-y-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="sticky top-0 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-semibold border-b border-slate-200 dark:border-slate-700 text-[10px]">
+                  <tr>
+                    <th class="px-3 py-2.5">Date / Time</th>
+                    <th class="px-3 py-2.5">Recipient</th>
+                    <th class="px-3 py-2.5">Trigger Event</th>
+                    <th class="px-3 py-2.5">Activity & Project</th>
+                    <th class="px-3 py-2.5">Status</th>
+                    <th class="px-3 py-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="notif-logs-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= TAB 3: TEAM DIRECTORY ================= -->
+        <div id="notif-tab-members" class="space-y-4 text-xs hidden">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="font-bold text-slate-800 dark:text-white">Assignee Email Directory</h4>
+              <p class="text-slate-500 text-[11px]">Configure email addresses for process owners to receive automated Outlook notifications.</p>
+            </div>
+            <button onclick="app.refreshMembersList()" class="text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center space-x-1">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-semibold border-b border-slate-200 dark:border-slate-700 text-[10px]">
+                <tr>
+                  <th class="px-3 py-2.5">Member Name</th>
+                  <th class="px-3 py-2.5">Role</th>
+                  <th class="px-3 py-2.5">Email Address (Outlook)</th>
+                  <th class="px-3 py-2.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="notif-members-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
+        <span id="notif-save-status" class="text-xs text-slate-500">Ready</span>
+        <div class="flex items-center space-x-2">
+          <button onclick="app.closeNotificationsModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-lg">Close</button>
+          <button onclick="app.saveNotificationSettings()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center space-x-1.5 shadow-xs transition">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Save Configuration</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== EMAIL HTML PREVIEW MODAL ==================== -->
+  <div id="email-preview-modal" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      
+      <div class="px-6 py-3.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 flex-shrink-0">
+        <div>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <i data-lucide="mail-open" class="w-4 h-4 text-blue-500"></i>
+            <span>Email Notification Preview</span>
+          </h3>
+          <p id="email-preview-subject" class="text-xs text-slate-500 font-medium truncate max-w-md"></p>
+        </div>
+        <button onclick="app.closeEmailPreviewModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="px-6 py-2.5 bg-slate-100/60 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex justify-between flex-shrink-0">
+        <div><strong>To:</strong> <span id="email-preview-to"></span></div>
+        <div><strong>Sent:</strong> <span id="email-preview-date"></span></div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 bg-slate-100 dark:bg-slate-950 flex justify-center">
+        <div id="email-preview-container" class="w-full max-w-[620px] bg-white rounded-xl shadow-xs overflow-hidden">
+          <!-- Rendered HTML Email Content -->
+        </div>
+      </div>
+
+      <div class="px-6 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex justify-end flex-shrink-0">
+        <button onclick="app.closeEmailPreviewModal()" class="px-4 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg">Close Preview</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FLOATING TOAST NOTIFICATIONS -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- APPLICATION SCRIPT -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
