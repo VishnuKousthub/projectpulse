@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import io
 import re
 from datetime import datetime, date, timedelta
@@ -9,116 +9,199 @@ AVATAR_COLORS = [
     "#F59E0B", "#06B6D4", "#6366F1", "#14B8A6", "#F97316"
 ]
 
+MONTHS_MAP = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "may": 5, "jun": 6, "june": 6,
+    "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "september": 9, "sept": 9,
+    "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12
+}
+
 HEADER_MAPPINGS = {
     "task_no": [
-        "task no", "task_no", "s.no", "sno", "s no", "sl no", "sl.no", "task id", "item no", "item_no", "no", "#", "id"
+        "task no", "task_no", "s.no", "sno", "s no", "sl no", "sl.no", "task id", "item no", "item_no",
+        "no", "#", "id", "wbs", "item #", "activity #", "line #", "pos", "position", "sr.no", "sr no"
     ],
     "title": [
         "activity / process step", "activity name", "process step", "process", "activity",
         "task name", "task_name", "tasks", "task", "action item", "action items", "action", "actions",
         "work item", "work items", "work", "item name", "items", "item",
         "title", "name", "deliverable", "deliverables", "step name", "steps", "step",
-        "scope", "feature", "features", "todo", "to-do", "to do", "topic", "job",
-        "milestone", "plan", "story", "user story", "requirement", "requirements",
-        "content", "objective", "objectives", "description"
+        "scope", "scope of work", "work package", "feature", "features", "todo", "to-do", "to do",
+        "topic", "job", "milestone", "plan", "story", "user story", "requirement", "requirements",
+        "content", "objective", "objectives", "description", "details", "task description", "activity description"
     ],
     "assignee": [
         "task owner", "owner", "assignee", "assigned to", "assigned_to", "resource",
-        "resource name", "member", "person", "who", "lead", "assigned", "responsible person"
+        "resource name", "resources", "member", "members", "person", "who", "lead", "assigned",
+        "responsible person", "responsible party", "pic", "p.i.c", "p.i.c.", "poc", "point of contact",
+        "executor", "developer", "engineer", "action by", "assigned by", "in charge"
     ],
     "department": [
-        "responsible", "department", "dept", "team", "function", "group", "division"
+        "responsible", "department", "dept", "team", "function", "group", "division", "discipline"
     ],
     "start_date": [
         "start", "start date", "start_date", "begin", "begin date",
-        "from", "start time", "startdate", "planned start", "commence"
+        "from", "start time", "startdate", "planned start", "commence", "commence date",
+        "target start", "baseline start", "orig start", "start timeline", "start_dt", "start_time"
     ],
     "due_date": [
         "end", "end date", "end_date", "due date", "due_date", "finish",
-        "finish date", "to", "deadline", "target date", "duedate", "enddate", "planned finish", "target"
+        "finish date", "to", "deadline", "target date", "duedate", "enddate",
+        "planned finish", "target finish", "target completion", "completion date",
+        "target", "baseline finish", "orig finish", "end timeline", "due_dt", "end_time"
     ],
     "status": [
         "status", "state", "progress", "stage", "% complete", "percent complete",
-        "progress %", "completion", "task status", "condition"
+        "% done", "progress %", "completion", "completion %", "task status", "condition", "overall status"
     ],
     "priority": [
-        "priority", "severity", "urgency", "importance", "level", "rank"
+        "priority", "severity", "urgency", "importance", "level", "rank", "prio"
     ],
     "estimated_hours": [
         "estimated hours", "est hours", "est_hours", "estimated time",
-        "duration (hours)", "duration", "hours", "work", "days", "work (hours)", "effort", "time (hrs)"
+        "duration (hours)", "duration (days)", "duration", "hours", "work", "days",
+        "work (hours)", "effort", "time (hrs)", "est duration", "est time", "mandays", "man-days", "manhours", "man-hours"
     ],
     "sprint": [
-        "sprint", "phase", "milestone", "category", "wbs", "epic", "stream", "stage name"
+        "sprint", "phase", "milestone", "category", "wbs", "epic", "stream", "stage name", "section", "module", "workstream"
     ],
     "description": [
-        "remark", "remarks", "description", "notes", "details", "comments", "summary", "scope notes"
+        "remark", "remarks", "description", "notes", "details", "comments", "summary", "scope notes", "observation", "observations"
     ],
     "tags": [
-        "tags", "tag", "labels", "keywords"
+        "tags", "tag", "labels", "keywords", "category", "type"
     ]
 }
 
 def normalize_header(header_str):
     if not header_str:
         return ""
-    return re.sub(r"[^a-z0-9% /_#]+", " ", str(header_str).lower()).strip()
+    return re.sub(r"[^a-z0-9% /_#\.]+", " ", str(header_str).lower()).strip()
 
 def match_column_name(clean_header):
     if not clean_header:
         return None
     
-    # Check exact task_no / id first
-    if clean_header in HEADER_MAPPINGS["task_no"]:
-        return "task_no"
+    clean_str = clean_header.strip()
 
-    # Priority check for title / activity name
-    for alias in HEADER_MAPPINGS["title"]:
-        if clean_header == alias or clean_header.startswith(alias):
-            return "title"
-    
-    # Priority check for assignee / owner
-    for alias in HEADER_MAPPINGS["assignee"]:
-        if clean_header == alias or clean_header.startswith(alias):
-            return "assignee"
+    # If the text ends with a number (e.g. "Step 1", "Reaction Step 2"), it is task data, not a column header
+    if re.search(r"\d+$", clean_str) and not any(clean_str == p for p in ["p0", "p1", "p2", "p3", "p4", "wbs", "task no", "sl no"]):
+        return None
 
-    # Check other mappings
+    # 1. Exact match across all aliases (longest alias first)
+    all_exact = []
     for canonical_field, aliases in HEADER_MAPPINGS.items():
-        if canonical_field in ("title", "assignee", "task_no"):
-            continue
         for alias in aliases:
-            if clean_header == alias or clean_header.startswith(alias):
-                return canonical_field
+            all_exact.append((alias, canonical_field))
+    
+    all_exact.sort(key=lambda x: len(x[0]), reverse=True)
+    for alias, field in all_exact:
+        if clean_str == alias:
+            return field
+
+    # 2. Word-boundary sub-phrase match with strict field prioritization
+    # Only match sub-phrases if clean header is concise (<= 4 words) to avoid matching full task titles
+    if len(clean_str.split()) <= 4:
+        field_order = ["start_date", "due_date", "status", "priority", "estimated_hours", "assignee", "sprint", "department", "description", "tags", "task_no", "title"]
+        for field in field_order:
+            aliases = sorted(HEADER_MAPPINGS[field], key=len, reverse=True)
+            for alias in aliases:
+                if re.search(r"\b" + re.escape(alias) + r"\b", clean_str):
+                    return field
 
     return None
 
 def parse_date_value(val):
-    if not val:
+    if val is None:
         return None
     if isinstance(val, (datetime, date)):
         return val.strftime("%Y-%m-%d")
     
-    val_str = str(val).strip()
-    if not val_str or val_str.lower() in ("none", "null", "n/a", "-", "tbd", "undeclared", "not declared"):
+    # Check numeric Excel serial dates (e.g. 45520 -> 2024-08-16)
+    if isinstance(val, (int, float)):
+        if 20000 <= val <= 80000:
+            try:
+                base_date = datetime(1899, 12, 30)
+                res_date = base_date + timedelta(days=float(val))
+                return res_date.strftime("%Y-%m-%d")
+            except Exception:
+                pass
         return None
 
-    # Handle DD/MM/YYYY or DD-MM-YYYY
-    m = re.search(r"(\d{1,2})[/-]+(\d{1,2})[/-]+(\d{4})", val_str)
+    val_str = str(val).strip()
+    if not val_str or val_str.lower() in ("none", "null", "n/a", "na", "-", "--", "tbd", "undeclared", "not declared", "nil", "pending"):
+        return None
+
+    # If it is a string of numeric serial date like '45520' or '45520.0'
+    if re.match(r"^\d{5}(\.\d+)?$", val_str):
+        try:
+            num = float(val_str)
+            if 20000 <= num <= 80000:
+                base_date = datetime(1899, 12, 30)
+                return (base_date + timedelta(days=num)).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+    # Standardize separators
+    cleaned = val_str.replace(".", "-").replace("/", "-")
+
+    # 1. YYYY-MM-DD or YYYY-M-D
+    m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", cleaned)
     if m:
-        d, mo, y = m.groups()
+        y, mo, d = m.groups()
         try:
             return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
         except Exception:
             pass
 
-    # Handle YYYY-MM-DD
-    m2 = re.search(r"(\d{4})[/-]+(\d{1,2})[/-]+(\d{1,2})", val_str)
-    if m2:
-        y, mo, d = m2.groups()
+    # 2. DD-MM-YYYY or D-M-YYYY
+    m = re.search(r"(\d{1,2})-(\d{1,2})-(\d{4})", cleaned)
+    if m:
+        d, mo, y = m.groups()
+        d_i, mo_i = int(d), int(mo)
+        if mo_i > 12 and d_i <= 12:
+            d_i, mo_i = mo_i, d_i
         try:
-            return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+            return f"{int(y):04d}-{mo_i:02d}-{d_i:02d}"
         except Exception:
             pass
+
+    # 3. DD-MM-YY or D-M-YY (2-digit year)
+    m = re.search(r"(\d{1,2})-(\d{1,2})-(\d{2})(?!\d)", cleaned)
+    if m:
+        d, mo, y = m.groups()
+        y_full = 2000 + int(y) if int(y) < 70 else 1900 + int(y)
+        d_i, mo_i = int(d), int(mo)
+        if mo_i > 12 and d_i <= 12:
+            d_i, mo_i = mo_i, d_i
+        try:
+            return f"{y_full:04d}-{mo_i:02d}-{d_i:02d}"
+        except Exception:
+            pass
+
+    # 4. Text month: '15-Aug-2026', '15 Aug 2026', 'Aug 15 2026', '15-August-2026', '15-Aug-26'
+    text_cleaned = re.sub(r"[,]+", " ", val_str)
+    tokens = re.split(r"[\s\-]+", text_cleaned)
+    if len(tokens) >= 3:
+        mo_num = None
+        d_num = None
+        y_num = None
+        for t in tokens:
+            t_low = t.lower()
+            if t_low in MONTHS_MAP:
+                mo_num = MONTHS_MAP[t_low]
+            elif re.match(r"^\d{4}$", t):
+                y_num = int(t)
+            elif re.match(r"^\d{1,2}$", t):
+                if d_num is None:
+                    d_num = int(t)
+                elif y_num is None:
+                    y_num = 2000 + int(t) if int(t) < 70 else 1900 + int(t)
+        if mo_num and d_num and y_num:
+            try:
+                return f"{y_num:04d}-{mo_num:02d}-{d_num:02d}"
+            except Exception:
+                pass
 
     return None
 
@@ -143,13 +226,13 @@ def normalize_status(val):
         except Exception:
             pass
 
-    if any(k in s for k in ["done", "complete", "finish", "closed", "pass", "resolved"]):
+    if any(k in s for k in ["done", "complete", "finish", "closed", "pass", "resolved", "delivered"]):
         return "done"
     elif any(k in s for k in ["delay", "in progress", "progress", "active", "working", "ongoing", "started", "doing", "wip"]):
         return "in_progress"
     elif any(k in s for k in ["review", "testing", "qa", "verify", "audit", "hold", "pending review"]):
         return "in_review"
-    elif any(k in s for k in ["backlog", "future", "icebox", "wishlist"]):
+    elif any(k in s for k in ["backlog", "future", "icebox", "wishlist", "planned"]):
         return "backlog"
     return "todo"
 
@@ -180,7 +263,7 @@ def normalize_estimated_hours(val):
     if not s:
         return 0.0
 
-    days_match = re.search(r"([\d\.]+)\s*(d|day|days)", s)
+    days_match = re.search(r"([\d\.]+)\s*(d|day|days|manday|mandays)", s)
     if days_match:
         try:
             return round(float(days_match.group(1)) * 8.0, 1)
@@ -198,23 +281,43 @@ def normalize_estimated_hours(val):
 
 def parse_gantt_file(file_bytes, filename=""):
     """
-    Universal Spreadsheet / Table Parser for ProjectPulse.
+    Universal Spreadsheet & Gantt Chart Parser for ProjectPulse.
     Accepts ANY Excel (.xlsx, .xlsm, .xls) or CSV / TSV file.
-    Supports basic 1-column task lists, simple 2-column tables, or complex Gantt schedules.
+    Supports multi-sheet scanning, section hierarchies, custom date styles, and undeclared timeline preservation.
     """
     is_excel = filename.lower().endswith((".xlsx", ".xlsm", ".xltx", ".xls")) or file_bytes[:4] == b"PK\x03\x04"
     
     if is_excel:
         wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-        target_sheet = None
-        for sname in wb.sheetnames:
-            if any(k in sname.lower() for k in ["gantt", "production", "schedule", "plan", "tasks", "activities", "sheet1"]):
-                target_sheet = wb[sname]
-                break
-        if target_sheet is None:
-            target_sheet = wb.active
+        best_sheet_parsed = None
+        best_sheet_score = -1
 
-        return _parse_excel_sheet(target_sheet, wb)
+        # Scan all sheets in the workbook and pick the highest scoring schedule sheet
+        for sname in wb.sheetnames:
+            ws = wb[sname]
+            try:
+                parsed = _parse_excel_sheet(ws)
+                if parsed and parsed.get("tasks"):
+                    task_count = len(parsed["tasks"])
+                    cols_count = len(parsed.get("columns_detected", {}))
+                    dated_count = sum(1 for t in parsed["tasks"] if t.get("start_date") or t.get("due_date"))
+                    assigned_count = sum(1 for t in parsed["tasks"] if t.get("assignee_name"))
+                    
+                    sheet_score = (task_count * 10) + (cols_count * 50) + (dated_count * 30) + (assigned_count * 20)
+                    if any(k in sname.lower() for k in ["gantt", "schedule", "production", "plan", "tasks", "activities"]):
+                        sheet_score += 100
+
+                    if sheet_score > best_sheet_score:
+                        best_sheet_score = sheet_score
+                        best_sheet_parsed = parsed
+            except Exception:
+                continue
+
+        if best_sheet_parsed and best_sheet_parsed.get("tasks"):
+            return best_sheet_parsed
+
+        # Fallback to active sheet
+        return _parse_excel_sheet(wb.active)
     else:
         return _parse_csv_text(file_bytes)
 
@@ -222,7 +325,6 @@ def _parse_excel_sheet(ws, wb=None):
     rows_raw = []
     for row in ws.iter_rows(values_only=True):
         row_list = list(row)
-        # Keep row if it has at least one non-empty cell
         if any(c is not None and str(c).strip() != "" for c in row_list):
             rows_raw.append(row_list)
 
@@ -248,6 +350,8 @@ def _process_table_rows(rows_raw):
     Intelligently extracts tasks, assignees, timelines, and metadata from raw rows.
     Works for any table format (1 column, 2 columns, or full Gantt sheet).
     """
+    max_cols = max(len(r) for r in rows_raw) if rows_raw else 0
+
     # 1. Extract Project Metadata if present in top header banners
     project_metadata = {
         "project_name": None,
@@ -311,7 +415,6 @@ def _process_table_rows(rows_raw):
 
     # 3. Fallback: If no recognized header row is found (e.g. raw list of activities)
     if best_header_idx == -1 or not best_header_map or "title" not in best_header_map.values():
-        # Find which column contains descriptive text strings
         max_cols = max(len(r) for r in rows_raw)
         col_text_scores = [0] * max_cols
         
@@ -319,7 +422,6 @@ def _process_table_rows(rows_raw):
             for c_idx, cell in enumerate(row):
                 if cell is not None:
                     c_str = str(cell).strip()
-                    # If string length > 2 and not just numbers or pure dates
                     if len(c_str) > 2 and not re.match(r"^\d+(\.\d+)?$", c_str) and not parse_date_value(c_str):
                         col_text_scores[c_idx] += 1
 
@@ -327,7 +429,6 @@ def _process_table_rows(rows_raw):
         if col_text_scores and max(col_text_scores) > 0:
             best_title_col = col_text_scores.index(max(col_text_scores))
 
-        # Check if row 0 was a generic header or data
         row0_val = str(rows_raw[0][best_title_col] or "").strip().lower() if len(rows_raw[0]) > best_title_col else ""
         if any(row0_val == h for h in ["task", "tasks", "title", "activity", "name", "action", "items"]):
             best_header_idx = 0
@@ -337,12 +438,10 @@ def _process_table_rows(rows_raw):
             data_rows = rows_raw
         
         best_header_map = {best_title_col: "title"}
-        # If there are second or third columns, map assignee or date if detectable
         if max_cols > 1:
             for c_idx in range(max_cols):
                 if c_idx == best_title_col:
                     continue
-                # Test sample values in this column
                 sample_vals = [r[c_idx] for r in data_rows[:10] if c_idx < len(r) and r[c_idx] is not None]
                 if any(parse_date_value(v) for v in sample_vals):
                     if "start_date" not in best_header_map.values():
@@ -400,6 +499,7 @@ def _process_table_rows(rows_raw):
         elif field == "task_no": task_no_col = col_idx
 
     current_order_idx = 0
+    current_section_name = None
 
     for row in data_rows:
         if not row or not any(c is not None and str(c).strip() != "" for c in row):
@@ -425,11 +525,30 @@ def _process_table_rows(rows_raw):
         if lower_title in ("total time", "summary", "kpi", "total", "grand total", "sub total", "notes", "legend"):
             continue
 
+        # Dates: Parse explicitly if provided
+        start_date = parse_date_value(row[start_col]) if start_col is not None and start_col < len(row) else None
+        due_date = parse_date_value(row[due_col]) if due_col is not None and due_col < len(row) else None
+
         # Assignee
         raw_assignee = row[assignee_col] if assignee_col is not None and assignee_col < len(row) else None
         assignee_str = str(raw_assignee).strip() if raw_assignee is not None else None
         if assignee_str and assignee_str.lower() in ("unassigned", "n/a", "none", "-", "tbd", "undeclared"):
             assignee_str = None
+
+        # Check if this row is a Section / Phase header in a multi-column table (e.g. "Phase 1: Lab Synthesis" or "Sprint 2")
+        non_empty_cells = [c for c in row if c is not None and str(c).strip() != ""]
+        is_section = False
+        if len(non_empty_cells) == 1 and max_cols > 1 and len(best_header_map) >= 2:
+            if not start_date and not due_date and not assignee_str:
+                if any(k in title_str.lower() for k in ["phase", "sprint", "stage", "section", "module", "part", "milestone", "wbs", "stream"]):
+                    is_section = True
+                elif max_cols >= 3 and len(title_str) > 2 and not parse_date_value(title_str) and not re.match(r"^\d+$", title_str):
+                    is_section = True
+
+        if is_section:
+            current_section_name = title_str
+            sprints_set.add(current_section_name)
+            continue
 
         if assignee_str:
             sub_members = [m.strip() for m in re.split(r"[,&/]+", assignee_str) if m.strip() and m.strip().lower() not in ("pm team", "scm team", "qa", "qc", "production team")]
@@ -452,10 +571,6 @@ def _process_table_rows(rows_raw):
             status=raw_status,
             remark=desc_str
         )
-
-        # Dates: Parse explicitly if provided; otherwise KEEP AS NONE ("Not Declared")!
-        start_date = parse_date_value(row[start_col]) if start_col is not None and start_col < len(row) else None
-        due_date = parse_date_value(row[due_col]) if due_col is not None and due_col < len(row) else None
 
         # Check other date cells or weekly timeline ranges if explicit dates were not found
         if not start_date or not due_date:
@@ -489,15 +604,17 @@ def _process_table_rows(rows_raw):
         if project_metadata.get("project_code"):
             tags.append(project_metadata["project_code"].lower())
 
-        # Sprint / Phase (Keep None if not specified)
+        # Sprint / Phase
         sprint_name = None
         if sprint_col is not None and sprint_col < len(row) and row[sprint_col]:
             sprint_val = str(row[sprint_col]).strip()
             if sprint_val and sprint_val.lower() not in ("none", "null", "-", "n/a", "no sprint", "backlog"):
                 sprint_name = sprint_val
                 sprints_set.add(sprint_name)
+        elif current_section_name:
+            sprint_name = current_section_name
 
-        # Estimated Hours (0.0 if not provided)
+        # Estimated Hours
         est_hours = 0.0
         if est_col is not None and est_col < len(row):
             est_hours = normalize_estimated_hours(row[est_col]) or 0.0
@@ -572,3 +689,4 @@ def generate_sample_gantt_excel():
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
+

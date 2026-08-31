@@ -3118,10 +3118,15 @@ const app = {
     }
 
     const targetUrl = `/api/projects/${this.state.currentProjectId || 1}/upload_gantt`;
+    const headers = {};
+    if (this.state.authToken) {
+      headers['Authorization'] = `Bearer ${this.state.authToken}`;
+    }
 
     try {
       const response = await fetch(targetUrl, {
         method: 'POST',
+        headers,
         body: formData
       });
       const data = await response.json();

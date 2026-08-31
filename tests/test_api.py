@@ -412,13 +412,14 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(res2["tasks"][0]["assignee_name"], "Sri Vishnu")
         self.assertIsNone(res2["tasks"][0]["start_date"])
 
-        # Test 3: Excel with custom headers
+        # Test 3: Excel with custom headers, named month dates, and serial dates
         import openpyxl, io
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.append(["Deliverables", "Status", "Responsible Person"])
-        ws.append(["API Architecture Spec", "Done", "Elena"])
-        ws.append(["Database Migration", "In Progress", "Alex"])
+        ws.append(["Deliverables", "Status", "Responsible Person", "Planned Start", "Target Finish"])
+        ws.append(["Phase 1: Foundation", None, None, None, None]) # Section header
+        ws.append(["API Architecture Spec", "Done", "Elena", "15-Aug-2026", "25-Aug-2026"])
+        ws.append(["Database Migration", "In Progress", "Alex", 45520, 45530]) # Serial numbers
         buf = io.BytesIO()
         wb.save(buf)
 
@@ -427,7 +428,14 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(res3["tasks"][0]["title"], "API Architecture Spec")
         self.assertEqual(res3["tasks"][0]["status"], "done")
         self.assertEqual(res3["tasks"][0]["assignee_name"], "Elena")
-        self.assertIsNone(res3["tasks"][0]["start_date"])
+        self.assertEqual(res3["tasks"][0]["start_date"], "2026-08-15")
+        self.assertEqual(res3["tasks"][0]["due_date"], "2026-08-25")
+        self.assertEqual(res3["tasks"][0]["sprint_name"], "Phase 1: Foundation")
+
+        # Serial dates check
+        self.assertEqual(res3["tasks"][1]["title"], "Database Migration")
+        self.assertEqual(res3["tasks"][1]["start_date"], "2024-08-16")
+        self.assertEqual(res3["tasks"][1]["due_date"], "2024-08-26")
 
     def test_14_authentication_flow(self):
         # 1. Invalid credentials -> 401
@@ -522,6 +530,35 @@ class TestProjectPulseAPI(unittest.TestCase):
         def start_resp_lo(st, hd, exc=None): status_holder.append(st)
         app(env_logout, start_resp_lo)
         self.assertEqual(int(status_holder[0].split()[0]), 200)
+
+    def test_15_multi_sheet_excel_parsing(self):
+        import openpyxl, io
+        from app.gantt_parser import parse_gantt_file
+        wb = openpyxl.Workbook()
+        
+        # Sheet 1: Empty instructions
+        ws_info = wb.active
+        ws_info.title = "Instructions"
+        ws_info.append(["Project Management Guidelines"])
+        ws_info.append(["Follow ISO standards for all deliverables"])
+
+        # Sheet 2: The actual Gantt schedule
+        ws_gantt = wb.create_sheet(title="Production Schedule")
+        ws_gantt.append(["Process Step", "Lead", "Target Start", "Target Finish", "Condition"])
+        ws_gantt.append(["Chemical Formulation", "Sri Vishnu", "12-Sep-2026", "18-Sep-2026", "In Progress"])
+        ws_gantt.append(["HPLC Purity Analysis", "Elena", "20-Sep-2026", "24-Sep-2026", "To Do"])
+        
+        buf = io.BytesIO()
+        wb.save(buf)
+
+        res = parse_gantt_file(buf.getvalue(), "multi_sheet_project.xlsx")
+        self.assertEqual(len(res["tasks"]), 2)
+        self.assertEqual(res["tasks"][0]["title"], "Chemical Formulation")
+        self.assertEqual(res["tasks"][0]["start_date"], "2026-09-12")
+        self.assertEqual(res["tasks"][0]["due_date"], "2026-09-18")
+        self.assertEqual(res["tasks"][0]["status"], "in_progress")
+        self.assertEqual(res["tasks"][1]["title"], "HPLC Purity Analysis")
+        self.assertEqual(res["tasks"][1]["assignee_name"], "Elena")
 
 if __name__ == "__main__":
     unittest.main()
