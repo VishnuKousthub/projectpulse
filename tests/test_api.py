@@ -560,6 +560,37 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(res["tasks"][1]["title"], "HPLC Purity Analysis")
         self.assertEqual(res["tasks"][1]["assignee_name"], "Elena")
 
+    def test_16_chemical_batch_gantt_schedule_parsing(self):
+        import openpyxl, io
+        from app.gantt_parser import parse_gantt_file
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Production Schedule"
+        ws.append(["Project Name:", "AZADOL (CCS079)", "Customer:", "Chemtatva", "Target Qty:", "1kg Batch Production"])
+        ws.append([])
+        ws.append(["Task", "Activity / Process Step", "Responsible", "Task Owner", "Start Date", "End Date", "Status", "Remarks", "01/08 to 07/08", "08/08 to 14/08", "15/08 to 21/08"])
+        ws.append([1, "PO Received date", "SCM", "Sri Vishnu", "06/08/2026", "06/08/2026", "Done", "PO #441", 8, None, None])
+        ws.append([2, "Kickoff Meeting", "PM", "Sri Vishnu", "12/08/2026", "12/08/2026", "Done", "Kickoff complete", None, 8, None])
+        ws.append([3, "Raw Material Delivery", "SCM", "Sri Vishnu", "28/08/2026", "28/08/2026", "In Progress", "En route", None, None, 16])
+        
+        buf = io.BytesIO()
+        wb.save(buf)
+
+        res = parse_gantt_file(buf.getvalue(), "batch_schedule.xlsx")
+        self.assertEqual(len(res["tasks"]), 3)
+        self.assertEqual(res["tasks"][0]["title"], "PO Received date")
+        self.assertEqual(res["tasks"][0]["assignee_name"], "Sri Vishnu")
+        self.assertEqual(res["tasks"][0]["department"], "SCM")
+        self.assertEqual(res["tasks"][0]["start_date"], "2026-08-06")
+        self.assertEqual(res["tasks"][0]["due_date"], "2026-08-06")
+        self.assertEqual(res["tasks"][0]["status"], "done")
+
+        self.assertEqual(res["tasks"][1]["title"], "Kickoff Meeting")
+        self.assertEqual(res["tasks"][1]["status"], "done")
+        self.assertEqual(res["tasks"][2]["title"], "Raw Material Delivery")
+        self.assertEqual(res["tasks"][2]["status"], "in_progress")
+
 if __name__ == "__main__":
     unittest.main()
 
