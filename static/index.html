@@ -325,6 +325,37 @@
           <span>New Task</span>
         </button>
 
+        <!-- Vertical Divider -->
+        <div class="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+
+        <!-- User Profile & Sign Out Dropdown -->
+        <div class="relative">
+          <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="flex items-center space-x-2 p-1 pl-1.5 pr-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition">
+            <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
+              A
+            </div>
+            <div class="hidden sm:block text-left leading-tight">
+              <div id="header-user-name" class="text-xs font-bold text-slate-800 dark:text-white truncate max-w-[110px]">Admin</div>
+              <div id="header-user-role" class="text-[10px] text-slate-400 capitalize">Administrator</div>
+            </div>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div id="user-dropdown-menu" class="hidden absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
+            <div class="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700/80">
+              <div id="dropdown-user-fullname" class="font-bold text-slate-800 dark:text-white truncate">System Administrator</div>
+              <div id="dropdown-user-email" class="text-[11px] text-slate-400 truncate">admin@company.internal</div>
+            </div>
+            <div class="p-1">
+              <button onclick="app.handleLogout()" class="w-full text-left px-3 py-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center space-x-2 transition">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </header>
 
@@ -1663,6 +1694,167 @@
       <div class="px-6 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex justify-end flex-shrink-0">
         <button onclick="app.closeEmailPreviewModal()" class="px-4 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg">Close Preview</button>
       </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== AUTHENTICATION SCREEN (LOGIN / SIGN UP) ==================== -->
+  <div id="auth-container" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4 overflow-y-auto">
+    <!-- Ambient Background Glow & Cyber Gradients -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl"></div>
+      <div class="absolute top-1/2 -right-40 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
+      <div class="absolute -bottom-40 left-1/3 w-96 h-96 bg-emerald-600/15 rounded-full blur-3xl"></div>
+      <div class="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-40"></div>
+    </div>
+
+    <!-- Main Auth Card -->
+    <div class="relative w-full max-w-md bg-slate-900/80 backdrop-blur-2xl border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-black/80 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Brand Logo & Header -->
+      <div class="text-center space-y-2">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border border-white/20 p-2 shadow-xl shadow-blue-500/20 mx-auto">
+          <svg class="w-full h-full filter drop-shadow-[0_0_8px_rgba(56,189,248,0.6)]" viewBox="0 0 36 36" fill="none">
+            <defs>
+              <linearGradient id="authLogoPulse" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#38BDF8"/>
+                <stop offset="50%" stop-color="#6366F1"/>
+                <stop offset="100%" stop-color="#A855F7"/>
+              </linearGradient>
+            </defs>
+            <circle cx="18" cy="18" r="15" stroke="url(#authLogoPulse)" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.4"/>
+            <path d="M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5" stroke="url(#authLogoPulse)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="13.5" cy="9" r="2" fill="#38BDF8"/>
+            <circle cx="18" cy="27" r="2" fill="#6366F1"/>
+            <circle cx="22.5" cy="13" r="2" fill="#A855F7"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-2xl font-black tracking-tight text-white flex items-center justify-center space-x-1.5">
+            <span>Project</span><span class="text-blue-500">Pulse</span>
+          </h2>
+          <p class="text-xs text-slate-400">High-Precision Project & Schedule Execution</p>
+        </div>
+      </div>
+
+      <!-- Tab Switcher (Sign In vs Create Account) -->
+      <div class="flex p-1 bg-slate-950/80 border border-slate-800 rounded-xl">
+        <button id="auth-tab-login" onclick="app.switchAuthTab('login')" class="flex-1 py-2 text-xs font-bold rounded-lg transition bg-blue-600 text-white shadow-xs">
+          Sign In
+        </button>
+        <button id="auth-tab-register" onclick="app.switchAuthTab('register')" class="flex-1 py-2 text-xs font-bold rounded-lg transition text-slate-400 hover:text-white">
+          Create Account
+        </button>
+      </div>
+
+      <!-- Quick Demo Login Bar -->
+      <div id="auth-demo-bar" class="space-y-2">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 font-semibold px-1">
+          <span>⚡ 1-Click Quick Demo Sign-In:</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" onclick="app.fillDemoCredentials('admin')" class="px-2 py-1.5 rounded-lg bg-blue-950/50 hover:bg-blue-900/60 border border-blue-800/60 text-blue-300 text-[11px] font-bold text-center transition">
+            Admin
+          </button>
+          <button type="button" onclick="app.fillDemoCredentials('lead')" class="px-2 py-1.5 rounded-lg bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-800/60 text-indigo-300 text-[11px] font-bold text-center transition">
+            Project Lead
+          </button>
+          <button type="button" onclick="app.fillDemoCredentials('member')" class="px-2 py-1.5 rounded-lg bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-800/60 text-emerald-300 text-[11px] font-bold text-center transition">
+            Member
+          </button>
+        </div>
+      </div>
+
+      <!-- Auth Error Alert Container -->
+      <div id="auth-error-alert" class="hidden p-3 rounded-xl bg-rose-950/60 border border-rose-800/60 text-rose-300 text-xs flex items-center space-x-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 text-rose-400 flex-shrink-0"></i>
+        <span id="auth-error-text">Invalid username or password</span>
+      </div>
+
+      <!-- SIGN IN FORM -->
+      <form id="login-form" onsubmit="app.handleLoginFormSubmit(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1.5">Username or Email</label>
+          <div class="relative">
+            <i data-lucide="user" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="text" id="login-input-identifier" required placeholder="admin or you@company.com"
+              class="w-full pl-9 pr-3 py-2 bg-slate-950/90 border border-slate-800 focus:border-blue-500 rounded-xl text-white focus:outline-none transition">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="font-semibold text-slate-300">Password</label>
+          </div>
+          <div class="relative">
+            <i data-lucide="lock" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="password" id="login-input-password" required placeholder="••••••••"
+              class="w-full pl-9 pr-10 py-2 bg-slate-950/90 border border-slate-800 focus:border-blue-500 rounded-xl text-white focus:outline-none transition">
+            <button type="button" onclick="app.togglePasswordVisibility('login-input-password', this)" class="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" id="login-input-remember" checked class="rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-blue-500">
+            <span>Remember me</span>
+          </label>
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center space-x-2 transition">
+          <span>Sign In to ProjectPulse</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+      <!-- CREATE ACCOUNT FORM -->
+      <form id="register-form" onsubmit="app.handleRegisterFormSubmit(event)" class="hidden space-y-3.5 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Full Name</label>
+          <div class="relative">
+            <i data-lucide="badge-check" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="text" id="register-input-fullname" required placeholder="e.g. Sri Vishnu"
+              class="w-full pl-9 pr-3 py-2 bg-slate-950/90 border border-slate-800 focus:border-blue-500 rounded-xl text-white focus:outline-none transition">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Username</label>
+          <div class="relative">
+            <i data-lucide="user" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="text" id="register-input-username" required placeholder="e.g. srivishnu"
+              class="w-full pl-9 pr-3 py-2 bg-slate-950/90 border border-slate-800 focus:border-blue-500 rounded-xl text-white focus:outline-none transition">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Email Address</label>
+          <div class="relative">
+            <i data-lucide="mail" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="email" id="register-input-email" required placeholder="you@company.com"
+              class="w-full pl-9 pr-3 py-2 bg-slate-950/90 border border-slate-800 focus:border-blue-500 rounded-xl text-white focus:outline-none transition">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Password (min 6 characters)</label>
+          <div class="relative">
+            <i data-lucide="lock" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="password" id="register-input-password" required minlength="6" placeholder="••••••••"
+              class="w-full pl-9 pr-10 py-2 bg-slate-950/90 border border-slate-800 focus:border-blue-500 rounded-xl text-white focus:outline-none transition">
+            <button type="button" onclick="app.togglePasswordVisibility('register-input-password', this)" class="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" id="register-submit-btn" class="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/30 flex items-center justify-center space-x-2 transition mt-2">
+          <span>Create My Account</span>
+          <i data-lucide="check" class="w-4 h-4"></i>
+        </button>
+      </form>
 
     </div>
   </div>

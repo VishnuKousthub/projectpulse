@@ -1,10 +1,11 @@
 import json
 import os
 import sqlite3
+import secrets
 from datetime import datetime, timezone, timedelta
 from bottle import Bottle, request, response, static_file, run
 
-from app.database import get_db, init_db
+from app.database import get_db, init_db, hash_password, verify_password
 from app.seed import seed_database
 from app.gantt_parser import (
     parse_gantt_file, generate_sample_gantt_csv, generate_sample_gantt_excel, AVATAR_COLORS
@@ -38,7 +39,7 @@ def record_activity(conn, project_id, user_name, action, details, task_id=None):
 def enable_cors():
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+    response.headers["Access-Control-Allow-Headers"] = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, Authorization"
 
 @app.route("/<:re:.*>", method="OPTIONS")
 def enable_cors_generic_route():
@@ -57,6 +58,180 @@ def serve_static(filepath):
 @app.get("/favicon.ico")
 def serve_favicon():
     return ""
+
+# ==================== AUTHENTICATION ====================
+
+def get_current_user():
+    auth_header = request.headers.get("Authorization", "")
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    if not token:
+        token = request.get_cookie("pp_token")
+    
+    if not token:
+        return None
+    
+    with get_db() as conn:
+        session = conn.execute("""
+            SELECT s.*, u.id as user_id, u.username, u.email, u.full_name, u.role, u.avatar_color
+            FROM sessions s
+            JOIN users u ON s.user_id = u.id
+            WHERE s.token = ? AND s.expires_at > datetime('now')
+        """, (token,)).fetchone()
+        return session
+
+@app.post("/api/auth/login")
+def auth_login():
+    data = request.json or {}
+    identifier = (data.get("username") or data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    remember = bool(data.get("remember", True))
+
+    if not identifier or not password:
+        return json_response({"error": "Please enter your username/email and password"}, status=400)
+
+    with get_db() as conn:
+        user = conn.execute("""
+            SELECT * FROM users
+            WHERE LOWER(username) = ? OR LOWER(email) = ?
+        """, (identifier, identifier)).fetchone()
+
+        if not user or not verify_password(password, user["password_hash"]):
+            return json_response({"error": "Invalid username or password"}, status=401)
+
+        token = secrets.token_hex(32)
+        now_dt = datetime.now(timezone.utc)
+        now_str = now_dt.isoformat()
+        expires_dt = now_dt + timedelta(days=30 if remember else 1)
+        expires_str = expires_dt.isoformat()
+
+        conn.execute("""
+            INSERT INTO sessions (token, user_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+        """, (token, user["id"], now_str, expires_str))
+
+        conn.execute("UPDATE users SET last_login = ? WHERE id = ?", (now_str, user["id"]))
+
+        user_dict = {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+            "avatar_color": user["avatar_color"]
+        }
+
+        # Set session cookie
+        max_age = 30 * 86400 if remember else 86400
+        response.set_cookie("pp_token", token, path="/", max_age=max_age, httponly=False, samesite="Lax")
+
+        return json_response({
+            "success": True,
+            "token": token,
+            "user": user_dict
+        })
+
+@app.post("/api/auth/register")
+def auth_register():
+    data = request.json or {}
+    full_name = (data.get("full_name") or "").strip()
+    username = (data.get("username") or "").strip().lower()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    if not full_name:
+        return json_response({"error": "Full name is required"}, status=400)
+    if not username or len(username) < 3:
+        return json_response({"error": "Username must be at least 3 characters"}, status=400)
+    if not email or "@" not in email:
+        return json_response({"error": "Please provide a valid email address"}, status=400)
+    if not password or len(password) < 6:
+        return json_response({"error": "Password must be at least 6 characters"}, status=400)
+
+    now_dt = datetime.now(timezone.utc)
+    now_str = now_dt.isoformat()
+    pwd_hash = hash_password(password)
+
+    avatar_colors = ["#3B82F6", "#8B5CF6", "#EC4899", "#10B981", "#F59E0B", "#06B6D4", "#6366F1"]
+    avatar_color = avatar_colors[len(username) % len(avatar_colors)]
+
+    with get_db() as conn:
+        existing = conn.execute("""
+            SELECT username, email FROM users
+            WHERE LOWER(username) = ? OR LOWER(email) = ?
+        """, (username, email)).fetchone()
+
+        if existing:
+            if existing["username"].lower() == username:
+                return json_response({"error": "This username is already registered"}, status=400)
+            else:
+                return json_response({"error": "An account with this email already exists"}, status=400)
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at, last_login)
+            VALUES (?, ?, ?, ?, 'manager', ?, ?, ?)
+        """, (username, email, pwd_hash, full_name, avatar_color, now_str, now_str))
+        user_id = cursor.lastrowid
+
+        token = secrets.token_hex(32)
+        expires_str = (now_dt + timedelta(days=30)).isoformat()
+        cursor.execute("""
+            INSERT INTO sessions (token, user_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+        """, (token, user_id, now_str, expires_str))
+
+        user_dict = {
+            "id": user_id,
+            "username": username,
+            "email": email,
+            "full_name": full_name,
+            "role": "manager",
+            "avatar_color": avatar_color
+        }
+
+        response.set_cookie("pp_token", token, path="/", max_age=30*86400, httponly=False, samesite="Lax")
+
+        return json_response({
+            "success": True,
+            "token": token,
+            "user": user_dict
+        }, status=201)
+
+@app.get("/api/auth/me")
+def auth_me():
+    user = get_current_user()
+    if not user:
+        return json_response({"authenticated": False}, status=401)
+    
+    return json_response({
+        "authenticated": True,
+        "user": {
+            "id": user["user_id"],
+            "username": user["username"],
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+            "avatar_color": user["avatar_color"]
+        }
+    })
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    auth_header = request.headers.get("Authorization", "")
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    if not token:
+        token = request.get_cookie("pp_token")
+    
+    if token:
+        with get_db() as conn:
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    
+    response.delete_cookie("pp_token", path="/")
+    return json_response({"success": True})
 
 # ==================== PROJECTS ====================
 
@@ -644,10 +819,18 @@ def add_timelog(task_id):
     now_str = get_now_iso()
 
     with get_db() as conn:
-        task = conn.execute("SELECT project_id, title FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        task = conn.execute("SELECT project_id, title, assignee_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
         
+        if not member_id:
+            if task["assignee_id"]:
+                member_id = task["assignee_id"]
+            else:
+                first_m = conn.execute("SELECT id FROM members WHERE project_id = ? LIMIT 1", (task["project_id"],)).fetchone()
+                if first_m:
+                    member_id = first_m["id"]
+
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO timelogs (task_id, member_id, hours, description, logged_date, created_at)

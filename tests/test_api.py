@@ -429,6 +429,100 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(res3["tasks"][0]["assignee_name"], "Elena")
         self.assertIsNone(res3["tasks"][0]["start_date"])
 
+    def test_14_authentication_flow(self):
+        # 1. Invalid credentials -> 401
+        status, res = self.request("/api/auth/login", method="POST", body={
+            "username": "admin",
+            "password": "wrongpassword"
+        })
+        self.assertEqual(status, 401)
+
+        # 2. Valid Login as admin -> 200
+        status, login_res = self.request("/api/auth/login", method="POST", body={
+            "username": "admin",
+            "password": "admin123"
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(login_res["success"])
+        token = login_res["token"]
+        self.assertEqual(login_res["user"]["username"], "admin")
+        self.assertEqual(login_res["user"]["role"], "admin")
+
+        # 3. GET /api/auth/me with Bearer token -> 200
+        env = {
+            "REQUEST_METHOD": "GET",
+            "PATH_INFO": "/api/auth/me",
+            "SCRIPT_NAME": "",
+            "SERVER_NAME": "localhost",
+            "SERVER_PORT": "8000",
+            "wsgi.version": (1, 0),
+            "wsgi.url_scheme": "http",
+            "wsgi.input": io.BytesIO(b""),
+            "CONTENT_LENGTH": "0",
+            "CONTENT_TYPE": "application/json",
+            "QUERY_STRING": "",
+            "HTTP_AUTHORIZATION": f"Bearer {token}",
+            "wsgi.errors": io.StringIO(),
+            "wsgi.multithread": False,
+            "wsgi.multiprocess": False,
+            "wsgi.run_once": False,
+        }
+        status_holder = []
+        headers_holder = []
+        def start_resp(st, hd, exc=None):
+            status_holder.append(st)
+            headers_holder.append(hd)
+        body_chunks = app(env, start_resp)
+        me_res = json.loads(b"".join(body_chunks).decode("utf-8"))
+        self.assertEqual(int(status_holder[0].split()[0]), 200)
+        self.assertTrue(me_res["authenticated"])
+        self.assertEqual(me_res["user"]["username"], "admin")
+
+        # 4. Register new user -> 201
+        status, reg_res = self.request("/api/auth/register", method="POST", body={
+            "full_name": "Test User",
+            "username": "testuser_auth",
+            "email": "testuser@company.internal",
+            "password": "secretPassword123"
+        })
+        self.assertEqual(status, 201)
+        self.assertTrue(reg_res["success"])
+        self.assertEqual(reg_res["user"]["username"], "testuser_auth")
+
+        # 5. Duplicate registration -> 400
+        status, dup_res = self.request("/api/auth/register", method="POST", body={
+            "full_name": "Test User 2",
+            "username": "testuser_auth",
+            "email": "different@company.internal",
+            "password": "secretPassword123"
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("already registered", dup_res["error"])
+
+        # 6. Logout
+        env_logout = {
+            "REQUEST_METHOD": "POST",
+            "PATH_INFO": "/api/auth/logout",
+            "SCRIPT_NAME": "",
+            "SERVER_NAME": "localhost",
+            "SERVER_PORT": "8000",
+            "wsgi.version": (1, 0),
+            "wsgi.url_scheme": "http",
+            "wsgi.input": io.BytesIO(b"{}"),
+            "CONTENT_LENGTH": "2",
+            "CONTENT_TYPE": "application/json",
+            "QUERY_STRING": "",
+            "HTTP_AUTHORIZATION": f"Bearer {token}",
+            "wsgi.errors": io.StringIO(),
+            "wsgi.multithread": False,
+            "wsgi.multiprocess": False,
+            "wsgi.run_once": False,
+        }
+        status_holder = []
+        def start_resp_lo(st, hd, exc=None): status_holder.append(st)
+        app(env_logout, start_resp_lo)
+        self.assertEqual(int(status_holder[0].split()[0]), 200)
+
 if __name__ == "__main__":
     unittest.main()
 

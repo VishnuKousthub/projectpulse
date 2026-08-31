@@ -4,6 +4,8 @@
 
 const app = {
   state: {
+    user: null,
+    authToken: localStorage.getItem('projectpulse_token') || null,
     projects: [],
     currentProjectId: null,
     currentProject: null,
@@ -31,7 +33,11 @@ const app = {
   async init() {
     this.initTheme();
     this.initKeyboardShortcuts();
-    await this.fetchProjects();
+    this.initClickOutside();
+    const authenticated = await this.checkAuth();
+    if (authenticated) {
+      await this.fetchProjects();
+    }
     this.initLucide();
   },
 
@@ -77,6 +83,18 @@ const app = {
     });
   },
 
+  initClickOutside() {
+    document.addEventListener('click', (e) => {
+      const userBtn = document.getElementById('user-profile-btn');
+      const userMenu = document.getElementById('user-dropdown-menu');
+      if (userMenu && !userMenu.classList.contains('hidden')) {
+        if (!userBtn?.contains(e.target) && !userMenu.contains(e.target)) {
+          userMenu.classList.add('hidden');
+        }
+      }
+    });
+  },
+
   closeAllModals() {
     this.closeTaskModal();
     this.closeProjectModal();
@@ -85,6 +103,7 @@ const app = {
     this.closeManualTimeLogModal();
     this.closeImportExportModal();
     this.closeGanttUploadModal();
+    this.closeUserMenu();
   },
 
   toggleSidebar() {
@@ -94,20 +113,33 @@ const app = {
 
   async api(endpoint, options = {}) {
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      };
+      if (this.state.authToken) {
+        headers['Authorization'] = `Bearer ${this.state.authToken}`;
+      }
+
       const response = await fetch(endpoint, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(options.headers || {})
-        },
-        ...options
+        ...options,
+        headers
       });
+
+      if (response.status === 401 && !endpoint.startsWith('/api/auth/login') && !endpoint.startsWith('/api/auth/register')) {
+        this.handleSessionExpired();
+        throw new Error('Session expired. Please sign in again.');
+      }
+
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || errData.detail || `Request failed with status ${response.status}`);
       }
       return await response.json();
     } catch (err) {
-      this.showToast(err.message, 'error');
+      if (!endpoint.startsWith('/api/auth/')) {
+        this.showToast(err.message, 'error');
+      }
       throw err;
     }
   },
@@ -3549,6 +3581,268 @@ const app = {
   async refreshMembersList() {
     await this.fetchMembers();
     this.renderNotificationMembers();
+  },
+
+  // ==================== AUTHENTICATION & LOGIN SCREEN ====================
+  async checkAuth() {
+    try {
+      const res = await this.api('/api/auth/me');
+      if (res && res.authenticated && res.user) {
+        this.state.user = res.user;
+        this.updateHeaderUserProfile();
+        this.hideAuthContainer();
+        return true;
+      }
+    } catch (e) {
+      // Not authenticated
+    }
+    this.state.user = null;
+    this.state.authToken = null;
+    localStorage.removeItem('projectpulse_token');
+    this.showAuthContainer();
+    return false;
+  },
+
+  showAuthContainer() {
+    const container = document.getElementById('auth-container');
+    if (container) {
+      container.classList.remove('hidden');
+      document.getElementById('login-input-identifier')?.focus();
+    }
+  },
+
+  hideAuthContainer() {
+    const container = document.getElementById('auth-container');
+    if (container) {
+      container.classList.add('hidden');
+    }
+    this.hideAuthError();
+  },
+
+  switchAuthTab(tab = 'login') {
+    const loginTab = document.getElementById('auth-tab-login');
+    const registerTab = document.getElementById('auth-tab-register');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const demoBar = document.getElementById('auth-demo-bar');
+    this.hideAuthError();
+
+    if (tab === 'login') {
+      loginTab?.classList.add('bg-blue-600', 'text-white', 'shadow-xs');
+      loginTab?.classList.remove('text-slate-400');
+      registerTab?.classList.remove('bg-blue-600', 'text-white', 'shadow-xs');
+      registerTab?.classList.add('text-slate-400');
+
+      loginForm?.classList.remove('hidden');
+      registerForm?.classList.add('hidden');
+      demoBar?.classList.remove('hidden');
+      document.getElementById('login-input-identifier')?.focus();
+    } else {
+      registerTab?.classList.add('bg-blue-600', 'text-white', 'shadow-xs');
+      registerTab?.classList.remove('text-slate-400');
+      loginTab?.classList.remove('bg-blue-600', 'text-white', 'shadow-xs');
+      loginTab?.classList.add('text-slate-400');
+
+      registerForm?.classList.remove('hidden');
+      loginForm?.classList.add('hidden');
+      demoBar?.classList.add('hidden');
+      document.getElementById('register-input-fullname')?.focus();
+    }
+    this.initLucide();
+  },
+
+  fillDemoCredentials(role = 'admin') {
+    const idInput = document.getElementById('login-input-identifier');
+    const pwdInput = document.getElementById('login-input-password');
+    if (!idInput || !pwdInput) return;
+
+    if (role === 'admin') {
+      idInput.value = 'admin';
+      pwdInput.value = 'admin123';
+    } else if (role === 'lead') {
+      idInput.value = 'vishnu';
+      pwdInput.value = 'chemtatva123';
+    } else if (role === 'member') {
+      idInput.value = 'alex';
+      pwdInput.value = 'alex123';
+    }
+
+    this.hideAuthError();
+    document.getElementById('login-submit-btn')?.focus();
+  },
+
+  togglePasswordVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    if (btn) {
+      btn.innerHTML = isPassword ? '<i data-lucide="eye-off" class="w-4 h-4"></i>' : '<i data-lucide="eye" class="w-4 h-4"></i>';
+      this.initLucide();
+    }
+  },
+
+  showAuthError(message) {
+    const box = document.getElementById('auth-error-alert');
+    const text = document.getElementById('auth-error-text');
+    if (box && text) {
+      text.textContent = message || 'Invalid username or password';
+      box.classList.remove('hidden');
+    }
+  },
+
+  hideAuthError() {
+    const box = document.getElementById('auth-error-alert');
+    if (box) box.classList.add('hidden');
+  },
+
+  async handleLoginFormSubmit(e) {
+    e.preventDefault();
+    const identifier = document.getElementById('login-input-identifier')?.value.trim();
+    const password = document.getElementById('login-input-password')?.value;
+    const remember = document.getElementById('login-input-remember')?.checked;
+
+    if (!identifier || !password) {
+      this.showAuthError('Please enter your username and password');
+      return;
+    }
+
+    const submitBtn = document.getElementById('login-submit-btn');
+    const originalText = submitBtn?.innerHTML;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Signing in...</span>';
+    }
+
+    try {
+      const res = await this.api('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: identifier, password, remember })
+      });
+
+      if (res.token && res.user) {
+        this.state.authToken = res.token;
+        this.state.user = res.user;
+        localStorage.setItem('projectpulse_token', res.token);
+
+        this.updateHeaderUserProfile();
+        this.hideAuthContainer();
+        this.showToast(`Welcome back, ${res.user.full_name}!`, 'success');
+        await this.fetchProjects();
+      }
+    } catch (err) {
+      this.showAuthError(err.message || 'Login failed. Check your credentials.');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+        this.initLucide();
+      }
+    }
+  },
+
+  async handleRegisterFormSubmit(e) {
+    e.preventDefault();
+    const full_name = document.getElementById('register-input-fullname')?.value.trim();
+    const username = document.getElementById('register-input-username')?.value.trim();
+    const email = document.getElementById('register-input-email')?.value.trim();
+    const password = document.getElementById('register-input-password')?.value;
+
+    if (!full_name || !username || !email || !password) {
+      this.showAuthError('All fields are required.');
+      return;
+    }
+
+    const submitBtn = document.getElementById('register-submit-btn');
+    const originalText = submitBtn?.innerHTML;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Creating Account...</span>';
+    }
+
+    try {
+      const res = await this.api('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ full_name, username, email, password })
+      });
+
+      if (res.token && res.user) {
+        this.state.authToken = res.token;
+        this.state.user = res.user;
+        localStorage.setItem('projectpulse_token', res.token);
+
+        this.updateHeaderUserProfile();
+        this.hideAuthContainer();
+        this.showToast(`Account created! Welcome, ${res.user.full_name}!`, 'success');
+        await this.fetchProjects();
+      }
+    } catch (err) {
+      this.showAuthError(err.message || 'Registration failed.');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+        this.initLucide();
+      }
+    }
+  },
+
+  async handleLogout() {
+    try {
+      await this.api('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+
+    this.state.authToken = null;
+    this.state.user = null;
+    localStorage.removeItem('projectpulse_token');
+    this.closeUserMenu();
+    this.showAuthContainer();
+    this.showToast('You have signed out', 'info');
+  },
+
+  handleSessionExpired() {
+    this.state.authToken = null;
+    this.state.user = null;
+    localStorage.removeItem('projectpulse_token');
+    this.showAuthContainer();
+    this.showAuthError('Your session has expired. Please sign in again.');
+  },
+
+  toggleUserMenu() {
+    const menu = document.getElementById('user-dropdown-menu');
+    if (menu) {
+      menu.classList.toggle('hidden');
+      this.initLucide();
+    }
+  },
+
+  closeUserMenu() {
+    document.getElementById('user-dropdown-menu')?.classList.add('hidden');
+  },
+
+  updateHeaderUserProfile() {
+    const user = this.state.user;
+    if (!user) return;
+
+    const avatarEl = document.getElementById('header-user-avatar');
+    const nameEl = document.getElementById('header-user-name');
+    const roleEl = document.getElementById('header-user-role');
+    const dropNameEl = document.getElementById('dropdown-user-fullname');
+    const dropEmailEl = document.getElementById('dropdown-user-email');
+
+    const initial = (user.full_name || user.username || 'U').charAt(0).toUpperCase();
+
+    if (avatarEl) {
+      avatarEl.textContent = initial;
+      if (user.avatar_color) {
+        avatarEl.style.backgroundColor = user.avatar_color;
+      }
+    }
+    if (nameEl) nameEl.textContent = user.full_name || user.username;
+    if (roleEl) roleEl.textContent = user.role || 'Member';
+    if (dropNameEl) dropNameEl.textContent = user.full_name || user.username;
+    if (dropEmailEl) dropEmailEl.textContent = user.email || '';
+    this.initLucide();
   },
 
   // ==================== TOAST NOTIFICATIONS ====================

@@ -1,5 +1,8 @@
-import sqlite3
+﻿import sqlite3
 import os
+import hashlib
+import secrets
+from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 
 DB_PATH = os.environ.get("PROJECT_PULSE_DB", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "project_pulse.db"))
@@ -24,10 +27,64 @@ def get_db():
     finally:
         conn.close()
 
+def hash_password(password: str, salt: str = None) -> str:
+    if not salt:
+        salt = secrets.token_hex(16)
+    pw_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+    return f"{salt}${pw_hash}"
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    if not stored_hash or "$" not in stored_hash:
+        return False
+    salt, hash_val = stored_hash.split("$", 1)
+    computed = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+    return secrets.compare_digest(computed, hash_val)
+
+def seed_default_users(cursor):
+    cursor.execute("SELECT COUNT(*) as cnt FROM users")
+    if cursor.fetchone()["cnt"] == 0:
+        now_str = datetime.now(timezone.utc).isoformat()
+        default_users = [
+            ("admin", "admin@company.internal", "admin123", "System Administrator", "admin", "#3B82F6"),
+            ("vishnu", "srivishnu@chemtatva.com", "chemtatva123", "Sri Vishnu", "manager", "#6366F1"),
+            ("alex", "alex.morgan@company.internal", "alex123", "Alex Morgan", "member", "#10B981")
+        ]
+        for username, email, pwd, full_name, role, color in default_users:
+            cursor.execute("""
+                INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (username, email, hash_password(pwd), full_name, role, color, now_str))
+
 def init_db():
     with get_db() as conn:
         cursor = conn.cursor()
         
+        # User accounts table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            role TEXT DEFAULT 'manager', -- 'admin', 'manager', 'member', 'viewer'
+            avatar_color TEXT DEFAULT '#3B82F6',
+            created_at TEXT NOT NULL,
+            last_login TEXT
+        )
+        """)
+
+        # User sessions table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,13 +171,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS timelogs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id INTEGER NOT NULL,
-            member_id INTEGER,
+            member_id INTEGER NOT NULL,
             hours REAL NOT NULL,
             description TEXT,
             logged_date TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE,
-            FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE SET NULL
+            FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE CASCADE
         )
         """)
 
@@ -133,7 +190,8 @@ def init_db():
             action TEXT NOT NULL,
             details TEXT,
             timestamp TEXT NOT NULL,
-            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL
         )
         """)
 
@@ -206,7 +264,14 @@ def init_db():
                 )
             """)
 
+        # Seed default users
+        seed_default_users(cursor)
+
         # Indexes for fast querying
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
@@ -217,4 +282,3 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_task ON email_logs(task_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_sent ON email_logs(sent_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dispatches_lookup ON notification_dispatches(task_id, trigger_type, dispatch_date)")
-
