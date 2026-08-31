@@ -126,7 +126,7 @@ const app = {
         headers
       });
 
-      if (response.status === 401 && !endpoint.startsWith('/api/auth/login') && !endpoint.startsWith('/api/auth/register')) {
+      if (response.status === 401 && !endpoint.startsWith('/api/auth/')) {
         this.handleSessionExpired();
         throw new Error('Session expired. Please sign in again.');
       }
@@ -3585,17 +3585,37 @@ const app = {
 
   // ==================== AUTHENTICATION & LOGIN SCREEN ====================
   async checkAuth() {
+    const token = this.state.authToken || localStorage.getItem('projectpulse_token');
+    if (!token) {
+      this.state.user = null;
+      this.state.authToken = null;
+      this.showAuthContainer();
+      return false;
+    }
+
+    this.state.authToken = token;
+
     try {
-      const res = await this.api('/api/auth/me');
-      if (res && res.authenticated && res.user) {
-        this.state.user = res.user;
-        this.updateHeaderUserProfile();
-        this.hideAuthContainer();
-        return true;
+      const res = await fetch('/api/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.authenticated && data.user) {
+          this.state.user = data.user;
+          this.updateHeaderUserProfile();
+          this.hideAuthContainer();
+          return true;
+        }
       }
     } catch (e) {
-      // Not authenticated
+      console.error('Auth check error:', e);
     }
+
     this.state.user = null;
     this.state.authToken = null;
     localStorage.removeItem('projectpulse_token');
