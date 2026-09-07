@@ -627,43 +627,50 @@ def create_task(project_id):
             except Exception as e:
                 print(f"[Notifier] Error sending assignment notification: {e}")
 
-    return get_task(t_id)
+        task_res = get_task_dict(conn, t_id)
+        return json_response(task_res)
+
+def get_task_dict(conn, task_id: int):
+    task = conn.execute("""
+        SELECT t.*,
+            m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
+            s.name as sprint_name,
+            p.name as project_name, p.color as project_color
+        FROM tasks t
+        LEFT JOIN members m ON t.assignee_id = m.id
+        LEFT JOIN sprints s ON t.sprint_id = s.id
+        JOIN projects p ON t.project_id = p.id
+        WHERE t.id = ?
+    """, (task_id,)).fetchone()
+
+    if not task:
+        return None
+
+    t_dict = dict(task)
+    try:
+        t_dict["tags"] = json.loads(t_dict["tags"]) if t_dict["tags"] else []
+    except Exception:
+        t_dict["tags"] = []
+
+    t_dict["subtasks"] = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (task_id,)).fetchall()
+    t_dict["timelogs"] = conn.execute("""
+        SELECT tl.*, m.name as member_name, m.avatar_color as member_avatar
+        FROM timelogs tl
+        LEFT JOIN members m ON tl.member_id = m.id
+        WHERE tl.task_id = ?
+        ORDER BY tl.logged_date DESC, tl.id DESC
+    """, (task_id,)).fetchall()
+    t_dict["activities"] = conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()
+
+    return t_dict
 
 @app.get("/api/tasks/<task_id:int>")
 def get_task(task_id):
     with get_db() as conn:
-        task = conn.execute("""
-            SELECT t.*,
-                m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
-                s.name as sprint_name,
-                p.name as project_name, p.color as project_color
-            FROM tasks t
-            LEFT JOIN members m ON t.assignee_id = m.id
-            LEFT JOIN sprints s ON t.sprint_id = s.id
-            JOIN projects p ON t.project_id = p.id
-            WHERE t.id = ?
-        """, (task_id,)).fetchone()
-
-        if not task:
+        task_dict = get_task_dict(conn, task_id)
+        if not task_dict:
             return json_response({"error": "Task not found"}, status=404)
-
-        t_dict = dict(task)
-        try:
-            t_dict["tags"] = json.loads(t_dict["tags"]) if t_dict["tags"] else []
-        except Exception:
-            t_dict["tags"] = []
-
-        t_dict["subtasks"] = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (task_id,)).fetchall()
-        t_dict["timelogs"] = conn.execute("""
-            SELECT tl.*, m.name as member_name, m.avatar_color as member_avatar
-            FROM timelogs tl
-            LEFT JOIN members m ON tl.member_id = m.id
-            WHERE tl.task_id = ?
-            ORDER BY tl.logged_date DESC, tl.id DESC
-        """, (task_id,)).fetchall()
-        t_dict["activities"] = conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()
-
-        return json_response(t_dict)
+        return json_response(task_dict)
 
 @app.put("/api/tasks/<task_id:int>")
 def update_task(task_id):
@@ -741,7 +748,8 @@ def update_task(task_id):
             except Exception as e:
                 print(f"[Notifier] Error sending completion notification: {e}")
 
-    return get_task(task_id)
+        task_res = get_task_dict(conn, task_id)
+        return json_response(task_res)
 
 @app.post("/api/tasks/reorder")
 def reorder_tasks():

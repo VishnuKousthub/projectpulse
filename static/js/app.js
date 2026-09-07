@@ -674,6 +674,30 @@ const app = {
     `;
   },
 
+  async handleTaskMove(taskId, newStatus) {
+    const task = this.state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const prevStatus = task.status;
+    if (prevStatus === newStatus) return;
+
+    // Optimistic instant state update
+    task.status = newStatus;
+    this.renderKanban();
+
+    try {
+      await this.api(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus })
+      });
+      this.showToast(`Moved to ${newStatus.replace('_', ' ')}`, 'success');
+    } catch (e) {
+      console.error('Failed to move task:', e);
+      task.status = prevStatus;
+      this.renderKanban();
+      this.showToast('Failed to update task status', 'error');
+    }
+  },
+
   // ==================== GANTT / TIMELINE MULTI-SCALE RENDERER ====================
   setGanttScale(scale) {
     this.state.ganttScale = scale;
@@ -1108,24 +1132,7 @@ const app = {
   },
 
   async inlineUpdateGanttTask(taskId, field, value) {
-    try {
-      const payload = { [field]: value || null };
-      const updated = await this.api(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload)
-      });
-      
-      const t = this.state.tasks.find(x => x.id === taskId);
-      if (t) {
-        Object.assign(t, updated);
-      }
-      
-      this.showToast(`Updated ${field.replace('_', ' ')}`, 'success');
-      this.renderGantt();
-    } catch (e) {
-      console.error(e);
-      this.fetchTasks();
-    }
+    return this.inlineUpdateTask(taskId, field, value || null);
   },
 
   // ==================== TABLE GRID RENDERER (SEQUENTIAL PROCESS VIEW) ====================
@@ -1416,6 +1423,25 @@ const app = {
   },
 
   async inlineUpdateTask(taskId, field, value) {
+    const t = this.state.tasks.find(x => x.id === taskId);
+    if (!t) return;
+
+    const previousValue = t[field];
+    const prevAssigneeName = t.assignee_name;
+    const prevAssigneeAvatar = t.assignee_avatar;
+
+    // 1. Optimistic instant state update
+    t[field] = value;
+    if (field === 'assignee_id') {
+      const member = this.state.currentProject?.members?.find(m => m.id === Number(value));
+      t.assignee_name = member ? member.name : null;
+      t.assignee_avatar = member ? member.avatar_color : null;
+    }
+
+    // 2. Render whatever view the user is currently looking at (0ms latency!)
+    this.renderCurrentView();
+
+    // 3. Send update to server in background
     try {
       const payload = { [field]: value };
       const updated = await this.api(`/api/tasks/${taskId}`, {
@@ -1423,16 +1449,19 @@ const app = {
         body: JSON.stringify(payload)
       });
       
-      const t = this.state.tasks.find(x => x.id === taskId);
-      if (t) {
+      if (updated) {
         Object.assign(t, updated);
+        this.renderCurrentView();
       }
-      
       this.showToast(`Updated ${field.replace('_', ' ')}`, 'success');
-      this.renderTable();
     } catch (e) {
-      console.error(e);
-      this.fetchTasks();
+      console.error('Failed to update task:', e);
+      // Rollback on failure
+      t[field] = previousValue;
+      t.assignee_name = prevAssigneeName;
+      t.assignee_avatar = prevAssigneeAvatar;
+      this.renderCurrentView();
+      this.showToast(`Failed to update ${field.replace('_', ' ')}`, 'error');
     }
   },
 
@@ -2291,25 +2320,50 @@ const app = {
       document.getElementById('task-modal-type-badge').textContent = 'Task #' + params.id;
       if (delBtn) delBtn.classList.remove('hidden');
 
+      // 1. Instantly populate modal from local state cache (0ms latency!)
+      const localTask = this.state.tasks.find(t => t.id === Number(params.id));
+      if (localTask) {
+        idInput.value = localTask.id;
+        titleInput.value = localTask.title || '';
+        descInput.value = localTask.description || '';
+        statusSelect.value = localTask.status || 'todo';
+        prioritySelect.value = localTask.priority || 'medium';
+        assigneeSelect.value = localTask.assignee_id || '';
+        startInput.value = localTask.start_date || '';
+        dueInput.value = localTask.due_date || '';
+        estInput.value = localTask.estimated_hours || 0;
+        if (actInput) actInput.value = localTask.actual_hours || 0;
+        tagsInput.value = (localTask.tags || []).join(', ');
+        this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
+      }
+
+      this.updateTaskModalDateBadges();
+      modal.classList.remove('hidden');
+      titleInput.focus();
+      this.initLucide();
+
+      // 2. Fetch fresh subtasks & timelogs in background without blocking UI
       try {
         const task = await this.api(`/api/tasks/${params.id}`);
-        idInput.value = task.id;
-        titleInput.value = task.title || '';
-        descInput.value = task.description || '';
-        statusSelect.value = task.status || 'todo';
-        prioritySelect.value = task.priority || 'medium';
-        assigneeSelect.value = task.assignee_id || '';
-        startInput.value = task.start_date || '';
-        dueInput.value = task.due_date || '';
-        estInput.value = task.estimated_hours || 0;
-        if (actInput) actInput.value = task.actual_hours || 0;
-        tagsInput.value = (task.tags || []).join(', ');
-
-        this.renderSubtaskList(task.subtasks || []);
-
+        if (task && idInput.value == task.id) {
+          idInput.value = task.id;
+          titleInput.value = task.title || '';
+          descInput.value = task.description || '';
+          statusSelect.value = task.status || 'todo';
+          prioritySelect.value = task.priority || 'medium';
+          assigneeSelect.value = task.assignee_id || '';
+          startInput.value = task.start_date || '';
+          dueInput.value = task.due_date || '';
+          estInput.value = task.estimated_hours || 0;
+          if (actInput) actInput.value = task.actual_hours || 0;
+          tagsInput.value = (task.tags || []).join(', ');
+          this.renderSubtaskList(task.subtasks || []);
+          this.updateTaskModalDateBadges();
+        }
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load subtask details for modal:', e);
       }
+      return;
     } else {
       document.getElementById('task-modal-title').textContent = 'Create New Task';
       document.getElementById('task-modal-type-badge').textContent = 'New Task';
@@ -2503,25 +2557,50 @@ const app = {
       subtasks: tempSubtasks
     };
 
-    try {
-      if (taskId) {
-        await this.api(`/api/tasks/${taskId}`, {
+    // Close modal immediately (instant UX)
+    this.closeTaskModal();
+
+    if (taskId) {
+      const localTask = this.state.tasks.find(t => t.id === Number(taskId));
+      if (localTask) {
+        Object.assign(localTask, payload);
+        const member = this.state.currentProject?.members?.find(m => m.id === payload.assignee_id);
+        localTask.assignee_name = member ? member.name : null;
+        localTask.assignee_avatar = member ? member.avatar_color : null;
+        this.renderCurrentView();
+      }
+
+      try {
+        const updated = await this.api(`/api/tasks/${taskId}`, {
           method: 'PUT',
           body: JSON.stringify(payload)
         });
+        if (localTask && updated) {
+          Object.assign(localTask, updated);
+          this.renderCurrentView();
+        }
         this.showToast('Task updated successfully', 'success');
-      } else {
-        await this.api(`/api/projects/${this.state.currentProjectId}/tasks`, {
+      } catch (e) {
+        console.error('Failed to update task:', e);
+        this.showToast('Failed to save task update', 'error');
+        this.fetchTasks();
+      }
+    } else {
+      try {
+        const created = await this.api(`/api/projects/${this.state.currentProjectId}/tasks`, {
           method: 'POST',
           body: JSON.stringify(payload)
         });
+        if (created) {
+          this.state.tasks.push(created);
+          this.renderCurrentView();
+        }
         this.showToast('Task created successfully', 'success');
+      } catch (e) {
+        console.error('Failed to create task:', e);
+        this.showToast('Failed to create task', 'error');
+        this.fetchTasks();
       }
-
-      this.closeTaskModal();
-      await this.fetchTasks();
-    } catch (e) {
-      console.error(e);
     }
   },
 

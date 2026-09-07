@@ -197,35 +197,7 @@ def send_email_dispatch(
         settings.get('smtp_host')
     )
 
-    if should_send_smtp:
-        try:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            sender_name = settings.get('sender_name') or 'ProjectPulse Notifications'
-            sender_addr = settings.get('smtp_user')
-            msg['From'] = f"{sender_name} <{sender_addr}>"
-            msg['To'] = f"{recipient_name} <{recipient_email}>" if recipient_name else recipient_email
-
-            html_part = MIMEText(body_html, 'html', 'utf-8')
-            msg.attach(html_part)
-
-            host = settings.get('smtp_host', 'smtp.office365.com')
-            port = int(settings.get('smtp_port', 587))
-            
-            with smtplib.SMTP(host, port, timeout=12) as server:
-                server.ehlo()
-                if settings.get('use_tls', 1):
-                    server.starttls()
-                    server.ehlo()
-                server.login(settings.get('smtp_user'), settings.get('smtp_pass'))
-                server.sendmail(sender_addr, [recipient_email], msg.as_string())
-            
-            status = 'sent'
-        except Exception as e:
-            status = 'failed'
-            error_msg = str(e)
-    else:
-        status = 'simulated'
+    initial_status = 'pending' if should_send_smtp else 'simulated'
 
     cursor = conn.cursor()
     cursor.execute("""
@@ -236,12 +208,49 @@ def send_email_dispatch(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         project_id, task_id, recipient_email, recipient_name,
-        subject, body_html, trigger_type, status, error_msg, now_str
+        subject, body_html, trigger_type, initial_status, error_msg, now_str
     ))
+    log_id = cursor.lastrowid
+
+    if should_send_smtp:
+        def send_smtp_worker(log_entry_id, smtp_settings, subj, body, to_addr, to_name):
+            try:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = subj
+                sender_name = smtp_settings.get('sender_name') or 'ProjectPulse Notifications'
+                sender_addr = smtp_settings.get('smtp_user')
+                msg['From'] = f"{sender_name} <{sender_addr}>"
+                msg['To'] = f"{to_name} <{to_addr}>" if to_name else to_addr
+
+                html_part = MIMEText(body, 'html', 'utf-8')
+                msg.attach(html_part)
+
+                host = smtp_settings.get('smtp_host', 'smtp.office365.com')
+                port = int(smtp_settings.get('smtp_port', 587))
+                
+                with smtplib.SMTP(host, port, timeout=12) as server:
+                    server.ehlo()
+                    if smtp_settings.get('use_tls', 1):
+                        server.starttls()
+                        server.ehlo()
+                    server.login(smtp_settings.get('smtp_user'), smtp_settings.get('smtp_pass'))
+                    server.sendmail(sender_addr, [to_addr], msg.as_string())
+
+                with get_db() as c:
+                    c.execute("UPDATE email_logs SET status = 'sent' WHERE id = ?", (log_entry_id,))
+            except Exception as ex:
+                with get_db() as c:
+                    c.execute("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?", (str(ex), log_entry_id))
+
+        threading.Thread(
+            target=send_smtp_worker,
+            args=(log_id, settings, subject, body_html, recipient_email, recipient_name),
+            daemon=True
+        ).start()
 
     return {
-        'success': status in ['sent', 'simulated'],
-        'status': status,
+        'success': True,
+        'status': initial_status,
         'error': error_msg,
         'recipient': recipient_email,
         'trigger_type': trigger_type
