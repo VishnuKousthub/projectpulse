@@ -544,6 +544,18 @@ def get_tasks(project_id):
         query += " ORDER BY t.order_index ASC, t.id ASC"
         tasks = conn.execute(query, params).fetchall()
 
+        # Batch fetch all subtasks for this project in 1 single query (eliminates N+1 latency)
+        subtasks_raw = conn.execute("""
+            SELECT s.* FROM subtasks s 
+            JOIN tasks t ON s.task_id = t.id 
+            WHERE t.project_id = ? 
+            ORDER BY s.order_index ASC
+        """, (project_id,)).fetchall()
+        
+        subtasks_by_task = {}
+        for s in subtasks_raw:
+            subtasks_by_task.setdefault(s["task_id"], []).append(dict(s))
+
         result = []
         for t in tasks:
             t_dict = dict(t)
@@ -552,8 +564,7 @@ def get_tasks(project_id):
             except Exception:
                 t_dict["tags"] = []
             
-            subtasks = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (t["id"],)).fetchall()
-            t_dict["subtasks_list"] = subtasks
+            t_dict["subtasks_list"] = subtasks_by_task.get(t["id"], [])
             result.append(t_dict)
 
         return json_response(result)
@@ -1303,25 +1314,27 @@ def upload_gantt_file(project_id):
             (target_p_id,)
         ).fetchone()["m"]
 
+        task_rows = []
         for idx, t in enumerate(tasks_data):
             assignee_id = member_map.get(t["assignee_name"].lower()) if t.get("assignee_name") else None
             sprint_id = sprint_map.get(t["sprint_name"].lower()) if t.get("sprint_name") else None
             tags_json = json.dumps(t.get("tags") or [])
-
-            cursor.execute("""
-                INSERT INTO tasks (
-                    project_id, sprint_id, title, description, status, priority,
-                    order_index, start_date, due_date, estimated_hours, actual_hours,
-                    assignee_id, tags, created_at, updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+            task_rows.append((
                 target_p_id, sprint_id, t["title"], t.get("description", ""),
                 t.get("status", "todo"), t.get("priority", "medium"),
                 max_order + idx + 1, t.get("start_date"), t.get("due_date"),
                 float(t.get("estimated_hours") or 0.0), 0.0,
                 assignee_id, tags_json, now_str, now_str
             ))
+
+        cursor.executemany("""
+            INSERT INTO tasks (
+                project_id, sprint_id, title, description, status, priority,
+                order_index, start_date, due_date, estimated_hours, actual_hours,
+                assignee_id, tags, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, task_rows)
 
         record_activity(
             conn, target_p_id, "User", "Gantt Upload",

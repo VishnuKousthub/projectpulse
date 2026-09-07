@@ -132,7 +132,7 @@ const app = {
     }
   },
 
-  async fetchProjects() {
+  async fetchProjects(autoSelectId = null) {
     try {
       const projects = await this.api('/api/projects');
       this.state.projects = projects;
@@ -140,9 +140,16 @@ const app = {
       this.renderProjectsSidebar();
 
       if (projects.length > 0) {
-        const savedId = localStorage.getItem('projectpulse_active_project');
-        const exists = projects.find(p => p.id === Number(savedId));
-        await this.selectProject(exists ? exists.id : projects[0].id);
+        let targetId = autoSelectId;
+        if (!targetId) {
+          const savedId = localStorage.getItem('projectpulse_active_project');
+          const exists = projects.find(p => p.id === Number(savedId));
+          targetId = exists ? exists.id : projects[0].id;
+        } else {
+          const exists = projects.find(p => p.id === Number(targetId));
+          if (!exists) targetId = projects[0].id;
+        }
+        await this.selectProject(targetId);
       } else {
         this.openProjectModal();
       }
@@ -184,17 +191,32 @@ const app = {
   },
 
   async selectProject(projectId) {
+    if (!projectId) return;
     this.state.currentProjectId = projectId;
     localStorage.setItem('projectpulse_active_project', projectId);
-    
-    this.state.currentProject = await this.api(`/api/projects/${projectId}`);
     
     const select = document.getElementById('project-select');
     if (select) select.value = projectId;
     this.renderProjectsSidebar();
-    this.populateFilterDropdowns();
 
-    await this.fetchTasks();
+    let url = `/api/projects/${projectId}/tasks?`;
+    if (this.state.searchQuery) url += `search=${encodeURIComponent(this.state.searchQuery)}&`;
+    if (this.state.filterAssignee) url += `assignee_id=${encodeURIComponent(this.state.filterAssignee)}&`;
+    if (this.state.filterPriority) url += `priority=${encodeURIComponent(this.state.filterPriority)}&`;
+
+    // Fetch project details and tasks concurrently in parallel (eliminates waterfall)
+    try {
+      const [project, tasks] = await Promise.all([
+        this.api(`/api/projects/${projectId}`),
+        this.api(url)
+      ]);
+      this.state.currentProject = project;
+      this.state.tasks = tasks;
+      this.populateFilterDropdowns();
+      this.renderCurrentView();
+    } catch (e) {
+      console.error('Failed to select project:', e);
+    }
   },
 
   populateFilterDropdowns() {
@@ -2576,8 +2598,7 @@ const app = {
           body: JSON.stringify({ name, description, color })
         });
         this.closeProjectModal();
-        await this.fetchProjects();
-        await this.selectProject(Number(id));
+        await this.fetchProjects(Number(id));
         this.showToast('Project updated successfully', 'success');
       } else {
         const project = await this.api('/api/projects', {
@@ -2585,8 +2606,7 @@ const app = {
           body: JSON.stringify({ name, description, color })
         });
         this.closeProjectModal();
-        await this.fetchProjects();
-        await this.selectProject(project.id);
+        await this.fetchProjects(project.id);
         this.showToast('Project created successfully', 'success');
       }
     } catch (e) {
@@ -2621,11 +2641,11 @@ const app = {
       this.showToast(`Project "${name}" deleted`, 'success');
       this.closeProjectModal();
 
+      if (Number(localStorage.getItem('projectpulse_active_project')) === Number(projectId)) {
+        localStorage.removeItem('projectpulse_active_project');
+      }
       await this.fetchProjects();
-      if (this.state.projects.length > 0) {
-        const nextId = this.state.projects[0].id;
-        await this.selectProject(nextId);
-      } else {
+      if (this.state.projects.length === 0) {
         this.state.currentProjectId = null;
         this.state.currentProject = null;
         this.state.tasks = [];
@@ -2744,9 +2764,10 @@ const app = {
       this.showToast(data.message || `Successfully imported ${data.tasks_imported} tasks!`, 'success');
       this.closeGanttUploadModal();
 
-      await this.fetchProjects();
       if (data.project_id) {
-        await this.selectProject(data.project_id);
+        await this.fetchProjects(data.project_id);
+      } else {
+        await this.fetchProjects();
       }
       this.switchView('gantt');
     } catch (err) {
@@ -2809,8 +2830,7 @@ const app = {
           body: JSON.stringify(payload)
         });
         this.closeImportExportModal();
-        await this.fetchProjects();
-        await this.selectProject(res.project_id);
+        await this.fetchProjects(res.project_id);
         this.showToast('Project imported successfully', 'success');
       } catch (err) {
         this.showToast('Invalid JSON backup file', 'error');
