@@ -59,6 +59,12 @@ def serve_static(filepath):
 def serve_favicon():
     return ""
 
+@app.get("/health")
+@app.get("/_health")
+@app.get("/api/health")
+def health_check():
+    return json_response({"status": "healthy", "service": "ProjectPulse", "timestamp": get_now_iso()})
+
 # ==================== AUTHENTICATION ====================
 
 def get_current_user():

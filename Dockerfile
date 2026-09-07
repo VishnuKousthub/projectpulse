@@ -9,7 +9,7 @@ FROM python:3.11-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PROJECT_PULSE_DB=/app/data/project_pulse.db \
-    PORT=8000 \
+    PORT=8080 \
     DOCKER=1
 
 # Working Directory
@@ -31,8 +31,8 @@ COPY static/ /app/static/
 # Create data directory for persistent SQLite storage
 RUN mkdir -p /app/data && chmod 777 /app/data
 
-# Expose Web Port
-EXPOSE 8000
+# Expose Web Port (8080 for Cloud Run, 8000 for local/docker-compose)
+EXPOSE 8080 8000
 
-# Start Production WSGI Server (Gunicorn with dynamic port binding for Cloud Run/Railway/Koyeb/Docker)
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 8 --timeout 120 app.main:app"]
+# Start Production WSGI Server (Gunicorn with exec for instant signal & port binding)
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 8 --timeout 120 app.main:app"]

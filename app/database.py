@@ -10,13 +10,35 @@ def get_db_path():
     if raw_path:
         try:
             d = os.path.dirname(os.path.abspath(raw_path))
-            if d and not os.path.exists(d):
+            if d:
                 os.makedirs(d, exist_ok=True)
+                # Verify directory is writable
+                test_file = os.path.join(d, ".db_write_check")
+                with open(test_file, "w") as f:
+                    f.write("ok")
+                if os.path.exists(test_file):
+                    os.remove(test_file)
             return raw_path
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[ProjectPulse DB Warning] Configured path '{raw_path}' not writable: {e}")
+
+    # Fallback 1: Project root directory
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_dir, "project_pulse.db")
+    local_path = os.path.join(base_dir, "project_pulse.db")
+    try:
+        d = os.path.dirname(os.path.abspath(local_path))
+        test_file = os.path.join(d, ".db_write_check")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        if os.path.exists(test_file):
+            os.remove(test_file)
+        return local_path
+    except Exception:
+        pass
+
+    # Fallback 2: System /tmp directory (guaranteed writable on all Linux/Docker/Cloud Run containers)
+    tmp_dir = "/tmp" if os.path.exists("/tmp") else os.environ.get("TEMP", os.getcwd())
+    return os.path.join(tmp_dir, "project_pulse.db")
 
 DB_PATH = get_db_path()
 
@@ -31,9 +53,10 @@ def get_db():
     target_path = get_db_path()
     try:
         conn = sqlite3.connect(target_path, timeout=30.0)
-    except sqlite3.OperationalError:
-        # Fallback to local working directory or /tmp if configured path is not writable
-        fallback_path = os.path.join(os.getcwd(), "project_pulse.db")
+    except Exception as e:
+        # Ultimate fallback to /tmp or current working directory if target_path fails
+        tmp_dir = "/tmp" if os.path.exists("/tmp") else os.getcwd()
+        fallback_path = os.path.join(tmp_dir, "project_pulse.db")
         conn = sqlite3.connect(fallback_path, timeout=30.0)
     conn.row_factory = dict_factory
     conn.execute("PRAGMA foreign_keys = ON")
