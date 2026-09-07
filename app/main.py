@@ -49,10 +49,12 @@ def enable_cors_generic_route():
 
 @app.get("/")
 def serve_index():
+    response.set_header("Cache-Control", "no-cache, must-revalidate")
     return static_file("index.html", root=STATIC_DIR)
 
 @app.get("/static/<filepath:path>")
 def serve_static(filepath):
+    response.set_header("Cache-Control", "public, max-age=604800")
     return static_file(filepath, root=STATIC_DIR)
 
 @app.get("/favicon.ico")

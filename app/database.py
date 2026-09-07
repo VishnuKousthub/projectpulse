@@ -5,20 +5,26 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 
+_RESOLVED_DB_PATH = None
+
 def get_db_path():
+    global _RESOLVED_DB_PATH
+    if _RESOLVED_DB_PATH:
+        return _RESOLVED_DB_PATH
+
     raw_path = os.environ.get("PROJECT_PULSE_DB")
     if raw_path:
         try:
             d = os.path.dirname(os.path.abspath(raw_path))
             if d:
                 os.makedirs(d, exist_ok=True)
-                # Verify directory is writable
                 test_file = os.path.join(d, ".db_write_check")
                 with open(test_file, "w") as f:
                     f.write("ok")
                 if os.path.exists(test_file):
                     os.remove(test_file)
-            return raw_path
+            _RESOLVED_DB_PATH = raw_path
+            return _RESOLVED_DB_PATH
         except Exception as e:
             print(f"[ProjectPulse DB Warning] Configured path '{raw_path}' not writable: {e}")
 
@@ -32,13 +38,15 @@ def get_db_path():
             f.write("ok")
         if os.path.exists(test_file):
             os.remove(test_file)
-        return local_path
+        _RESOLVED_DB_PATH = local_path
+        return _RESOLVED_DB_PATH
     except Exception:
         pass
 
     # Fallback 2: System /tmp directory (guaranteed writable on all Linux/Docker/Cloud Run containers)
     tmp_dir = "/tmp" if os.path.exists("/tmp") else os.environ.get("TEMP", os.getcwd())
-    return os.path.join(tmp_dir, "project_pulse.db")
+    _RESOLVED_DB_PATH = os.path.join(tmp_dir, "project_pulse.db")
+    return _RESOLVED_DB_PATH
 
 DB_PATH = get_db_path()
 
@@ -54,7 +62,6 @@ def get_db():
     try:
         conn = sqlite3.connect(target_path, timeout=30.0)
     except Exception as e:
-        # Ultimate fallback to /tmp or current working directory if target_path fails
         tmp_dir = "/tmp" if os.path.exists("/tmp") else os.getcwd()
         fallback_path = os.path.join(tmp_dir, "project_pulse.db")
         conn = sqlite3.connect(fallback_path, timeout=30.0)
@@ -62,10 +69,15 @@ def get_db():
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
     try:
-        conn.execute("PRAGMA journal_mode = DELETE")
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA cache_size = -64000")
     except Exception:
-        pass
+        try:
+            conn.execute("PRAGMA journal_mode = DELETE")
+            conn.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            pass
     try:
         yield conn
         conn.commit()
