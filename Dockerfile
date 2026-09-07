@@ -34,5 +34,5 @@ RUN mkdir -p /app/data && chmod 777 /app/data
 # Expose Web Port (8080 for Cloud Run, 8000 for local/docker-compose)
 EXPOSE 8080 8000
 
-# Start Production WSGI Server (Gunicorn with exec for instant signal & port binding)
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 8 --timeout 120 app.main:app"]
+# Start Production Multi-threaded Web Server
+CMD ["python", "-m", "app.main"]

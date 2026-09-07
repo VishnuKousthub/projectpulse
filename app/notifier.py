@@ -1,4 +1,4 @@
-﻿"""
+"""
 ProjectPulse - Microsoft Outlook and SMTP Email Notification Engine
 Handles automated email alerts for:
 1. 1 Day Before Due Date (Nearing Due Date)
@@ -561,6 +561,7 @@ _scheduler_started = False
 _scheduler_lock = threading.Lock()
 
 def _scheduler_loop():
+    time.sleep(15)  # Allow container to fully initialize and bind port first
     while True:
         try:
             with get_db() as conn:

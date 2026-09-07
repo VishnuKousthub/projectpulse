@@ -1475,9 +1475,12 @@ def get_notification_log_detail(log_id):
         return json_response(dict(log))
 
 def init_app():
-    init_db()
-    seed_database()
-    start_background_scheduler()
+    try:
+        init_db()
+        seed_database()
+        start_background_scheduler()
+    except Exception as e:
+        print(f"[ProjectPulse Warning] Background initialization non-fatal error: {e}")
 
 # Auto-initialize on module load (WSGI / Gunicorn / Bottle)
 _initialized = False
@@ -1486,13 +1489,12 @@ if not _initialized:
     _initialized = True
 
 def main():
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
     host = os.environ.get("HOST", "0.0.0.0")
     print(f"============================================================")
-    print(f"  ProjectPulse High-Availability Server (Multi-threaded)")
+    print(f"  ProjectPulse Production Server (Multi-threaded)")
     print(f"  Listening on: http://{host}:{port}")
     print(f"  -> Local access: http://localhost:{port}")
-    print(f"  -> Network access: http://<YOUR_WIFI_IP>:{port}")
     print(f"============================================================")
     try:
         from waitress import serve
