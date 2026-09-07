@@ -1,11 +1,24 @@
-﻿import sqlite3
+import sqlite3
 import os
 import hashlib
 import secrets
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 
-DB_PATH = os.environ.get("PROJECT_PULSE_DB", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "project_pulse.db"))
+def get_db_path():
+    raw_path = os.environ.get("PROJECT_PULSE_DB")
+    if raw_path:
+        try:
+            d = os.path.dirname(os.path.abspath(raw_path))
+            if d and not os.path.exists(d):
+                os.makedirs(d, exist_ok=True)
+            return raw_path
+        except Exception:
+            pass
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, "project_pulse.db")
+
+DB_PATH = get_db_path()
 
 def dict_factory(cursor, row):
     d = {}
@@ -15,7 +28,13 @@ def dict_factory(cursor, row):
 
 @contextmanager
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    target_path = get_db_path()
+    try:
+        conn = sqlite3.connect(target_path)
+    except sqlite3.OperationalError:
+        # Fallback to local working directory or /tmp if configured path is not writable
+        fallback_path = os.path.join(os.getcwd(), "project_pulse.db")
+        conn = sqlite3.connect(fallback_path)
     conn.row_factory = dict_factory
     conn.execute("PRAGMA foreign_keys = ON")
     try:

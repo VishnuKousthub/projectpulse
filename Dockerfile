@@ -34,9 +34,5 @@ RUN mkdir -p /app/data && chmod 777 /app/data
 # Expose Web Port
 EXPOSE 8000
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/api/projects || exit 1
-
-# Start Production WSGI Server (Gunicorn with 2 workers + 4 threads)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", "--timeout", "120", "app.main:app"]
+# Start Production WSGI Server (Gunicorn with dynamic port binding for Render/Railway/Koyeb/Docker)
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 4 --timeout 120 app.main:app"]

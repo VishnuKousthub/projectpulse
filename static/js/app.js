@@ -1180,6 +1180,16 @@ const app = {
     this.renderTable();
   },
 
+  setTableSprintFilter(val) {
+    this.state.tableSprintFilter = val;
+    this.renderTable();
+  },
+
+  setTableStatusFilter(val) {
+    this.state.tableStatusFilter = val;
+    this.renderTable();
+  },
+
   renderTable() {
     const tbody = document.getElementById('tasks-table-body');
     if (!tbody) return;
@@ -1188,7 +1198,19 @@ const app = {
 
     const allTasks = this.state.tasks || [];
     const members = this.state.currentProject?.members || [];
+    const sprints = this.state.currentProject?.sprints || [];
     const todayStr = new Date().toISOString().split('T')[0];
+
+    // Populate Table Sprint Filter Dropdown
+    const sprintFilterSel = document.getElementById('table-filter-sprint');
+    if (sprintFilterSel && sprintFilterSel.options.length <= 1) {
+      sprintFilterSel.innerHTML = `
+        <option value="">All Sprints & Phases</option>
+        ${sprints.map(s => `<option value="${s.id}">${this.escapeHtml(s.name)}</option>`).join('')}
+        <option value="none">Unassigned to Sprint</option>
+      `;
+      if (this.state.tableSprintFilter) sprintFilterSel.value = this.state.tableSprintFilter;
+    }
 
     // 1. Calculate KPI Metrics
     const totalCount = allTasks.length;
@@ -1221,13 +1243,21 @@ const app = {
     // 2. Filter Tasks
     const q = this.state.tableFilterQuery || '';
     let filtered = allTasks.filter(t => {
+      if (this.state.tableSprintFilter) {
+        if (this.state.tableSprintFilter === 'none' && t.sprint_id) return false;
+        if (this.state.tableSprintFilter !== 'none' && String(t.sprint_id) !== String(this.state.tableSprintFilter)) return false;
+      }
+      if (this.state.tableStatusFilter && t.status !== this.state.tableStatusFilter) {
+        return false;
+      }
       if (!q) return true;
       const titleMatch = (t.title || '').toLowerCase().includes(q);
       const descMatch = (t.description || '').toLowerCase().includes(q);
       const tagsMatch = (t.tags || []).some(tag => tag.toLowerCase().includes(q));
       const assignee = members.find(m => m.id === t.assignee_id);
-      const assigneeMatch = assignee && assignee.name.toLowerCase().includes(q);
-      return titleMatch || descMatch || tagsMatch || assigneeMatch;
+      const assigneeMatch = (assignee && assignee.name.toLowerCase().includes(q)) || (t.assignee_name && t.assignee_name.toLowerCase().includes(q));
+      const sprintMatch = t.sprint_name && t.sprint_name.toLowerCase().includes(q);
+      return titleMatch || descMatch || tagsMatch || assigneeMatch || sprintMatch;
     });
 
     // 3. Sort Tasks according to Sequence or user choice
@@ -1244,6 +1274,8 @@ const app = {
           return (b.estimated_hours || 0) - (a.estimated_hours || 0);
         case 'title_asc':
           return (a.title || '').localeCompare(b.title || '');
+        case 'sprint':
+          return (a.sprint_name || 'ZZZZ').localeCompare(b.sprint_name || 'ZZZZ');
         case 'order':
         default:
           const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
@@ -1257,10 +1289,10 @@ const app = {
     if (filtered.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="8" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+          <td colspan="9" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
             <i data-lucide="search-x" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
-            <div class="text-sm font-semibold text-slate-600 dark:text-slate-400">No activities match the search filter</div>
-            <div class="text-xs text-slate-400 mt-1">Try resetting or clearing your search term</div>
+            <div class="text-sm font-semibold text-slate-600 dark:text-slate-400">No activities match the current filter</div>
+            <div class="text-xs text-slate-400 mt-1">Try resetting search or adjusting sprint/status filters</div>
           </td>
         </tr>
       `;
@@ -1322,7 +1354,18 @@ const app = {
             </div>
           </td>
 
-          <!-- 2. Status Dropdown -->
+          <!-- 2. Phase / Sprint Column -->
+          <td class="px-3.5 py-2.5">
+            <div class="relative inline-block w-full max-w-[160px]">
+              <select onchange="app.inlineUpdateTask(${t.id}, 'sprint_id', this.value ? Number(this.value) : null)"
+                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate">
+                <option value="">No Sprint / Phase</option>
+                ${sprints.map(s => `<option value="${s.id}" ${t.sprint_id === s.id ? 'selected' : ''}>${this.escapeHtml(s.name)}</option>`).join('')}
+              </select>
+            </div>
+          </td>
+
+          <!-- 3. Status Dropdown -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[120px]">
               <select onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"
@@ -1336,9 +1379,9 @@ const app = {
             </div>
           </td>
 
-          <!-- 3. Priority Dropdown -->
+          <!-- 4. Priority Dropdown -->
           <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[110px]">
+            <div class="relative inline-block w-full max-w-[100px]">
               <select onchange="app.inlineUpdateTask(${t.id}, 'priority', this.value)"
                 class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${priorityConfig.color}">
                 <option value="low" ${t.priority === 'low' ? 'selected' : ''}>Low</option>
@@ -1349,18 +1392,18 @@ const app = {
             </div>
           </td>
 
-          <!-- 4. Assignee / Role -->
+          <!-- 5. Assignee / Role -->
           <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[170px]">
+            <div class="relative inline-block w-full max-w-[150px]">
               <select onchange="app.inlineUpdateTask(${t.id}, 'assignee_id', this.value ? Number(this.value) : null)"
                 class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate">
-                <option value="">Unassigned</option>
+                <option value="">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</option>
                 ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
               </select>
             </div>
           </td>
 
-          <!-- 5. Start Date -->
+          <!-- 6. Start Date -->
           <td class="px-3.5 py-2.5">
             ${t.start_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
@@ -1382,7 +1425,7 @@ const app = {
             `}
           </td>
 
-          <!-- 6. Due Date -->
+          <!-- 7. Due Date -->
           <td class="px-3.5 py-2.5">
             ${t.due_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
@@ -1404,7 +1447,7 @@ const app = {
             `}
           </td>
 
-          <!-- 7. Hours (Est & Act) -->
+          <!-- 8. Hours (Est & Act) -->
           <td class="px-3.5 py-2.5">
             <div class="flex items-center space-x-1">
               <input type="number" step="0.5" min="0" value="${estH}"
@@ -1419,7 +1462,7 @@ const app = {
             </div>
           </td>
 
-          <!-- 8. Actions -->
+          <!-- 9. Actions -->
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
             <div class="flex items-center justify-end space-x-1">
               <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details">
@@ -2306,62 +2349,144 @@ const app = {
   },
 
   // ==================== ANALYTICS DASHBOARD ====================
+  async handleAnalyticsProjectChange(projectId) {
+    if (!projectId) return;
+    await this.selectProject(Number(projectId));
+    this.renderAnalytics();
+  },
+
+  async handleAnalyticsSprintChange(sprintId) {
+    this.state.analyticsSprintId = sprintId;
+    this.renderAnalytics();
+  },
+
   async renderAnalytics() {
+    if (!this.state.currentProjectId && this.state.projects?.length > 0) {
+      this.state.currentProjectId = this.state.projects[0].id;
+    }
     if (!this.state.currentProjectId) return;
+
     try {
-      const data = await this.api(`/api/projects/${this.state.currentProjectId}/analytics`);
+      // 1. Populate Analytics Project Selector
+      const pSelect = document.getElementById('analytics-project-select');
+      if (pSelect && this.state.projects?.length > 0) {
+        pSelect.innerHTML = this.state.projects.map(p => `
+          <option value="${p.id}" ${p.id === this.state.currentProjectId ? 'selected' : ''}>
+            ${this.escapeHtml(p.name)} (${p.task_count || 0} tasks)
+          </option>
+        `).join('');
+      }
+
+      // 2. Populate Analytics Sprint Selector
+      const sSelect = document.getElementById('analytics-sprint-select');
+      const sprints = this.state.currentProject?.sprints || [];
+      if (sSelect) {
+        sSelect.innerHTML = `
+          <option value="">All Sprints & Project Lifecycle</option>
+          ${sprints.map(s => `
+            <option value="${s.id}" ${this.state.analyticsSprintId === String(s.id) ? 'selected' : ''}>
+              ${this.escapeHtml(s.name)}
+            </option>
+          `).join('')}
+        `;
+      }
+
+      // 3. Fetch Analytics Data
+      let url = `/api/projects/${this.state.currentProjectId}/analytics`;
+      if (this.state.analyticsSprintId) {
+        url += `?sprint_id=${encodeURIComponent(this.state.analyticsSprintId)}`;
+      }
+      
+      const data = await this.api(url);
+      if (!data || data.error) {
+        console.warn('Analytics data not available:', data?.error);
+        return;
+      }
+
       const kpis = data.kpis || {};
       
-      document.getElementById('kpi-total-tasks').textContent = kpis.total_tasks || 0;
-      document.getElementById('kpi-inprogress-tasks').textContent = kpis.in_progress_tasks || 0;
-      document.getElementById('kpi-done-tasks').textContent = kpis.done_tasks || 0;
-      document.getElementById('kpi-completion-rate').textContent = `${kpis.completion_rate || 0}%`;
-      document.getElementById('kpi-overdue-tasks').textContent = kpis.overdue_tasks || 0;
-      document.getElementById('kpi-total-hours').textContent = `${(kpis.total_act_hours || 0).toFixed(1)}h`;
+      const elTotal = document.getElementById('kpi-total-tasks');
+      const elInProg = document.getElementById('kpi-inprogress-tasks');
+      const elDone = document.getElementById('kpi-done-tasks');
+      const elRate = document.getElementById('kpi-completion-rate');
+      const elOver = document.getElementById('kpi-overdue-tasks');
+      const elHrs = document.getElementById('kpi-total-hours');
+
+      if (elTotal) elTotal.textContent = kpis.total_tasks || 0;
+      if (elInProg) elInProg.textContent = kpis.in_progress_tasks || 0;
+      if (elDone) elDone.textContent = kpis.done_tasks || 0;
+      if (elRate) elRate.textContent = `${kpis.completion_rate || 0}%`;
+      if (elOver) elOver.textContent = kpis.overdue_tasks || 0;
+      if (elHrs) elHrs.textContent = `${(kpis.total_act_hours || 0).toFixed(1)}h`;
 
       const sprintTitle = document.getElementById('burndown-sprint-title');
       if (sprintTitle) sprintTitle.textContent = kpis.sprint_name || 'Active Sprint';
 
-      this.renderBurndownChart(data.burndown);
-      this.renderPriorityChart(data.priority_distribution);
-      this.renderWorkloadChart(data.workload);
-
-      const activities = await this.api(`/api/projects/${this.state.currentProjectId}/activity`);
-      const actContainer = document.getElementById('activity-stream-render');
-      if (actContainer) {
-        if (activities.length === 0) {
-          actContainer.innerHTML = `<div class="text-slate-400">No activity recorded yet.</div>`;
-        } else {
-          actContainer.innerHTML = activities.slice(0, 15).map(a => `
-            <div class="flex items-start space-x-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-              <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
-                ${a.user_name.charAt(0)}
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="font-semibold text-slate-800 dark:text-white truncate">${this.escapeHtml(a.user_name)}: <span class="font-normal text-slate-500">${this.escapeHtml(a.details || a.action)}</span></div>
-                <div class="text-[10px] text-slate-400">${new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-              </div>
-            </div>
-          `).join('');
-        }
+      // 4. Render Charts with Safe Wrappers
+      try {
+        this.renderBurndownChart(data.burndown);
+      } catch (err) {
+        console.error('Error rendering burndown chart:', err);
       }
+
+      try {
+        this.renderPriorityChart(data.priority_distribution);
+      } catch (err) {
+        console.error('Error rendering priority chart:', err);
+      }
+
+      try {
+        this.renderWorkloadChart(data.workload);
+      } catch (err) {
+        console.error('Error rendering workload chart:', err);
+      }
+
+      // 5. Render Activity Stream
+      try {
+        const activities = await this.api(`/api/projects/${this.state.currentProjectId}/activity`);
+        const actContainer = document.getElementById('activity-stream-render');
+        if (actContainer) {
+          if (!activities || activities.length === 0) {
+            actContainer.innerHTML = `<div class="text-slate-400 p-2">No activity recorded yet for this project.</div>`;
+          } else {
+            actContainer.innerHTML = activities.slice(0, 15).map(a => `
+              <div class="flex items-start space-x-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+                <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                  ${((a && a.user_name) || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="font-semibold text-slate-800 dark:text-white truncate">${this.escapeHtml(a.user_name || 'User')}: <span class="font-normal text-slate-500">${this.escapeHtml(a.details || a.action || '')}</span></div>
+                  <div class="text-[10px] text-slate-400">${new Date(a.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              </div>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Error rendering activity stream:', err);
+      }
+
     } catch (e) {
-      console.error(e);
+      console.error('Error loading analytics:', e);
     }
   },
 
   renderBurndownChart(burndown) {
     const ctx = document.getElementById('burndownChart');
     if (!ctx) return;
+    if (typeof Chart === 'undefined') {
+      ctx.parentElement.innerHTML = `<div class="p-4 text-xs text-slate-400 text-center">Chart library loading...</div>`;
+      return;
+    }
     if (this.state.charts.burndown) this.state.charts.burndown.destroy();
 
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? '#334155' : '#e2e8f0';
     const textColor = isDark ? '#94a3b8' : '#64748b';
 
-    const labels = burndown?.labels?.length > 0 ? burndown.labels : ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5'];
-    const ideal = burndown?.ideal?.length > 0 ? burndown.ideal : [40, 30, 20, 10, 0];
-    const actual = burndown?.actual?.length > 0 ? burndown.actual : [40, 38, 25, 20, 15];
+    const labels = (burndown?.labels && burndown.labels.length > 0) ? burndown.labels : ['Kickoff', 'Procurement', 'Synthesis', 'QC Analysis', 'Release'];
+    const ideal = (burndown?.ideal && burndown.ideal.length > 0) ? burndown.ideal : [100, 75, 50, 25, 0];
+    const actual = (burndown?.actual && burndown.actual.length > 0) ? burndown.actual : [100, 85, 55, 30, 10];
 
     this.state.charts.burndown = new Chart(ctx, {
       type: 'line',
@@ -2407,17 +2532,25 @@ const app = {
   renderPriorityChart(priorityCounts = []) {
     const ctx = document.getElementById('priorityChart');
     if (!ctx) return;
+    if (typeof Chart === 'undefined') return;
     if (this.state.charts.priority) this.state.charts.priority.destroy();
 
     const counts = { urgent: 0, high: 0, medium: 0, low: 0 };
-    priorityCounts.forEach(p => { if (counts[p.priority] !== undefined) counts[p.priority] = p.count; });
+    if (Array.isArray(priorityCounts)) {
+      priorityCounts.forEach(p => { 
+        if (p && counts[p.priority] !== undefined) counts[p.priority] = p.count || 0; 
+      });
+    }
+
+    const totalPriority = counts.urgent + counts.high + counts.medium + counts.low;
+    const dataVals = totalPriority > 0 ? [counts.urgent, counts.high, counts.medium, counts.low] : [0, 0, 1, 0];
 
     this.state.charts.priority = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Urgent', 'High', 'Medium', 'Low'],
         datasets: [{
-          data: [counts.urgent, counts.high, counts.medium, counts.low],
+          data: dataVals,
           backgroundColor: ['#ef4444', '#f97316', '#eab308', '#10b981'],
           borderWidth: 0
         }]
@@ -2436,23 +2569,25 @@ const app = {
   renderWorkloadChart(workload = []) {
     const ctx = document.getElementById('workloadChart');
     if (!ctx) return;
+    if (typeof Chart === 'undefined') return;
     if (this.state.charts.workload) this.state.charts.workload.destroy();
 
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? '#334155' : '#e2e8f0';
     const textColor = isDark ? '#94a3b8' : '#64748b';
 
-    const names = workload.map(w => w.name.split(' ')[0]);
-    const est = workload.map(w => w.total_est_hours || 0);
-    const act = workload.map(w => w.total_act_hours || 0);
+    const safeList = Array.isArray(workload) ? workload : [];
+    const names = safeList.map(w => (w && w.name ? String(w.name).split(' ')[0] : 'Member'));
+    const est = safeList.map(w => (w ? parseFloat(w.total_est_hours) || 0 : 0));
+    const act = safeList.map(w => (w ? parseFloat(w.total_act_hours) || 0 : 0));
 
     this.state.charts.workload = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: names,
+        labels: names.length > 0 ? names : ['Unassigned'],
         datasets: [
-          { label: 'Assigned Est. Hours', data: est, backgroundColor: '#3b82f6', borderRadius: 4 },
-          { label: 'Actual Logged Hours', data: act, backgroundColor: '#10b981', borderRadius: 4 }
+          { label: 'Assigned Est. Hours', data: est.length > 0 ? est : [0], backgroundColor: '#3b82f6', borderRadius: 4 },
+          { label: 'Actual Logged Hours', data: act.length > 0 ? act : [0], backgroundColor: '#10b981', borderRadius: 4 }
         ]
       },
       options: {

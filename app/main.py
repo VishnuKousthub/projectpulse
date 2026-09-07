@@ -884,6 +884,10 @@ def get_project_timelogs(project_id):
 def get_analytics(project_id):
     sprint_id = request.query.get("sprint_id")
     with get_db() as conn:
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not project:
+            return json_response({"error": "Project not found"}, status=404)
+
         if sprint_id and sprint_id.isdigit():
             sprint = conn.execute("SELECT * FROM sprints WHERE id = ? AND project_id = ?", (int(sprint_id), project_id)).fetchone()
         else:
@@ -918,6 +922,27 @@ def get_analytics(project_id):
             ORDER BY assigned_tasks DESC
         """, (project_id, project_id)).fetchall()
 
+        if not workload:
+            workload_rows = conn.execute("""
+                SELECT 
+                    COALESCE(m.id, 0) as id,
+                    COALESCE(m.name, 'Unassigned') as name,
+                    COALESCE(m.role, 'Team Member') as role,
+                    COALESCE(m.avatar_color, '#3B82F6') as avatar_color,
+                    COUNT(t.id) as assigned_tasks,
+                    COUNT(CASE WHEN t.status = 'done' THEN 1 END) as completed_tasks,
+                    COALESCE(SUM(t.estimated_hours), 0) as total_est_hours,
+                    COALESCE(SUM(t.actual_hours), 0) as total_act_hours
+                FROM tasks t
+                LEFT JOIN members m ON t.assignee_id = m.id
+                WHERE t.project_id = ?
+                GROUP BY COALESCE(m.id, 0)
+                ORDER BY assigned_tasks DESC
+            """, (project_id,)).fetchall()
+            workload = [dict(r) for r in workload_rows]
+        else:
+            workload = [dict(r) for r in workload]
+
         kpi_row = conn.execute("""
             SELECT
                 COUNT(*) as total_tasks,
@@ -934,12 +959,12 @@ def get_analytics(project_id):
         done = kpi_row["done_tasks"] or 0
         completion_rate = round((done / total * 100), 1) if total > 0 else 0
 
-        burndown_data = {"labels": [], "ideal": [], "actual": [], "sprint_name": sprint["name"] if sprint else "No active sprint"}
+        burndown_data = {"labels": [], "ideal": [], "actual": [], "sprint_name": sprint["name"] if sprint else "Project Timeline"}
 
         if sprint and sprint["start_date"] and sprint["end_date"]:
             try:
-                start = datetime.strptime(sprint["start_date"], "%Y-%m-%d")
-                end = datetime.strptime(sprint["end_date"], "%Y-%m-%d")
+                start = datetime.strptime(sprint["start_date"][:10], "%Y-%m-%d")
+                end = datetime.strptime(sprint["end_date"][:10], "%Y-%m-%d")
                 days_total = max((end - start).days, 1)
                 
                 sprint_tasks_total_est = conn.execute(
@@ -977,14 +1002,73 @@ def get_analytics(project_id):
             except Exception:
                 pass
 
+        if not burndown_data["labels"]:
+            dates_row = conn.execute("""
+                SELECT MIN(start_date) as min_start, MAX(due_date) as max_due,
+                       COALESCE(SUM(estimated_hours), 0) as total_est,
+                       COALESCE(SUM(actual_hours), 0) as total_act
+                FROM tasks
+                WHERE project_id = ? AND start_date IS NOT NULL
+            """, (project_id,)).fetchone()
+            
+            if dates_row and dates_row["min_start"] and dates_row["max_due"]:
+                try:
+                    start = datetime.strptime(dates_row["min_start"][:10], "%Y-%m-%d")
+                    end = datetime.strptime(dates_row["max_due"][:10], "%Y-%m-%d")
+                    total_est = float(dates_row["total_est"] or 40.0)
+                    days_total = max((end - start).days, 1)
+                    step_days = max(days_total // 7, 1)
+                    
+                    labels = []
+                    ideal = []
+                    actual = []
+                    today = datetime.now()
+                    num_steps = max(days_total // step_days, 1)
+                    
+                    for i in range(num_steps + 1):
+                        day_dt = start + timedelta(days=min(i * step_days, days_total))
+                        labels.append(day_dt.strftime("%b %d"))
+                        ideal_val = round(total_est * (1 - (min(i * step_days, days_total) / days_total)), 1)
+                        ideal.append(max(ideal_val, 0))
+                        
+                        if day_dt.date() <= (today + timedelta(days=1)).date():
+                            completed_sum = conn.execute("""
+                                SELECT COALESCE(SUM(estimated_hours), 0) as s FROM tasks
+                                WHERE project_id = ? AND status = 'done' AND (due_date <= ? OR start_date <= ?)
+                            """, (project_id, day_dt.strftime("%Y-%m-%d"), day_dt.strftime("%Y-%m-%d"))).fetchone()["s"]
+                            actual.append(max(round(total_est - completed_sum, 1), 0))
+                    
+                    burndown_data = {
+                        "labels": labels,
+                        "ideal": ideal,
+                        "actual": actual,
+                        "sprint_name": "Project Lifecycle Progress"
+                    }
+                except Exception:
+                    pass
+
+        dept_counts = conn.execute("""
+            SELECT 
+                COALESCE(NULLIF(TRIM(m.role), ''), 'Unassigned') as department,
+                COUNT(t.id) as count,
+                COALESCE(SUM(t.estimated_hours), 0) as est_hours,
+                COUNT(CASE WHEN t.status = 'done' THEN 1 END) as completed_count
+            FROM tasks t
+            LEFT JOIN members m ON t.assignee_id = m.id
+            WHERE t.project_id = ?
+            GROUP BY department
+            ORDER BY count DESC
+        """, (project_id,)).fetchall()
+
         result = {
             "kpis": {
                 **dict(kpi_row),
                 "completion_rate": completion_rate,
-                "sprint_name": sprint["name"] if sprint else "No active sprint"
+                "sprint_name": sprint["name"] if sprint else "Project Lifecycle"
             },
-            "status_distribution": status_counts,
-            "priority_distribution": priority_counts,
+            "status_distribution": [dict(r) for r in status_counts],
+            "priority_distribution": [dict(r) for r in priority_counts],
+            "department_distribution": [dict(r) for r in dept_counts],
             "workload": workload,
             "burndown": burndown_data
         }
