@@ -89,12 +89,89 @@ def get_current_user():
         """, (token,)).fetchone()
         return session
 
+def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
+    projects = conn.execute("""
+        SELECT p.*,
+            (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) as total_tasks,
+            (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status = 'done') as completed_tasks,
+            (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status != 'done' AND due_date < date('now') AND due_date IS NOT NULL) as overdue_tasks,
+            (SELECT COALESCE(SUM(actual_hours), 0) FROM tasks WHERE project_id = p.id) as total_actual_hours,
+            (SELECT COALESCE(SUM(estimated_hours), 0) FROM tasks WHERE project_id = p.id) as total_estimated_hours
+        FROM projects p
+        ORDER BY p.updated_at DESC
+    """).fetchall()
+
+    if not projects:
+        return {
+            "projects": [],
+            "current_project": None,
+            "tasks": []
+        }
+
+    target_id = active_project_id
+    if not target_id or not any(p["id"] == target_id for p in projects):
+        target_id = projects[0]["id"]
+
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (target_id,)).fetchone()
+    members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (target_id,)).fetchall()
+    sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date DESC", (target_id,)).fetchall()
+    milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (target_id,)).fetchall()
+
+    current_project = dict(project) if project else None
+    if current_project:
+        current_project["members"] = members
+        current_project["sprints"] = sprints
+        current_project["milestones"] = milestones
+
+    tasks_raw = conn.execute("""
+        SELECT t.*,
+            m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
+            s.name as sprint_name,
+            (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) as subtask_count,
+            (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND completed = 1) as subtask_completed_count,
+            (SELECT COALESCE(SUM(hours), 0) FROM timelogs WHERE task_id = t.id) as logged_hours_sum
+        FROM tasks t
+        LEFT JOIN members m ON t.assignee_id = m.id
+        LEFT JOIN sprints s ON t.sprint_id = s.id
+        WHERE t.project_id = ?
+        ORDER BY t.order_index ASC, t.id ASC
+    """, (target_id,)).fetchall()
+
+    subtasks_raw = conn.execute("""
+        SELECT s.* FROM subtasks s 
+        JOIN tasks t ON s.task_id = t.id 
+        WHERE t.project_id = ? 
+        ORDER BY s.order_index ASC
+    """, (target_id,)).fetchall()
+
+    subtasks_by_task = {}
+    for s in subtasks_raw:
+        subtasks_by_task.setdefault(s["task_id"], []).append(dict(s))
+
+    tasks = []
+    for t in tasks_raw:
+        t_dict = dict(t)
+        try:
+            t_dict["tags"] = json.loads(t_dict["tags"]) if t_dict.get("tags") else []
+        except Exception:
+            t_dict["tags"] = []
+        t_dict["subtasks_list"] = subtasks_by_task.get(t["id"], [])
+        tasks.append(t_dict)
+
+    return {
+        "projects": projects,
+        "current_project": current_project,
+        "tasks": tasks
+    }
+
 @app.post("/api/auth/login")
 def auth_login():
     data = request.json or {}
     identifier = (data.get("username") or data.get("email") or "").strip().lower()
     password = data.get("password") or ""
     remember = bool(data.get("remember", True))
+    active_p_id = data.get("active_project_id")
+    active_p_id = int(active_p_id) if active_p_id and str(active_p_id).isdigit() else None
 
     if not identifier or not password:
         return json_response({"error": "Please enter your username/email and password"}, status=400)
@@ -130,6 +207,9 @@ def auth_login():
             "avatar_color": user["avatar_color"]
         }
 
+        # Precompute full bootstrap payload for instant 0ms landing
+        bootstrap = get_bootstrap_payload(conn, user["id"], active_p_id)
+
         # Set session cookie
         max_age = 30 * 86400 if remember else 86400
         response.set_cookie("pp_token", token, path="/", max_age=max_age, httponly=False, samesite="Lax")
@@ -137,7 +217,10 @@ def auth_login():
         return json_response({
             "success": True,
             "token": token,
-            "user": user_dict
+            "user": user_dict,
+            "projects": bootstrap["projects"],
+            "current_project": bootstrap["current_project"],
+            "tasks": bootstrap["tasks"]
         })
 
 @app.post("/api/auth/register")
@@ -199,12 +282,16 @@ def auth_register():
             "avatar_color": avatar_color
         }
 
+        bootstrap = get_bootstrap_payload(conn, user_id)
         response.set_cookie("pp_token", token, path="/", max_age=30*86400, httponly=False, samesite="Lax")
 
         return json_response({
             "success": True,
             "token": token,
-            "user": user_dict
+            "user": user_dict,
+            "projects": bootstrap["projects"],
+            "current_project": bootstrap["current_project"],
+            "tasks": bootstrap["tasks"]
         }, status=201)
 
 @app.get("/api/auth/me")
@@ -213,6 +300,12 @@ def auth_me():
     if not user:
         return json_response({"authenticated": False}, status=401)
     
+    active_p_id = request.query.get("active_project_id")
+    active_p_id = int(active_p_id) if active_p_id and str(active_p_id).isdigit() else None
+
+    with get_db() as conn:
+        bootstrap = get_bootstrap_payload(conn, user["user_id"], active_p_id)
+
     return json_response({
         "authenticated": True,
         "user": {
@@ -222,8 +315,20 @@ def auth_me():
             "full_name": user["full_name"],
             "role": user["role"],
             "avatar_color": user["avatar_color"]
-        }
+        },
+        "projects": bootstrap["projects"],
+        "current_project": bootstrap["current_project"],
+        "tasks": bootstrap["tasks"]
     })
+
+@app.get("/api/bootstrap")
+def api_bootstrap():
+    user = get_current_user()
+    active_p_id = request.query.get("active_project_id")
+    active_p_id = int(active_p_id) if active_p_id and str(active_p_id).isdigit() else None
+    with get_db() as conn:
+        bootstrap = get_bootstrap_payload(conn, user["user_id"] if user else None, active_p_id)
+        return json_response(bootstrap)
 
 @app.post("/api/auth/logout")
 def auth_logout():

@@ -25,11 +25,48 @@ const app = {
     this.initTheme();
     this.initKeyboardShortcuts();
     this.initClickOutside();
-    const authenticated = await this.checkAuth();
-    if (authenticated) {
-      await this.fetchProjects();
-    }
     this.initLucide();
+
+    // Fast-path: Instant Hydration from Local Storage (0ms perceived load)
+    const token = localStorage.getItem('projectpulse_token');
+    const cachedUser = localStorage.getItem('projectpulse_user');
+    const cachedProjects = localStorage.getItem('projectpulse_cached_projects');
+    const activeProjectId = localStorage.getItem('projectpulse_active_project');
+    const cachedCurrentProject = activeProjectId ? localStorage.getItem(`projectpulse_cached_project_${activeProjectId}`) : null;
+    const cachedTasks = activeProjectId ? localStorage.getItem(`projectpulse_cached_tasks_${activeProjectId}`) : null;
+
+    if (token && cachedUser) {
+      try {
+        this.state.authToken = token;
+        this.state.user = JSON.parse(cachedUser);
+        this.updateHeaderUserProfile();
+        this.hideAuthContainer();
+
+        if (cachedProjects) {
+          this.state.projects = JSON.parse(cachedProjects);
+          this.renderProjectsDropdown();
+          this.renderProjectsSidebar();
+        }
+
+        if (cachedCurrentProject) {
+          this.state.currentProject = JSON.parse(cachedCurrentProject);
+          this.state.currentProjectId = this.state.currentProject.id;
+          this.populateFilterDropdowns();
+        }
+
+        if (cachedTasks) {
+          this.state.tasks = JSON.parse(cachedTasks);
+          this.renderCurrentView();
+        }
+      } catch (e) {
+        console.error('Error hydrating cache:', e);
+      }
+    } else {
+      this.showAuthContainer();
+    }
+
+    // Background auth check & quiet bootstrap sync
+    await this.checkAuth();
   },
 
   initTheme() {
@@ -199,12 +236,23 @@ const app = {
     if (select) select.value = projectId;
     this.renderProjectsSidebar();
 
+    // Fast-path: Check localStorage cache for this project & tasks for instant 0ms view switch
+    const cachedProj = localStorage.getItem(`projectpulse_cached_project_${projectId}`);
+    const cachedTasks = localStorage.getItem(`projectpulse_cached_tasks_${projectId}`);
+    if (cachedProj && cachedTasks && !this.state.searchQuery && !this.state.filterAssignee && !this.state.filterPriority) {
+      try {
+        this.state.currentProject = JSON.parse(cachedProj);
+        this.state.tasks = JSON.parse(cachedTasks);
+        this.populateFilterDropdowns();
+        this.renderCurrentView();
+      } catch (e) {}
+    }
+
     let url = `/api/projects/${projectId}/tasks?`;
     if (this.state.searchQuery) url += `search=${encodeURIComponent(this.state.searchQuery)}&`;
     if (this.state.filterAssignee) url += `assignee_id=${encodeURIComponent(this.state.filterAssignee)}&`;
     if (this.state.filterPriority) url += `priority=${encodeURIComponent(this.state.filterPriority)}&`;
 
-    // Fetch project details and tasks concurrently in parallel (eliminates waterfall)
     try {
       const [project, tasks] = await Promise.all([
         this.api(`/api/projects/${projectId}`),
@@ -212,6 +260,10 @@ const app = {
       ]);
       this.state.currentProject = project;
       this.state.tasks = tasks;
+      if (!this.state.searchQuery && !this.state.filterAssignee && !this.state.filterPriority) {
+        localStorage.setItem(`projectpulse_cached_project_${projectId}`, JSON.stringify(project));
+        localStorage.setItem(`projectpulse_cached_tasks_${projectId}`, JSON.stringify(tasks));
+      }
       this.populateFilterDropdowns();
       this.renderCurrentView();
     } catch (e) {
@@ -3313,19 +3365,10 @@ const app = {
     }
 
     this.state.authToken = token;
-
-    // Fast-path: If user profile is already cached in localStorage, pre-populate UI instantly!
-    const cachedUser = localStorage.getItem('projectpulse_user');
-    if (cachedUser) {
-      try {
-        this.state.user = JSON.parse(cachedUser);
-        this.updateHeaderUserProfile();
-        this.hideAuthContainer();
-      } catch (e) {}
-    }
+    const activeProjectId = this.state.currentProjectId || localStorage.getItem('projectpulse_active_project') || '';
 
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await fetch(`/api/auth/me?active_project_id=${encodeURIComponent(activeProjectId)}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -3339,12 +3382,35 @@ const app = {
           localStorage.setItem('projectpulse_user', JSON.stringify(data.user));
           this.updateHeaderUserProfile();
           this.hideAuthContainer();
+
+          if (data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
+            this.state.projects = data.projects;
+            localStorage.setItem('projectpulse_cached_projects', JSON.stringify(data.projects));
+            this.renderProjectsDropdown();
+            this.renderProjectsSidebar();
+          }
+
+          if (data.current_project) {
+            this.state.currentProject = data.current_project;
+            this.state.currentProjectId = data.current_project.id;
+            localStorage.setItem('projectpulse_active_project', data.current_project.id);
+            localStorage.setItem(`projectpulse_cached_project_${data.current_project.id}`, JSON.stringify(data.current_project));
+            this.populateFilterDropdowns();
+          }
+
+          if (data.tasks && Array.isArray(data.tasks)) {
+            this.state.tasks = data.tasks;
+            if (this.state.currentProjectId) {
+              localStorage.setItem(`projectpulse_cached_tasks_${this.state.currentProjectId}`, JSON.stringify(data.tasks));
+            }
+            this.renderCurrentView();
+          }
+
           return true;
         }
       }
     } catch (e) {
       console.error('Auth check error:', e);
-      // If offline or network glitch but token and cached user exist, keep active
       if (this.state.user) return true;
     }
 
@@ -3424,7 +3490,11 @@ const app = {
     }
 
     this.hideAuthError();
-    document.getElementById('login-submit-btn')?.focus();
+  },
+
+  async quickDemoLogin(role = 'admin') {
+    this.fillDemoCredentials(role);
+    await this.handleLoginFormSubmit();
   },
 
   togglePasswordVisibility(inputId, btn) {
@@ -3453,7 +3523,7 @@ const app = {
   },
 
   async handleLoginFormSubmit(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const identifier = document.getElementById('login-input-identifier')?.value.trim();
     const password = document.getElementById('login-input-password')?.value;
     const remember = document.getElementById('login-input-remember')?.checked;
@@ -3467,14 +3537,21 @@ const app = {
     const originalText = submitBtn?.innerHTML;
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Signing in...</span>';
+      submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Entering Workspace...</span>';
       this.initLucide();
     }
+
+    const savedProjectId = localStorage.getItem('projectpulse_active_project') || '';
 
     try {
       const res = await this.api('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username: identifier, password, remember })
+        body: JSON.stringify({
+          username: identifier,
+          password,
+          remember,
+          active_project_id: savedProjectId
+        })
       });
 
       if (res.token && res.user) {
@@ -3483,10 +3560,33 @@ const app = {
         localStorage.setItem('projectpulse_token', res.token);
         localStorage.setItem('projectpulse_user', JSON.stringify(res.user));
 
+        if (res.projects && Array.isArray(res.projects) && res.projects.length > 0) {
+          this.state.projects = res.projects;
+          localStorage.setItem('projectpulse_cached_projects', JSON.stringify(res.projects));
+        }
+
+        if (res.current_project) {
+          this.state.currentProject = res.current_project;
+          this.state.currentProjectId = res.current_project.id;
+          localStorage.setItem('projectpulse_active_project', res.current_project.id);
+          localStorage.setItem(`projectpulse_cached_project_${res.current_project.id}`, JSON.stringify(res.current_project));
+        }
+
+        if (res.tasks && Array.isArray(res.tasks)) {
+          this.state.tasks = res.tasks;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_tasks_${this.state.currentProjectId}`, JSON.stringify(res.tasks));
+          }
+        }
+
+        // Instant UI Render in 0ms!
         this.updateHeaderUserProfile();
+        this.renderProjectsDropdown();
+        this.renderProjectsSidebar();
+        this.populateFilterDropdowns();
+        this.renderCurrentView();
         this.hideAuthContainer();
         this.showToast(`Welcome back, ${res.user.full_name}!`, 'success');
-        await this.fetchProjects();
       }
     } catch (err) {
       this.showAuthError(err.message || 'Login failed. Check your credentials.');
@@ -3500,7 +3600,7 @@ const app = {
   },
 
   async handleRegisterFormSubmit(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const full_name = document.getElementById('register-input-fullname')?.value.trim();
     const username = document.getElementById('register-input-username')?.value.trim();
     const email = document.getElementById('register-input-email')?.value.trim();
@@ -3531,10 +3631,32 @@ const app = {
         localStorage.setItem('projectpulse_token', res.token);
         localStorage.setItem('projectpulse_user', JSON.stringify(res.user));
 
+        if (res.projects && Array.isArray(res.projects) && res.projects.length > 0) {
+          this.state.projects = res.projects;
+          localStorage.setItem('projectpulse_cached_projects', JSON.stringify(res.projects));
+        }
+
+        if (res.current_project) {
+          this.state.currentProject = res.current_project;
+          this.state.currentProjectId = res.current_project.id;
+          localStorage.setItem('projectpulse_active_project', res.current_project.id);
+          localStorage.setItem(`projectpulse_cached_project_${res.current_project.id}`, JSON.stringify(res.current_project));
+        }
+
+        if (res.tasks && Array.isArray(res.tasks)) {
+          this.state.tasks = res.tasks;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_tasks_${this.state.currentProjectId}`, JSON.stringify(res.tasks));
+          }
+        }
+
         this.updateHeaderUserProfile();
+        this.renderProjectsDropdown();
+        this.renderProjectsSidebar();
+        this.populateFilterDropdowns();
+        this.renderCurrentView();
         this.hideAuthContainer();
         this.showToast(`Account created! Welcome, ${res.user.full_name}!`, 'success');
-        await this.fetchProjects();
       }
     } catch (err) {
       this.showAuthError(err.message || 'Registration failed.');
@@ -3554,6 +3676,11 @@ const app = {
     this.state.user = null;
     localStorage.removeItem('projectpulse_token');
     localStorage.removeItem('projectpulse_user');
+    const activeId = this.state.currentProjectId;
+    if (activeId) {
+      localStorage.removeItem(`projectpulse_cached_project_${activeId}`);
+      localStorage.removeItem(`projectpulse_cached_tasks_${activeId}`);
+    }
     this.closeUserMenu();
     this.showAuthContainer();
     this.showToast('You have signed out', 'info');

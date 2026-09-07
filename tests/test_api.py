@@ -591,7 +591,32 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(res["tasks"][2]["title"], "Raw Material Delivery")
         self.assertEqual(res["tasks"][2]["status"], "in_progress")
 
+    def test_17_bootstrap_payload(self):
+        # 1. Login with demo admin -> should return full bootstrap (projects, current_project, tasks)
+        status, res = self.request("/api/auth/login", method="POST", body={
+            "username": "admin",
+            "password": "admin123"
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(res["success"])
+        self.assertIn("projects", res)
+        self.assertIn("current_project", res)
+        self.assertIn("tasks", res)
+        self.assertIsInstance(res["projects"], list)
+        self.assertGreaterEqual(len(res["projects"]), 1)
+        self.assertIsNotNone(res["current_project"])
+        self.assertIsInstance(res["tasks"], list)
+        self.assertGreaterEqual(len(res["tasks"]), 1)
+
+        # 2. Test /api/bootstrap endpoint
+        status_boot, boot_data = self.request("/api/bootstrap")
+        self.assertEqual(status_boot, 200)
+        self.assertIn("projects", boot_data)
+        self.assertIn("current_project", boot_data)
+        self.assertIn("tasks", boot_data)
+
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -71,6 +71,8 @@ def get_db():
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA temp_store = MEMORY")
+        conn.execute("PRAGMA mmap_size = 268435456")
         conn.execute("PRAGMA cache_size = -64000")
     except Exception:
         try:
