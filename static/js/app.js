@@ -3,6 +3,8 @@
  */
 
 const app = {
+  _projectSeq: 0,
+  _searchTimer: null,
   state: {
     user: null,
     authToken: localStorage.getItem('projectpulse_token') || null,
@@ -19,6 +21,18 @@ const app = {
     calendarDate: new Date(),
     charts: {},
     sortableInstances: []
+  },
+
+  syncCurrentProjectCache() {
+    if (this.state.currentProjectId) {
+      const pid = this.state.currentProjectId;
+      if (this.state.currentProject) {
+        localStorage.setItem(`projectpulse_cached_project_${pid}`, JSON.stringify(this.state.currentProject));
+      }
+      if (this.state.tasks) {
+        localStorage.setItem(`projectpulse_cached_tasks_${pid}`, JSON.stringify(this.state.tasks));
+      }
+    }
   },
 
   async init() {
@@ -199,7 +213,7 @@ const app = {
     const select = document.getElementById('project-select');
     if (!select) return;
     select.innerHTML = this.state.projects.map(p => `
-      <option value="${p.id}" ${p.id === this.state.currentProjectId ? 'selected' : ''}>
+      <option value="${p.id}" ${Number(p.id) === Number(this.state.currentProjectId) ? 'selected' : ''}>
         ${this.escapeHtml(p.name)}
       </option>
     `).join('');
@@ -211,7 +225,7 @@ const app = {
     const container = document.getElementById('projects-list-sidebar');
     if (!container) return;
     container.innerHTML = this.state.projects.map(p => `
-      <div class="group/p flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${p.id === this.state.currentProjectId ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'}">
+      <div class="group/p flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${Number(p.id) === Number(this.state.currentProjectId) ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'}">
         <button onclick="app.selectProject(${p.id})" class="flex items-center space-x-2 truncate flex-1 text-left min-w-0">
           <span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${p.color || '#3B82F6'}"></span>
           <span class="truncate">${this.escapeHtml(p.name)}</span>
@@ -229,28 +243,63 @@ const app = {
 
   async selectProject(projectId) {
     if (!projectId) return;
+    projectId = Number(projectId);
+    if (isNaN(projectId)) return;
+
+    // Increment request sequence to invalidate any prior pending async fetches
+    const seq = ++this._projectSeq;
     this.state.currentProjectId = projectId;
     localStorage.setItem('projectpulse_active_project', projectId);
     
+    // Immediately sync selects & sidebar
     const select = document.getElementById('project-select');
-    if (select) select.value = projectId;
+    if (select) select.value = String(projectId);
+    const analyticsSelect = document.getElementById('analytics-project-select');
+    if (analyticsSelect) analyticsSelect.value = String(projectId);
     this.renderProjectsSidebar();
 
-    // Fast-path: Check localStorage cache for this project & tasks for instant 0ms view switch
+    // Reset project-dependent view state to avoid distortion across projects
+    this.state.ganttOffset = 0;
+    this.state.calendarSelectedDay = null;
+    const inspector = document.getElementById('calendar-day-inspector');
+    if (inspector) inspector.classList.add('hidden');
+
+    // Reset assignee filter on project switch
+    this.state.filterAssignee = '';
+    const memberSelect = document.getElementById('filter-assignee');
+    if (memberSelect) memberSelect.value = '';
+
+    // Fast-path: Instant 0ms cache hydration if available
     const cachedProj = localStorage.getItem(`projectpulse_cached_project_${projectId}`);
     const cachedTasks = localStorage.getItem(`projectpulse_cached_tasks_${projectId}`);
-    if (cachedProj && cachedTasks && !this.state.searchQuery && !this.state.filterAssignee && !this.state.filterPriority) {
+    let hydratedFromCache = false;
+
+    if (cachedProj && cachedTasks && !this.state.searchQuery && !this.state.filterPriority) {
       try {
-        this.state.currentProject = JSON.parse(cachedProj);
-        this.state.tasks = JSON.parse(cachedTasks);
-        this.populateFilterDropdowns();
-        this.renderCurrentView();
-      } catch (e) {}
+        const parsedProj = JSON.parse(cachedProj);
+        const parsedTasks = JSON.parse(cachedTasks);
+        if (parsedProj && Number(parsedProj.id) === projectId && Array.isArray(parsedTasks)) {
+          this.state.currentProject = parsedProj;
+          this.state.tasks = parsedTasks;
+          this.populateFilterDropdowns();
+          this.renderCurrentView();
+          hydratedFromCache = true;
+        }
+      } catch (e) {
+        console.error('Cache hydration error:', e);
+      }
+    }
+
+    if (!hydratedFromCache) {
+      const projInList = this.state.projects.find(p => Number(p.id) === projectId);
+      this.state.currentProject = projInList ? { ...projInList, members: [], sprints: [], milestones: [] } : null;
+      this.state.tasks = [];
+      this.populateFilterDropdowns();
+      this.renderCurrentView();
     }
 
     let url = `/api/projects/${projectId}/tasks?`;
     if (this.state.searchQuery) url += `search=${encodeURIComponent(this.state.searchQuery)}&`;
-    if (this.state.filterAssignee) url += `assignee_id=${encodeURIComponent(this.state.filterAssignee)}&`;
     if (this.state.filterPriority) url += `priority=${encodeURIComponent(this.state.filterPriority)}&`;
 
     try {
@@ -258,16 +307,25 @@ const app = {
         this.api(`/api/projects/${projectId}`),
         this.api(url)
       ]);
+
+      // Guard: Discard stale response if user switched to another project while this request was in flight
+      if (seq !== this._projectSeq || Number(this.state.currentProjectId) !== projectId) {
+        return;
+      }
+
       this.state.currentProject = project;
       this.state.tasks = tasks;
-      if (!this.state.searchQuery && !this.state.filterAssignee && !this.state.filterPriority) {
-        localStorage.setItem(`projectpulse_cached_project_${projectId}`, JSON.stringify(project));
-        localStorage.setItem(`projectpulse_cached_tasks_${projectId}`, JSON.stringify(tasks));
+
+      if (!this.state.searchQuery && !this.state.filterPriority) {
+        this.syncCurrentProjectCache();
       }
+
       this.populateFilterDropdowns();
       this.renderCurrentView();
     } catch (e) {
-      console.error('Failed to select project:', e);
+      if (seq === this._projectSeq) {
+        console.error('Failed to select project:', e);
+      }
     }
   },
 
@@ -275,10 +333,16 @@ const app = {
     const memberSelect = document.getElementById('filter-assignee');
     const members = this.state.currentProject?.members || [];
     if (memberSelect) {
+      const currentVal = this.state.filterAssignee ? String(this.state.filterAssignee) : '';
+      const hasMember = members.some(m => String(m.id) === currentVal);
+      if (!hasMember) {
+        this.state.filterAssignee = '';
+      }
       memberSelect.innerHTML = `
         <option value="">All Assignees</option>
-        ${members.map(m => `<option value="${m.id}">${this.escapeHtml(m.name)}</option>`).join('')}
+        ${members.map(m => `<option value="${m.id}" ${String(m.id) === String(this.state.filterAssignee) ? 'selected' : ''}>${this.escapeHtml(m.name)}</option>`).join('')}
       `;
+      memberSelect.value = this.state.filterAssignee || '';
     }
   },
 
@@ -336,24 +400,37 @@ const app = {
 
   async fetchTasks() {
     if (!this.state.currentProjectId) return;
+    const reqProjectId = Number(this.state.currentProjectId);
+    const seq = ++this._projectSeq;
     
-    let url = `/api/projects/${this.state.currentProjectId}/tasks?`;
+    let url = `/api/projects/${reqProjectId}/tasks?`;
     if (this.state.searchQuery) url += `search=${encodeURIComponent(this.state.searchQuery)}&`;
     if (this.state.filterAssignee) url += `assignee_id=${encodeURIComponent(this.state.filterAssignee)}&`;
     if (this.state.filterPriority) url += `priority=${encodeURIComponent(this.state.filterPriority)}&`;
 
     try {
       const tasks = await this.api(url);
+      if (seq !== this._projectSeq || Number(this.state.currentProjectId) !== reqProjectId) {
+        return;
+      }
       this.state.tasks = tasks;
+      if (!this.state.searchQuery && !this.state.filterAssignee && !this.state.filterPriority) {
+        this.syncCurrentProjectCache();
+      }
       this.renderCurrentView();
     } catch (e) {
-      console.error(e);
+      if (seq === this._projectSeq) {
+        console.error(e);
+      }
     }
   },
 
   handleSearch(value) {
     this.state.searchQuery = value;
-    this.fetchTasks();
+    clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(() => {
+      this.fetchTasks();
+    }, 150);
   },
 
   handleFilterChange() {
@@ -574,25 +651,38 @@ const app = {
       `;
     }
 
-    // 5. Initialize SortableJS on all columns
+    // 5. Initialize SortableJS on all columns (destroy old instances first to prevent memory leaks and event collisions)
+    if (this.state.sortableInstances && this.state.sortableInstances.length > 0) {
+      this.state.sortableInstances.forEach(s => {
+        try {
+          if (s && typeof s.destroy === 'function') s.destroy();
+        } catch (e) {}
+      });
+    }
+    this.state.sortableInstances = [];
+
     const containers = boardContainer.querySelectorAll('.kanban-col-body');
     containers.forEach(container => {
-      const sortable = new Sortable(container, {
-        group: 'kanban-cards',
-        animation: 150,
-        ghostClass: 'opacity-40',
-        chosenClass: 'scale-[1.02]',
-        dragClass: 'rotate-1',
-        onEnd: async (evt) => {
-          const itemEl = evt.item;
-          const taskId = parseInt(itemEl.getAttribute('data-task-id'), 10);
-          const newStatus = evt.to.getAttribute('data-status');
-          if (taskId && newStatus) {
-            await this.handleTaskMove(taskId, newStatus);
+      try {
+        const sortable = new Sortable(container, {
+          group: 'kanban-cards',
+          animation: 150,
+          ghostClass: 'opacity-40',
+          chosenClass: 'scale-[1.02]',
+          dragClass: 'rotate-1',
+          onEnd: async (evt) => {
+            const itemEl = evt.item;
+            const taskId = parseInt(itemEl.getAttribute('data-task-id'), 10);
+            const newStatus = evt.to.getAttribute('data-status');
+            if (taskId && newStatus) {
+              await this.handleTaskMove(taskId, newStatus);
+            }
           }
-        }
-      });
-      this.state.sortableInstances.push(sortable);
+        });
+        this.state.sortableInstances.push(sortable);
+      } catch (err) {
+        console.error('Error initializing sortable on column:', err);
+      }
     });
 
     this.initLucide();
@@ -2115,7 +2205,9 @@ const app = {
   async handleAnalyticsProjectChange(projectId) {
     if (!projectId) return;
     await this.selectProject(Number(projectId));
-    this.renderAnalytics();
+    if (this.state.activeView === 'analytics') {
+      this.renderAnalytics();
+    }
   },
 
   async renderAnalytics() {
@@ -2123,21 +2215,23 @@ const app = {
       this.state.currentProjectId = this.state.projects[0].id;
     }
     if (!this.state.currentProjectId) return;
+    const targetPid = Number(this.state.currentProjectId);
 
     try {
       // 1. Populate Analytics Project Selector
       const pSelect = document.getElementById('analytics-project-select');
       if (pSelect && this.state.projects?.length > 0) {
         pSelect.innerHTML = this.state.projects.map(p => `
-          <option value="${p.id}" ${p.id === this.state.currentProjectId ? 'selected' : ''}>
+          <option value="${p.id}" ${Number(p.id) === targetPid ? 'selected' : ''}>
             ${this.escapeHtml(p.name)} (${p.task_count || 0} tasks)
           </option>
         `).join('');
       }
 
       // 2. Fetch Analytics Data
-      const url = `/api/projects/${this.state.currentProjectId}/analytics`;
+      const url = `/api/projects/${targetPid}/analytics`;
       const data = await this.api(url);
+      if (Number(this.state.currentProjectId) !== targetPid) return;
       if (!data || data.error) {
         console.warn('Analytics data not available:', data?.error);
         return;
@@ -2183,7 +2277,8 @@ const app = {
 
       // 4. Render Activity Stream
       try {
-        const activities = await this.api(`/api/projects/${this.state.currentProjectId}/activity`);
+        const activities = await this.api(`/api/projects/${targetPid}/activity`);
+        if (Number(this.state.currentProjectId) !== targetPid) return;
         const actContainer = document.getElementById('activity-stream-render');
         if (actContainer) {
           if (!activities || activities.length === 0) {
