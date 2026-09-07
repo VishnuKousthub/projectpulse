@@ -2833,15 +2833,22 @@ const app = {
 
   // ==================== OUTLOOK EMAIL NOTIFICATION INTEGRATION ====================
   async openNotificationsModal() {
+    // 1. Instantly display modal (0ms perceived latency)
+    const modal = document.getElementById('notifications-modal');
+    if (modal) modal.classList.remove('hidden');
+    this.switchNotifTab('settings');
+    this.initLucide();
+
+    // 2. Fetch settings and logs concurrently in background
     try {
-      const settings = await this.api('/api/notifications/settings');
-      this.populateNotificationSettings(settings);
-      await this.loadNotificationLogs();
       this.renderNotificationMembers();
-      
-      const modal = document.getElementById('notifications-modal');
-      if (modal) modal.classList.remove('hidden');
-      this.switchNotifTab('settings');
+      const [settings] = await Promise.all([
+        this.api('/api/notifications/settings'),
+        this.loadNotificationLogs()
+      ]);
+      if (settings) {
+        this.populateNotificationSettings(settings);
+      }
       this.initLucide();
     } catch (e) {
       console.error(e);
