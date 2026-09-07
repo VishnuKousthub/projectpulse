@@ -34,5 +34,5 @@ RUN mkdir -p /app/data && chmod 777 /app/data
 # Expose Web Port
 EXPOSE 8000
 
-# Start Production WSGI Server (Gunicorn with dynamic port binding for Render/Railway/Koyeb/Docker)
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 4 --timeout 120 app.main:app"]
+# Start Production WSGI Server (Gunicorn with dynamic port binding for Cloud Run/Railway/Koyeb/Docker)
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 8 --timeout 120 app.main:app"]

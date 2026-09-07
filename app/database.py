@@ -30,13 +30,19 @@ def dict_factory(cursor, row):
 def get_db():
     target_path = get_db_path()
     try:
-        conn = sqlite3.connect(target_path)
+        conn = sqlite3.connect(target_path, timeout=30.0)
     except sqlite3.OperationalError:
         # Fallback to local working directory or /tmp if configured path is not writable
         fallback_path = os.path.join(os.getcwd(), "project_pulse.db")
-        conn = sqlite3.connect(fallback_path)
+        conn = sqlite3.connect(fallback_path, timeout=30.0)
     conn.row_factory = dict_factory
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    try:
+        conn.execute("PRAGMA journal_mode = DELETE")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except Exception:
+        pass
     try:
         yield conn
         conn.commit()
