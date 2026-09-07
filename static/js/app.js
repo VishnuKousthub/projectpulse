@@ -2767,26 +2767,55 @@ const app = {
       }
     }
 
-    try {
-      await this.api(`/api/projects/${projectId}`, { method: 'DELETE' });
-      this.showToast(`Project "${name}" deleted`, 'success');
-      this.closeProjectModal();
+    // 1. Optimistic UI update (0ms instant response)
+    const remainingProjects = this.state.projects.filter(p => p.id !== projectId);
+    this.state.projects = remainingProjects;
+    localStorage.setItem('projectpulse_cached_projects', JSON.stringify(remainingProjects));
+    localStorage.removeItem(`projectpulse_cached_project_${projectId}`);
+    localStorage.removeItem(`projectpulse_cached_tasks_${projectId}`);
 
-      if (Number(localStorage.getItem('projectpulse_active_project')) === Number(projectId)) {
-        localStorage.removeItem('projectpulse_active_project');
-      }
-      await this.fetchProjects();
-      if (this.state.projects.length === 0) {
+    if (this.state.currentProjectId === projectId) {
+      if (remainingProjects.length > 0) {
+        this.state.currentProjectId = remainingProjects[0].id;
+        this.state.currentProject = remainingProjects[0];
+        localStorage.setItem('projectpulse_active_project', remainingProjects[0].id);
+      } else {
         this.state.currentProjectId = null;
         this.state.currentProject = null;
         this.state.tasks = [];
-        this.renderProjectsDropdown();
-        this.renderProjectsSidebar();
-        this.renderCurrentView();
+        localStorage.removeItem('projectpulse_active_project');
+      }
+    }
+
+    this.renderProjectsDropdown();
+    this.renderProjectsSidebar();
+    this.closeProjectModal();
+    this.showToast(`Project "${name}" deleted`, 'success');
+
+    if (this.state.currentProjectId) {
+      this.selectProject(this.state.currentProjectId);
+    } else {
+      this.renderCurrentView();
+    }
+
+    // 2. Background server deletion
+    try {
+      const res = await this.api(`/api/projects/${projectId}`, { method: 'DELETE' });
+      if (res && res.projects) {
+        this.state.projects = res.projects;
+        localStorage.setItem('projectpulse_cached_projects', JSON.stringify(res.projects));
+        if (res.current_project) {
+          this.state.currentProject = res.current_project;
+          this.state.currentProjectId = res.current_project.id;
+          this.state.tasks = res.tasks || [];
+          this.renderProjectsDropdown();
+          this.renderProjectsSidebar();
+          this.populateFilterDropdowns();
+          this.renderCurrentView();
+        }
       }
     } catch (e) {
-      console.error(e);
-      this.showToast('Failed to delete project', 'error');
+      console.error('Delete project error:', e);
     }
   },
 
@@ -2895,11 +2924,26 @@ const app = {
       this.showToast(data.message || `Successfully imported ${data.tasks_imported} tasks!`, 'success');
       this.closeGanttUploadModal();
 
-      if (data.project_id) {
-        await this.fetchProjects(data.project_id);
-      } else {
-        await this.fetchProjects();
+      if (data.projects && Array.isArray(data.projects)) {
+        this.state.projects = data.projects;
+        localStorage.setItem('projectpulse_cached_projects', JSON.stringify(data.projects));
       }
+      if (data.current_project) {
+        this.state.currentProject = data.current_project;
+        this.state.currentProjectId = data.current_project.id;
+        localStorage.setItem('projectpulse_active_project', data.current_project.id);
+        localStorage.setItem(`projectpulse_cached_project_${data.current_project.id}`, JSON.stringify(data.current_project));
+      }
+      if (data.tasks && Array.isArray(data.tasks)) {
+        this.state.tasks = data.tasks;
+        if (this.state.currentProjectId) {
+          localStorage.setItem(`projectpulse_cached_tasks_${this.state.currentProjectId}`, JSON.stringify(data.tasks));
+        }
+      }
+
+      this.renderProjectsDropdown();
+      this.renderProjectsSidebar();
+      this.populateFilterDropdowns();
       this.switchView('gantt');
     } catch (err) {
       this.showToast(err.message, 'error');
@@ -2961,8 +3005,29 @@ const app = {
           body: JSON.stringify(payload)
         });
         this.closeImportExportModal();
-        await this.fetchProjects(res.project_id);
         this.showToast('Project imported successfully', 'success');
+
+        if (res.projects && Array.isArray(res.projects)) {
+          this.state.projects = res.projects;
+          localStorage.setItem('projectpulse_cached_projects', JSON.stringify(res.projects));
+        }
+        if (res.current_project) {
+          this.state.currentProject = res.current_project;
+          this.state.currentProjectId = res.current_project.id;
+          localStorage.setItem('projectpulse_active_project', res.current_project.id);
+          localStorage.setItem(`projectpulse_cached_project_${res.current_project.id}`, JSON.stringify(res.current_project));
+        }
+        if (res.tasks && Array.isArray(res.tasks)) {
+          this.state.tasks = res.tasks;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_tasks_${this.state.currentProjectId}`, JSON.stringify(res.tasks));
+          }
+        }
+
+        this.renderProjectsDropdown();
+        this.renderProjectsSidebar();
+        this.populateFilterDropdowns();
+        this.renderCurrentView();
       } catch (err) {
         this.showToast('Invalid JSON backup file', 'error');
       }

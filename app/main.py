@@ -437,7 +437,14 @@ def delete_project(project_id):
         if not project:
             return json_response({"error": "Project not found"}, status=404)
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-        return json_response({"success": True, "message": "Project deleted"})
+        bootstrap = get_bootstrap_payload(conn)
+        return json_response({
+            "success": True,
+            "message": "Project deleted",
+            "projects": bootstrap["projects"],
+            "current_project": bootstrap["current_project"],
+            "tasks": bootstrap["tasks"]
+        })
 
 # ==================== MEMBERS ====================
 
@@ -1328,7 +1335,14 @@ def import_project():
                 """, (new_t_id, new_m_id, tl["hours"], tl.get("description", ""), tl.get("logged_date", now_str[:10]), now_str))
 
         record_activity(conn, new_p_id, "System", "Project Imported", "Imported project backup")
-        return json_response({"success": True, "project_id": new_p_id})
+        bootstrap = get_bootstrap_payload(conn, active_project_id=new_p_id)
+        return json_response({
+            "success": True,
+            "project_id": new_p_id,
+            "projects": bootstrap["projects"],
+            "current_project": bootstrap["current_project"],
+            "tasks": bootstrap["tasks"]
+        })
 
 # ==================== GANTT EXCEL / CSV UPLOAD ====================
 
@@ -1454,12 +1468,17 @@ def upload_gantt_file(project_id):
             f"Imported {len(tasks_data)} tasks with {len(parsed['members_found'])} assigned members from '{filename}'"
         )
 
+        bootstrap = get_bootstrap_payload(conn, active_project_id=target_p_id)
+
         return json_response({
             "success": True,
             "tasks_imported": len(tasks_data),
             "members_added": new_members_count,
             "sprints_added": new_sprints_count,
             "project_id": target_p_id,
+            "projects": bootstrap["projects"],
+            "current_project": bootstrap["current_project"],
+            "tasks": bootstrap["tasks"],
             "message": f"Successfully imported {len(tasks_data)} tasks with assigned members!"
         })
 
