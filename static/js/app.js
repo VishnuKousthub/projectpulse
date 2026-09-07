@@ -3307,11 +3307,22 @@ const app = {
     if (!token) {
       this.state.user = null;
       this.state.authToken = null;
+      localStorage.removeItem('projectpulse_user');
       this.showAuthContainer();
       return false;
     }
 
     this.state.authToken = token;
+
+    // Fast-path: If user profile is already cached in localStorage, pre-populate UI instantly!
+    const cachedUser = localStorage.getItem('projectpulse_user');
+    if (cachedUser) {
+      try {
+        this.state.user = JSON.parse(cachedUser);
+        this.updateHeaderUserProfile();
+        this.hideAuthContainer();
+      } catch (e) {}
+    }
 
     try {
       const res = await fetch('/api/auth/me', {
@@ -3325,6 +3336,7 @@ const app = {
         const data = await res.json();
         if (data && data.authenticated && data.user) {
           this.state.user = data.user;
+          localStorage.setItem('projectpulse_user', JSON.stringify(data.user));
           this.updateHeaderUserProfile();
           this.hideAuthContainer();
           return true;
@@ -3332,11 +3344,14 @@ const app = {
       }
     } catch (e) {
       console.error('Auth check error:', e);
+      // If offline or network glitch but token and cached user exist, keep active
+      if (this.state.user) return true;
     }
 
     this.state.user = null;
     this.state.authToken = null;
     localStorage.removeItem('projectpulse_token');
+    localStorage.removeItem('projectpulse_user');
     this.showAuthContainer();
     return false;
   },
@@ -3397,12 +3412,15 @@ const app = {
     if (role === 'admin') {
       idInput.value = 'admin';
       pwdInput.value = 'admin123';
+    } else if (role === 'pm') {
+      idInput.value = 'pm';
+      pwdInput.value = 'pm123';
     } else if (role === 'lead') {
-      idInput.value = 'vishnu';
-      pwdInput.value = 'chemtatva123';
-    } else if (role === 'member') {
-      idInput.value = 'alex';
-      pwdInput.value = 'alex123';
+      idInput.value = 'lead';
+      pwdInput.value = 'lead123';
+    } else if (role === 'assignee' || role === 'asignee' || role === 'member') {
+      idInput.value = 'assignee';
+      pwdInput.value = 'assignee123';
     }
 
     this.hideAuthError();
@@ -3449,7 +3467,8 @@ const app = {
     const originalText = submitBtn?.innerHTML;
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Signing in...</span>';
+      submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Signing in...</span>';
+      this.initLucide();
     }
 
     try {
@@ -3462,6 +3481,7 @@ const app = {
         this.state.authToken = res.token;
         this.state.user = res.user;
         localStorage.setItem('projectpulse_token', res.token);
+        localStorage.setItem('projectpulse_user', JSON.stringify(res.user));
 
         this.updateHeaderUserProfile();
         this.hideAuthContainer();
@@ -3495,7 +3515,8 @@ const app = {
     const originalText = submitBtn?.innerHTML;
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Creating Account...</span>';
+      submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Creating Account...</span>';
+      this.initLucide();
     }
 
     try {
@@ -3508,6 +3529,7 @@ const app = {
         this.state.authToken = res.token;
         this.state.user = res.user;
         localStorage.setItem('projectpulse_token', res.token);
+        localStorage.setItem('projectpulse_user', JSON.stringify(res.user));
 
         this.updateHeaderUserProfile();
         this.hideAuthContainer();
@@ -3526,22 +3548,33 @@ const app = {
   },
 
   async handleLogout() {
-    try {
-      await this.api('/api/auth/logout', { method: 'POST' });
-    } catch (e) {}
-
+    const token = this.state.authToken;
+    // 1. Instant 0ms UI cleanup
     this.state.authToken = null;
     this.state.user = null;
     localStorage.removeItem('projectpulse_token');
+    localStorage.removeItem('projectpulse_user');
     this.closeUserMenu();
     this.showAuthContainer();
     this.showToast('You have signed out', 'info');
+
+    // 2. Non-blocking server cleanup in background
+    if (token) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }).catch(() => {});
+    }
   },
 
   handleSessionExpired() {
     this.state.authToken = null;
     this.state.user = null;
     localStorage.removeItem('projectpulse_token');
+    localStorage.removeItem('projectpulse_user');
     this.showAuthContainer();
     this.showAuthError('Your session has expired. Please sign in again.');
   },

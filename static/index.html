@@ -1547,15 +1547,18 @@
         <div class="flex items-center justify-between text-[11px] text-slate-400 font-semibold px-1">
           <span>⚡ 1-Click Quick Demo Sign-In:</span>
         </div>
-        <div class="grid grid-cols-3 gap-2">
-          <button type="button" onclick="app.fillDemoCredentials('admin')" class="px-2 py-1.5 rounded-lg bg-blue-950/50 hover:bg-blue-900/60 border border-blue-800/60 text-blue-300 text-[11px] font-bold text-center transition">
+        <div class="grid grid-cols-4 gap-1.5">
+          <button type="button" onclick="app.fillDemoCredentials('admin')" class="px-1.5 py-1.5 rounded-lg bg-blue-950/50 hover:bg-blue-900/70 border border-blue-800/60 text-blue-300 text-[11px] font-bold text-center transition">
             Admin
           </button>
-          <button type="button" onclick="app.fillDemoCredentials('lead')" class="px-2 py-1.5 rounded-lg bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-800/60 text-indigo-300 text-[11px] font-bold text-center transition">
-            Project Lead
+          <button type="button" onclick="app.fillDemoCredentials('pm')" class="px-1.5 py-1.5 rounded-lg bg-indigo-950/50 hover:bg-indigo-900/70 border border-indigo-800/60 text-indigo-300 text-[11px] font-bold text-center transition">
+            PM
           </button>
-          <button type="button" onclick="app.fillDemoCredentials('member')" class="px-2 py-1.5 rounded-lg bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-800/60 text-emerald-300 text-[11px] font-bold text-center transition">
-            Member
+          <button type="button" onclick="app.fillDemoCredentials('lead')" class="px-1.5 py-1.5 rounded-lg bg-purple-950/50 hover:bg-purple-900/70 border border-purple-800/60 text-purple-300 text-[11px] font-bold text-center transition">
+            Lead
+          </button>
+          <button type="button" onclick="app.fillDemoCredentials('assignee')" class="px-1.5 py-1.5 rounded-lg bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-800/60 text-emerald-300 text-[11px] font-bold text-center transition">
+            Assignee
           </button>
         </div>
       </div>
@@ -1658,6 +1661,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.0.7"></script>
+  <script src="/static/js/app.js?v=2.0.8"></script>
 </body>
 </html>

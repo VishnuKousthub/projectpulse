@@ -101,15 +101,18 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return secrets.compare_digest(computed, hash_val)
 
 def seed_default_users(cursor):
-    cursor.execute("SELECT COUNT(*) as cnt FROM users")
-    if cursor.fetchone()["cnt"] == 0:
-        now_str = datetime.now(timezone.utc).isoformat()
-        default_users = [
-            ("admin", "admin@company.internal", "admin123", "System Administrator", "admin", "#3B82F6"),
-            ("vishnu", "srivishnu@chemtatva.com", "chemtatva123", "Sri Vishnu", "manager", "#6366F1"),
-            ("alex", "alex.morgan@company.internal", "alex123", "Alex Morgan", "member", "#10B981")
-        ]
-        for username, email, pwd, full_name, role, color in default_users:
+    now_str = datetime.now(timezone.utc).isoformat()
+    default_users = [
+        ("admin", "admin@company.internal", "admin123", "System Administrator", "admin", "#3B82F6"),
+        ("pm", "pm@company.internal", "pm123", "Project Manager", "PM", "#6366F1"),
+        ("lead", "lead@company.internal", "lead123", "Project Lead", "Lead", "#8B5CF6"),
+        ("assignee", "assignee@company.internal", "assignee123", "Task Assignee", "Assignee", "#10B981"),
+        ("vishnu", "srivishnu@chemtatva.com", "chemtatva123", "Sri Vishnu", "PM", "#6366F1"),
+        ("alex", "alex.morgan@company.internal", "alex123", "Alex Morgan", "Assignee", "#10B981")
+    ]
+    for username, email, pwd, full_name, role, color in default_users:
+        existing = cursor.execute("SELECT id FROM users WHERE LOWER(username) = ?", (username.lower(),)).fetchone()
+        if not existing:
             cursor.execute("""
                 INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
