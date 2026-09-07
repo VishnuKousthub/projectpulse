@@ -16,16 +16,7 @@ const app = {
     searchQuery: '',
     filterAssignee: '',
     filterPriority: '',
-    filterSprint: '',
     calendarDate: new Date(),
-    stopwatch: {
-      timerId: null,
-      startTime: 0,
-      elapsedMs: 0,
-      isRunning: false,
-      taskId: null,
-      taskTitle: ''
-    },
     charts: {},
     sortableInstances: []
   },
@@ -98,9 +89,6 @@ const app = {
   closeAllModals() {
     this.closeTaskModal();
     this.closeProjectModal();
-    this.closeSprintModal();
-    this.closeMilestoneModal();
-    this.closeManualTimeLogModal();
     this.closeImportExportModal();
     this.closeGanttUploadModal();
     this.closeUserMenu();
@@ -242,8 +230,6 @@ const app = {
       gantt: 'Gantt & Timeline',
       table: 'Table Grid',
       calendar: 'Calendar Schedule',
-      sprints: 'Sprints & Milestones',
-      timetracker: 'Time Tracker',
       analytics: 'Analytics Dashboard'
     };
     const titleText = titles[viewName] || 'Project Management';
@@ -268,12 +254,6 @@ const app = {
       case 'calendar':
         this.renderCalendar();
         break;
-      case 'sprints':
-        this.renderSprints();
-        break;
-      case 'timetracker':
-        this.renderTimeTracker();
-        break;
       case 'analytics':
         this.renderAnalytics();
         break;
@@ -287,7 +267,6 @@ const app = {
     if (this.state.searchQuery) url += `search=${encodeURIComponent(this.state.searchQuery)}&`;
     if (this.state.filterAssignee) url += `assignee_id=${encodeURIComponent(this.state.filterAssignee)}&`;
     if (this.state.filterPriority) url += `priority=${encodeURIComponent(this.state.filterPriority)}&`;
-    if (this.state.filterSprint) url += `sprint_id=${encodeURIComponent(this.state.filterSprint)}&`;
 
     try {
       const tasks = await this.api(url);
@@ -341,7 +320,6 @@ const app = {
     if (!this.state.kanbanSwimlane) this.state.kanbanSwimlane = 'status';
     const allTasks = this.state.tasks || [];
     const members = this.state.currentProject?.members || [];
-    const sprints = this.state.currentProject?.sprints || [];
     const todayStr = new Date().toISOString().split('T')[0];
 
     // 1. Calculate Workflow Pipeline Breakdown
@@ -412,34 +390,20 @@ const app = {
 
     const swimlane = this.state.kanbanSwimlane;
 
-    if (swimlane === 'sprint' || swimlane === 'priority') {
-      // Swimlanes Layout
-      let swimlaneGroups = [];
-      if (swimlane === 'sprint') {
-        swimlaneGroups = sprints.map(s => ({
-          id: s.id,
-          title: s.name,
-          color: '#3B82F6',
-          tasks: filteredTasks.filter(t => t.sprint_id === s.id)
-        }));
-        const unassigned = filteredTasks.filter(t => !t.sprint_id);
-        if (unassigned.length > 0) {
-          swimlaneGroups.push({ id: null, title: 'Backlog / Unassigned Phase', color: '#64748B', tasks: unassigned });
-        }
-      } else {
-        const priorities = [
-          { id: 'urgent', title: 'Urgent Priority', color: '#EF4444' },
-          { id: 'high', title: 'High Priority', color: '#F97316' },
-          { id: 'medium', title: 'Medium Priority', color: '#F59E0B' },
-          { id: 'low', title: 'Low Priority', color: '#10B981' }
-        ];
-        swimlaneGroups = priorities.map(p => ({
-          id: p.id,
-          title: p.title,
-          color: p.color,
-          tasks: filteredTasks.filter(t => (t.priority || 'medium') === p.id)
-        })).filter(g => g.tasks.length > 0);
-      }
+    if (swimlane === 'priority') {
+      // Swimlanes Layout by Priority
+      const priorities = [
+        { id: 'urgent', title: 'Urgent Priority', color: '#EF4444' },
+        { id: 'high', title: 'High Priority', color: '#F97316' },
+        { id: 'medium', title: 'Medium Priority', color: '#F59E0B' },
+        { id: 'low', title: 'Low Priority', color: '#10B981' }
+      ];
+      const swimlaneGroups = priorities.map(p => ({
+        id: p.id,
+        title: p.title,
+        color: p.color,
+        tasks: filteredTasks.filter(t => (t.priority || 'medium') === p.id)
+      })).filter(g => g.tasks.length > 0);
 
       boardContainer.innerHTML = swimlaneGroups.map(sg => {
         const sgDone = sg.tasks.filter(t => t.status === 'done').length;
@@ -448,7 +412,7 @@ const app = {
 
         const colsHtml = columnsMeta.map(col => {
           const colTasks = sg.tasks.filter(t => (t.status || 'todo') === col.id);
-          const colCards = colTasks.map(t => this.renderTaskCardHTML(t, members, sprints, todayStr)).join('');
+          const colCards = colTasks.map(t => this.renderTaskCardHTML(t, members, todayStr)).join('');
 
           return `
             <div class="bg-slate-100/70 dark:bg-slate-800/60 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 flex flex-col min-w-[240px]">
@@ -492,7 +456,7 @@ const app = {
       const colsHtml = columnsMeta.map(col => {
         const colTasks = filteredTasks.filter(t => (t.status || 'todo') === col.id);
         const colHours = colTasks.reduce((sum, t) => sum + (parseFloat(t.estimated_hours) || 0), 0);
-        const colCards = colTasks.map(t => this.renderTaskCardHTML(t, members, sprints, todayStr)).join('');
+        const colCards = colTasks.map(t => this.renderTaskCardHTML(t, members, todayStr)).join('');
 
         return `
           <div class="bg-slate-100/90 dark:bg-slate-800/80 rounded-xl p-3.5 border border-slate-200 dark:border-slate-700/70 shadow-xs flex flex-col min-w-[260px]">
@@ -540,34 +504,17 @@ const app = {
     const containers = boardContainer.querySelectorAll('.kanban-col-body');
     containers.forEach(container => {
       const sortable = new Sortable(container, {
-        group: 'kanban-tasks',
-        animation: 200,
-        ghostClass: 'sortable-ghost',
-        chosenClass: 'sortable-chosen',
-        dragClass: 'sortable-drag',
-        dataIdAttr: 'data-task-id',
+        group: 'kanban-cards',
+        animation: 150,
+        ghostClass: 'opacity-40',
+        chosenClass: 'scale-[1.02]',
+        dragClass: 'rotate-1',
         onEnd: async (evt) => {
-          const taskId = Number(evt.item.getAttribute('data-task-id'));
+          const itemEl = evt.item;
+          const taskId = parseInt(itemEl.getAttribute('data-task-id'), 10);
           const newStatus = evt.to.getAttribute('data-status');
-          
-          const taskItems = Array.from(evt.to.querySelectorAll('[data-task-id]'));
-          const reorderPayload = taskItems.map((el, index) => ({
-            task_id: Number(el.getAttribute('data-task-id')),
-            status: newStatus,
-            new_order_index: index
-          }));
-
-          try {
-            await this.api('/api/tasks/reorder', {
-              method: 'POST',
-              body: JSON.stringify(reorderPayload)
-            });
-            const taskObj = this.state.tasks.find(t => t.id === taskId);
-            if (taskObj) taskObj.status = newStatus;
-            this.showToast(`Moved to ${newStatus.replace('_', ' ')}`, 'success');
-            this.renderKanban();
-          } catch (err) {
-            this.fetchTasks();
+          if (taskId && newStatus) {
+            await this.handleTaskMove(taskId, newStatus);
           }
         }
       });
@@ -577,15 +524,13 @@ const app = {
     this.initLucide();
   },
 
-  renderTaskCardHTML(task, members, sprints, todayStr) {
+  renderTaskCardHTML(task, members, todayStr) {
     if (!todayStr) todayStr = new Date().toISOString().split('T')[0];
     if (!members) members = this.state.currentProject?.members || [];
-    if (!sprints) sprints = this.state.currentProject?.sprints || [];
 
     const isDone = task.status === 'done';
     const isOverdue = !isDone && task.due_date && task.due_date < todayStr;
     const assigned = members.find(m => m.id === task.assignee_id);
-    const sprint = sprints.find(s => s.id === task.sprint_id);
 
     // Left Border Strip Accent Color
     const borderLeftColor = {
@@ -611,13 +556,12 @@ const app = {
     `).join('');
 
     const estH = parseFloat(task.estimated_hours) || 0;
-    const actH = parseFloat(task.actual_hours) || 0;
 
     return `
       <div data-task-id="${task.id}" onclick="app.openTaskModal({id: ${task.id}})"
         class="task-card bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs cursor-pointer select-none space-y-2.5 transition-all duration-200 hover:shadow-md hover:scale-[1.01] ${borderLeftColor} group">
         
-        <!-- Card Header: Checkbox + Phase Tag + Priority -->
+        <!-- Card Header: Checkbox + Task ID + Priority -->
         <div class="flex items-center justify-between gap-1.5">
           <div class="flex items-center space-x-2 min-w-0">
             <button onclick="event.stopPropagation(); app.quickToggleTaskDone(${task.id}, '${task.status}')"
@@ -625,12 +569,7 @@ const app = {
               title="${isDone ? 'Mark as In Progress' : 'Mark as Done'}">
               ${isDone ? '<i data-lucide="check" class="w-3 h-3"></i>' : ''}
             </button>
-            
-            ${sprint ? `
-              <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-200/60 dark:border-blue-800/60 truncate max-w-[120px]" title="${this.escapeHtml(sprint.name)}">
-                ${this.escapeHtml(sprint.name)}
-              </span>
-            ` : '<span class="text-[10px] font-mono text-slate-400 font-bold">#' + task.id + '</span>'}
+            <span class="text-[10px] font-mono text-slate-400 font-bold">#${task.id}</span>
           </div>
 
           <div class="flex-shrink-0">
@@ -1180,11 +1119,6 @@ const app = {
     this.renderTable();
   },
 
-  setTableSprintFilter(val) {
-    this.state.tableSprintFilter = val;
-    this.renderTable();
-  },
-
   setTableStatusFilter(val) {
     this.state.tableStatusFilter = val;
     this.renderTable();
@@ -1198,19 +1132,7 @@ const app = {
 
     const allTasks = this.state.tasks || [];
     const members = this.state.currentProject?.members || [];
-    const sprints = this.state.currentProject?.sprints || [];
     const todayStr = new Date().toISOString().split('T')[0];
-
-    // Populate Table Sprint Filter Dropdown
-    const sprintFilterSel = document.getElementById('table-filter-sprint');
-    if (sprintFilterSel && sprintFilterSel.options.length <= 1) {
-      sprintFilterSel.innerHTML = `
-        <option value="">All Sprints & Phases</option>
-        ${sprints.map(s => `<option value="${s.id}">${this.escapeHtml(s.name)}</option>`).join('')}
-        <option value="none">Unassigned to Sprint</option>
-      `;
-      if (this.state.tableSprintFilter) sprintFilterSel.value = this.state.tableSprintFilter;
-    }
 
     // 1. Calculate KPI Metrics
     const totalCount = allTasks.length;
@@ -1243,10 +1165,6 @@ const app = {
     // 2. Filter Tasks
     const q = this.state.tableFilterQuery || '';
     let filtered = allTasks.filter(t => {
-      if (this.state.tableSprintFilter) {
-        if (this.state.tableSprintFilter === 'none' && t.sprint_id) return false;
-        if (this.state.tableSprintFilter !== 'none' && String(t.sprint_id) !== String(this.state.tableSprintFilter)) return false;
-      }
       if (this.state.tableStatusFilter && t.status !== this.state.tableStatusFilter) {
         return false;
       }
@@ -1256,8 +1174,7 @@ const app = {
       const tagsMatch = (t.tags || []).some(tag => tag.toLowerCase().includes(q));
       const assignee = members.find(m => m.id === t.assignee_id);
       const assigneeMatch = (assignee && assignee.name.toLowerCase().includes(q)) || (t.assignee_name && t.assignee_name.toLowerCase().includes(q));
-      const sprintMatch = t.sprint_name && t.sprint_name.toLowerCase().includes(q);
-      return titleMatch || descMatch || tagsMatch || assigneeMatch || sprintMatch;
+      return titleMatch || descMatch || tagsMatch || assigneeMatch;
     });
 
     // 3. Sort Tasks according to Sequence or user choice
@@ -1274,8 +1191,6 @@ const app = {
           return (b.estimated_hours || 0) - (a.estimated_hours || 0);
         case 'title_asc':
           return (a.title || '').localeCompare(b.title || '');
-        case 'sprint':
-          return (a.sprint_name || 'ZZZZ').localeCompare(b.sprint_name || 'ZZZZ');
         case 'order':
         default:
           const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
@@ -1289,10 +1204,10 @@ const app = {
     if (filtered.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="9" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+          <td colspan="8" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
             <i data-lucide="search-x" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
             <div class="text-sm font-semibold text-slate-600 dark:text-slate-400">No activities match the current filter</div>
-            <div class="text-xs text-slate-400 mt-1">Try resetting search or adjusting sprint/status filters</div>
+            <div class="text-xs text-slate-400 mt-1">Try resetting search or adjusting status filter</div>
           </td>
         </tr>
       `;
@@ -1354,18 +1269,7 @@ const app = {
             </div>
           </td>
 
-          <!-- 2. Phase / Sprint Column -->
-          <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[160px]">
-              <select onchange="app.inlineUpdateTask(${t.id}, 'sprint_id', this.value ? Number(this.value) : null)"
-                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate">
-                <option value="">No Sprint / Phase</option>
-                ${sprints.map(s => `<option value="${s.id}" ${t.sprint_id === s.id ? 'selected' : ''}>${this.escapeHtml(s.name)}</option>`).join('')}
-              </select>
-            </div>
-          </td>
-
-          <!-- 3. Status Dropdown -->
+          <!-- 2. Status Dropdown -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[120px]">
               <select onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"
@@ -1379,7 +1283,7 @@ const app = {
             </div>
           </td>
 
-          <!-- 4. Priority Dropdown -->
+          <!-- 3. Priority Dropdown -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[100px]">
               <select onchange="app.inlineUpdateTask(${t.id}, 'priority', this.value)"
@@ -1392,9 +1296,9 @@ const app = {
             </div>
           </td>
 
-          <!-- 5. Assignee / Role -->
+          <!-- 4. Assignee / Role -->
           <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[150px]">
+            <div class="relative inline-block w-full max-w-[170px]">
               <select onchange="app.inlineUpdateTask(${t.id}, 'assignee_id', this.value ? Number(this.value) : null)"
                 class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate">
                 <option value="">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</option>
@@ -1403,7 +1307,7 @@ const app = {
             </div>
           </td>
 
-          <!-- 6. Start Date -->
+          <!-- 5. Start Date -->
           <td class="px-3.5 py-2.5">
             ${t.start_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
@@ -1425,7 +1329,7 @@ const app = {
             `}
           </td>
 
-          <!-- 7. Due Date -->
+          <!-- 6. Due Date -->
           <td class="px-3.5 py-2.5">
             ${t.due_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
@@ -1447,7 +1351,7 @@ const app = {
             `}
           </td>
 
-          <!-- 8. Hours (Est & Act) -->
+          <!-- 7. Hours (Est & Act) -->
           <td class="px-3.5 py-2.5">
             <div class="flex items-center space-x-1">
               <input type="number" step="0.5" min="0" value="${estH}"
@@ -1462,7 +1366,7 @@ const app = {
             </div>
           </td>
 
-          <!-- 9. Actions -->
+          <!-- 8. Actions -->
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
             <div class="flex items-center justify-end space-x-1">
               <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details">
@@ -1598,7 +1502,6 @@ const app = {
     const month = cur.getMonth();
     const allTasks = this.state.tasks || [];
     const members = this.state.currentProject?.members || [];
-    const sprints = this.state.currentProject?.sprints || [];
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
@@ -1652,19 +1555,19 @@ const app = {
 
     // 2. Delegate by mode
     if (this.state.calendarMode === 'week') {
-      this.renderCalendarWeek(container, tasks, members, sprints);
+      this.renderCalendarWeek(container, tasks, members);
     } else if (this.state.calendarMode === 'agenda') {
-      this.renderCalendarAgenda(container, tasks, members, sprints);
+      this.renderCalendarAgenda(container, tasks, members);
     } else {
-      this.renderCalendarMonth(container, tasks, members, sprints);
+      this.renderCalendarMonth(container, tasks, members);
     }
 
     // 3. Render Day Inspector if day is selected
-    this.renderCalendarDayInspector(members, sprints);
+    this.renderCalendarDayInspector(members);
     this.initLucide();
   },
 
-  renderCalendarMonth(container, tasks, members, sprints) {
+  renderCalendarMonth(container, tasks, members) {
     const cur = this.state.calendarDate;
     const year = cur.getFullYear();
     const month = cur.getMonth();
@@ -1802,7 +1705,7 @@ const app = {
     `;
   },
 
-  renderCalendarWeek(container, tasks, members, sprints) {
+  renderCalendarWeek(container, tasks, members) {
     const cur = this.state.calendarDate || new Date();
     // Compute current week start (Sunday)
     const d = new Date(cur);
@@ -1832,7 +1735,6 @@ const app = {
       const cardsHtml = dayTasks.map(t => {
         const isDone = t.status === 'done';
         const assigned = members.find(m => m.id === t.assignee_id);
-        const sprint = sprints.find(s => s.id === t.sprint_id);
 
         return `
           <div onclick="app.openTaskModal({id: ${t.id}})"
@@ -1848,13 +1750,6 @@ const app = {
             <h4 class="font-bold text-xs text-slate-800 dark:text-white ${isDone ? 'line-through text-slate-400' : ''}">
               ${this.escapeHtml(t.title)}
             </h4>
-
-            ${sprint ? `
-              <div class="text-[10px] font-semibold text-blue-600 dark:text-blue-400 flex items-center space-x-1">
-                <i data-lucide="zap" class="w-3 h-3"></i>
-                <span class="truncate">${this.escapeHtml(sprint.name)}</span>
-              </div>
-            ` : ''}
 
             <div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60 text-[11px] text-slate-500">
               <span>${t.estimated_hours || 0}h est</span>
@@ -1901,7 +1796,7 @@ const app = {
     `;
   },
 
-  renderCalendarAgenda(container, tasks, members, sprints) {
+  renderCalendarAgenda(container, tasks, members) {
     const cur = this.state.calendarDate || new Date();
     const year = cur.getFullYear();
     const month = cur.getMonth();
@@ -1941,7 +1836,6 @@ const app = {
       const taskCards = dateGroups[dKey].map(t => {
         const isDone = t.status === 'done';
         const assigned = members.find(m => m.id === t.assignee_id);
-        const sprint = sprints.find(s => s.id === t.sprint_id);
 
         return `
           <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-blue-400 dark:hover:border-blue-500 transition flex items-center justify-between gap-4">
@@ -1958,7 +1852,6 @@ const app = {
                     class="font-bold text-xs text-slate-800 dark:text-white hover:text-blue-600 cursor-pointer truncate ${isDone ? 'line-through text-slate-400' : ''}">
                     ${this.escapeHtml(t.title)}
                   </h4>
-                  ${sprint ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">${this.escapeHtml(sprint.name)}</span>` : ''}
                 </div>
                 <div class="text-[11px] text-slate-400 mt-0.5">
                   Timeline: ${t.start_date || 'N/A'} ? ${t.due_date || 'N/A'} • ${t.estimated_hours || 0}h estimated
@@ -2041,7 +1934,7 @@ const app = {
     `;
   },
 
-  renderCalendarDayInspector(members, sprints) {
+  renderCalendarDayInspector(members) {
     const inspector = document.getElementById('calendar-day-inspector');
     if (!inspector) return;
 
@@ -2115,248 +2008,10 @@ const app = {
     inspector.classList.remove('hidden');
   },
 
-  // ==================== SPRINTS & MILESTONES RENDERER ====================
-  renderSprints() {
-    const sprintContainer = document.getElementById('sprints-list-render');
-    const milestoneContainer = document.getElementById('milestones-list-render');
-    const sprints = this.state.currentProject?.sprints || [];
-    const milestones = this.state.currentProject?.milestones || [];
-
-    if (sprintContainer) {
-      if (sprints.length === 0) {
-        sprintContainer.innerHTML = `<div class="bg-white dark:bg-slate-800 p-8 rounded-xl border border-slate-200 dark:border-slate-700 text-center text-slate-400 text-xs">No sprints created yet. Click "+ New Sprint" to start planning.</div>`;
-      } else {
-        sprintContainer.innerHTML = sprints.map(s => {
-          const totalTasks = s.total_tasks || 0;
-          const doneTasks = s.completed_tasks || 0;
-          const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-          const isActive = s.status === 'active';
-
-          return `
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
-              <div class="flex items-start justify-between">
-                <div>
-                  <div class="flex items-center space-x-2">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}">
-                      ${s.status}
-                    </span>
-                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">${this.escapeHtml(s.name)}</h3>
-                  </div>
-                  ${s.goal ? `<p class="text-xs text-slate-500 mt-1">${this.escapeHtml(s.goal)}</p>` : ''}
-                </div>
-
-                <div class="flex items-center space-x-2">
-                  <button onclick="app.toggleSprintStatus(${s.id}, '${s.status}')" class="text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">
-                    ${isActive ? 'Complete Sprint' : (s.status === 'completed' ? 'Reopen' : 'Start Sprint')}
-                  </button>
-                  <button onclick="app.openSprintModal(${JSON.stringify(s).replace(/"/g, '&quot;')})" class="text-slate-400 hover:text-blue-600 p-1">
-                    <i data-lucide="edit-2" class="w-4 h-4"></i>
-                  </button>
-                </div>
-              </div>
-
-              <div class="space-y-1.5">
-                <div class="flex justify-between text-xs font-medium text-slate-500">
-                  <span>${doneTasks} of ${totalTasks} tasks completed</span>
-                  <span class="font-bold text-slate-700 dark:text-slate-300">${pct}%</span>
-                </div>
-                <div class="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div class="h-full bg-blue-600 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                <div class="flex items-center space-x-1">
-                  <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
-                  <span>${s.start_date || 'N/A'} ? ${s.end_date || 'N/A'}</span>
-                </div>
-                <div class="font-mono">
-                  <span>${s.total_actual_hours || 0}h / ${s.total_estimated_hours || 0}h logged</span>
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('');
-      }
-    }
-
-    if (milestoneContainer) {
-      if (milestones.length === 0) {
-        milestoneContainer.innerHTML = `<div class="text-center text-slate-400 text-xs py-4">No milestones created.</div>`;
-      } else {
-        milestoneContainer.innerHTML = milestones.map(m => `
-          <div class="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/40">
-            <div class="flex items-center space-x-3">
-              <input type="checkbox" ${m.status === 'completed' ? 'checked' : ''} onchange="app.toggleMilestoneStatus(${m.id}, this.checked)" class="rounded text-blue-600 w-4 h-4 cursor-pointer">
-              <div>
-                <h4 class="text-xs font-bold text-slate-800 dark:text-white ${m.status === 'completed' ? 'line-through text-slate-400' : ''}">${this.escapeHtml(m.title)}</h4>
-                <span class="text-[10px] text-slate-400">Due: ${m.due_date}</span>
-              </div>
-            </div>
-            <button onclick="app.deleteMilestone(${m.id})" class="text-slate-400 hover:text-rose-500 p-1">
-              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            </button>
-          </div>
-        `).join('');
-      }
-    }
-  },
-
-  async toggleSprintStatus(sprintId, currentStatus) {
-    const newStatus = currentStatus === 'active' ? 'completed' : (currentStatus === 'completed' ? 'planning' : 'active');
-    try {
-      await this.api(`/api/projects/${this.state.currentProjectId}/sprints/${sprintId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: newStatus })
-      });
-      await this.selectProject(this.state.currentProjectId);
-      this.showToast(`Sprint status updated to ${newStatus}`, 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  async toggleMilestoneStatus(milestoneId, isCompleted) {
-    try {
-      await this.api(`/api/projects/${this.state.currentProjectId}/milestones/${milestoneId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: isCompleted ? 'completed' : 'pending' })
-      });
-      await this.selectProject(this.state.currentProjectId);
-      this.showToast('Milestone status updated', 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  async deleteMilestone(milestoneId) {
-    if (!confirm('Are you sure you want to delete this milestone?')) return;
-    try {
-      await this.api(`/api/projects/${this.state.currentProjectId}/milestones/${milestoneId}`, { method: 'DELETE' });
-      await this.selectProject(this.state.currentProjectId);
-      this.showToast('Milestone deleted', 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // ==================== TIME TRACKER RENDERER ====================
-  async renderTimeTracker() {
-    if (!this.state.currentProjectId) return;
-    try {
-      const logs = await this.api(`/api/projects/${this.state.currentProjectId}/timelogs`);
-      const tbody = document.getElementById('timelogs-table-body');
-      const totalCard = document.getElementById('total-logged-hours-card');
-      const summaryText = document.getElementById('est-vs-act-summary');
-
-      let totalHours = 0;
-      let totalEst = 0;
-      this.state.tasks.forEach(t => {
-        totalHours += Number(t.actual_hours || 0);
-        totalEst += Number(t.estimated_hours || 0);
-      });
-
-      if (totalCard) totalCard.textContent = `${totalHours.toFixed(1)}h`;
-      if (summaryText) summaryText.textContent = `${totalHours.toFixed(1)}h recorded / ${totalEst.toFixed(1)}h estimated`;
-
-      if (tbody) {
-        if (logs.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">No time logs recorded yet.</td></tr>`;
-        } else {
-          tbody.innerHTML = logs.map(l => `
-            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40 transition">
-              <td class="px-4 py-3 font-mono text-slate-500">${l.logged_date}</td>
-              <td class="px-4 py-3 font-bold text-slate-800 dark:text-white">${this.escapeHtml(l.task_title)}</td>
-              <td class="px-4 py-3">${this.escapeHtml(l.member_name || 'Anonymous')}</td>
-              <td class="px-4 py-3 font-mono font-bold text-blue-600 dark:text-blue-400">${l.hours}h</td>
-              <td class="px-4 py-3 text-slate-500">${this.escapeHtml(l.description || '?')}</td>
-              <td class="px-4 py-3 text-right">
-                <button onclick="app.deleteTimeLog(${l.id})" class="text-slate-400 hover:text-rose-500 p-1">
-                  <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
-              </td>
-            </tr>
-          `).join('');
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  async deleteTimeLog(logId) {
-    if (!confirm('Delete this time log entry?')) return;
-    try {
-      await this.api(`/api/timelogs/${logId}`, { method: 'DELETE' });
-      await this.fetchTasks();
-      this.showToast('Time log removed', 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // ==================== STOPWATCH TIMER LOGIC ====================
-  toggleStopwatch() {
-    const sw = this.state.stopwatch;
-    const btn = document.getElementById('timer-toggle-btn');
-    const mainBtn = document.getElementById('main-stopwatch-btn');
-    const dot = document.getElementById('timer-dot');
-
-    if (sw.isRunning) {
-      clearInterval(sw.timerId);
-      sw.isRunning = false;
-      if (btn) btn.textContent = 'Resume';
-      if (mainBtn) mainBtn.textContent = 'Resume Stopwatch';
-      if (dot) dot.classList.remove('bg-emerald-500', 'pulse-indicator');
-      if (dot) dot.classList.add('bg-amber-400');
-    } else {
-      sw.startTime = Date.now() - sw.elapsedMs;
-      sw.isRunning = true;
-      if (btn) btn.textContent = 'Pause';
-      if (mainBtn) mainBtn.textContent = 'Pause Stopwatch';
-      if (dot) dot.classList.remove('bg-slate-400', 'bg-amber-400');
-      if (dot) dot.classList.add('bg-emerald-500', 'pulse-indicator');
-
-      sw.timerId = setInterval(() => {
-        sw.elapsedMs = Date.now() - sw.startTime;
-        this.updateStopwatchDisplay();
-      }, 1000);
-    }
-  },
-
-  updateStopwatchDisplay() {
-    const totalSec = Math.floor(this.state.stopwatch.elapsedMs / 1000);
-    const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-    const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
-    const secs = String(totalSec % 60).padStart(2, '0');
-    const formatted = `${hrs}:${mins}:${secs}`;
-
-    const topDisplay = document.getElementById('timer-display');
-    const mainDisplay = document.getElementById('main-stopwatch-display');
-    if (topDisplay) topDisplay.textContent = formatted;
-    if (mainDisplay) mainDisplay.textContent = formatted;
-  },
-
-  async saveStopwatchLog() {
-    const sw = this.state.stopwatch;
-    const hours = Math.max(Number((sw.elapsedMs / 3600000).toFixed(2)), 0.1);
-    if (hours <= 0 || sw.elapsedMs < 1000) {
-      this.showToast('Please run stopwatch before logging', 'error');
-      return;
-    }
-    if (sw.isRunning) this.toggleStopwatch();
-    this.openManualTimeLogModal({ hours });
-  },
-
   // ==================== ANALYTICS DASHBOARD ====================
   async handleAnalyticsProjectChange(projectId) {
     if (!projectId) return;
     await this.selectProject(Number(projectId));
-    this.renderAnalytics();
-  },
-
-  async handleAnalyticsSprintChange(sprintId) {
-    this.state.analyticsSprintId = sprintId;
     this.renderAnalytics();
   },
 
@@ -2377,26 +2032,8 @@ const app = {
         `).join('');
       }
 
-      // 2. Populate Analytics Sprint Selector
-      const sSelect = document.getElementById('analytics-sprint-select');
-      const sprints = this.state.currentProject?.sprints || [];
-      if (sSelect) {
-        sSelect.innerHTML = `
-          <option value="">All Sprints & Project Lifecycle</option>
-          ${sprints.map(s => `
-            <option value="${s.id}" ${this.state.analyticsSprintId === String(s.id) ? 'selected' : ''}>
-              ${this.escapeHtml(s.name)}
-            </option>
-          `).join('')}
-        `;
-      }
-
-      // 3. Fetch Analytics Data
-      let url = `/api/projects/${this.state.currentProjectId}/analytics`;
-      if (this.state.analyticsSprintId) {
-        url += `?sprint_id=${encodeURIComponent(this.state.analyticsSprintId)}`;
-      }
-      
+      // 2. Fetch Analytics Data
+      const url = `/api/projects/${this.state.currentProjectId}/analytics`;
       const data = await this.api(url);
       if (!data || data.error) {
         console.warn('Analytics data not available:', data?.error);
@@ -2419,10 +2056,10 @@ const app = {
       if (elOver) elOver.textContent = kpis.overdue_tasks || 0;
       if (elHrs) elHrs.textContent = `${(kpis.total_act_hours || 0).toFixed(1)}h`;
 
-      const sprintTitle = document.getElementById('burndown-sprint-title');
-      if (sprintTitle) sprintTitle.textContent = kpis.sprint_name || 'Active Sprint';
+      const subtitle = document.getElementById('burndown-project-title');
+      if (subtitle) subtitle.textContent = 'Project Lifecycle';
 
-      // 4. Render Charts with Safe Wrappers
+      // 3. Render Charts with Safe Wrappers
       try {
         this.renderBurndownChart(data.burndown);
       } catch (err) {
@@ -2441,7 +2078,7 @@ const app = {
         console.error('Error rendering workload chart:', err);
       }
 
-      // 5. Render Activity Stream
+      // 4. Render Activity Stream
       try {
         const activities = await this.api(`/api/projects/${this.state.currentProjectId}/activity`);
         const actContainer = document.getElementById('activity-stream-render');
@@ -2616,7 +2253,6 @@ const app = {
     const descInput = document.getElementById('task-input-description');
     const statusSelect = document.getElementById('task-input-status');
     const prioritySelect = document.getElementById('task-input-priority');
-    const sprintSelect = document.getElementById('task-input-sprint');
     const assigneeSelect = document.getElementById('task-input-assignee');
     const startInput = document.getElementById('task-input-startdate');
     const dueInput = document.getElementById('task-input-duedate');
@@ -2624,7 +2260,6 @@ const app = {
     const actInput = document.getElementById('task-input-acthours');
     const tagsInput = document.getElementById('task-input-tags');
     const delBtn = document.getElementById('task-delete-btn');
-    const footerLogs = document.getElementById('task-details-footer-section');
 
     document.getElementById('subtasks-container').innerHTML = '';
     document.getElementById('new-subtask-input').value = '';
@@ -2633,7 +2268,6 @@ const app = {
       document.getElementById('task-modal-title').textContent = 'Edit Task Details';
       document.getElementById('task-modal-type-badge').textContent = 'Task #' + params.id;
       if (delBtn) delBtn.classList.remove('hidden');
-      if (footerLogs) footerLogs.classList.remove('hidden');
 
       try {
         const task = await this.api(`/api/tasks/${params.id}`);
@@ -2642,7 +2276,6 @@ const app = {
         descInput.value = task.description || '';
         statusSelect.value = task.status || 'todo';
         prioritySelect.value = task.priority || 'medium';
-        sprintSelect.value = task.sprint_id || '';
         assigneeSelect.value = task.assignee_id || '';
         startInput.value = task.start_date || '';
         dueInput.value = task.due_date || '';
@@ -2652,19 +2285,6 @@ const app = {
 
         this.renderSubtaskList(task.subtasks || []);
 
-        const logsBadge = document.getElementById('task-logged-total-badge');
-        if (logsBadge) logsBadge.textContent = `Total: ${task.actual_hours || 0}h`;
-
-        const logsList = document.getElementById('task-timelogs-list');
-        if (logsList) {
-          logsList.innerHTML = (task.timelogs || []).map(tl => `
-            <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
-              <span>${tl.logged_date} • ${this.escapeHtml(tl.member_name || 'User')}: ${this.escapeHtml(tl.description || '')}</span>
-              <span class="font-mono font-bold text-blue-600">${tl.hours}h</span>
-            </div>
-          `).join('') || '<div class="text-slate-400">No logs on this task.</div>';
-        }
-
       } catch (e) {
         console.error(e);
       }
@@ -2672,17 +2292,14 @@ const app = {
       document.getElementById('task-modal-title').textContent = 'Create New Task';
       document.getElementById('task-modal-type-badge').textContent = 'New Task';
       if (delBtn) delBtn.classList.add('hidden');
-      if (footerLogs) footerLogs.classList.add('hidden');
 
       idInput.value = '';
       titleInput.value = '';
       descInput.value = '';
       statusSelect.value = params.status || 'todo';
       prioritySelect.value = 'medium';
-      sprintSelect.value = params.sprint_id || '';
       assigneeSelect.value = '';
       
-      const today = new Date().toISOString().split('T')[0];
       startInput.value = params.start_date || '';
       dueInput.value = params.due_date || '';
       estInput.value = '4.0';
@@ -2736,13 +2353,7 @@ const app = {
 
   populateTaskModalDropdowns() {
     const p = this.state.currentProject;
-    const sprintSelect = document.getElementById('task-input-sprint');
     const assigneeSelect = document.getElementById('task-input-assignee');
-
-    if (sprintSelect && p) {
-      sprintSelect.innerHTML = `<option value="">No Sprint (Backlog)</option>` +
-        (p.sprints || []).map(s => `<option value="${s.id}">${this.escapeHtml(s.name)} (${s.status})</option>`).join('');
-    }
 
     if (assigneeSelect && p) {
       assigneeSelect.innerHTML = `<option value="">Unassigned</option>` +
@@ -2846,7 +2457,6 @@ const app = {
     const desc = document.getElementById('task-input-description')?.value;
     const status = document.getElementById('task-input-status')?.value;
     const priority = document.getElementById('task-input-priority')?.value;
-    const sprintId = document.getElementById('task-input-sprint')?.value || null;
     const assigneeId = document.getElementById('task-input-assignee')?.value || null;
     const startDate = document.getElementById('task-input-startdate')?.value || null;
     const dueDate = document.getElementById('task-input-duedate')?.value || null;
@@ -2862,7 +2472,6 @@ const app = {
       description: desc,
       status,
       priority,
-      sprint_id: sprintId ? Number(sprintId) : null,
       assignee_id: assigneeId ? Number(assigneeId) : null,
       start_date: startDate,
       due_date: dueDate,
@@ -3002,7 +2611,7 @@ const app = {
         return;
       }
     } else {
-      if (!confirm(`Are you sure you want to permanently delete the project "${name}"?\n\nAll tasks, sprints, milestones, and time logs in this project will be deleted.`)) {
+      if (!confirm(`Are you sure you want to permanently delete the project "${name}"?\n\nAll tasks, members, and records in this project will be deleted.`)) {
         return;
       }
     }
@@ -3030,144 +2639,7 @@ const app = {
     }
   },
 
-  // ==================== SPRINT MODAL ====================
-  openSprintModal(sprint = null) {
-    const modal = document.getElementById('sprint-modal');
-    if (!modal) return;
 
-    document.getElementById('sprint-input-id').value = sprint ? sprint.id : '';
-    document.getElementById('sprint-input-name').value = sprint ? sprint.name : '';
-    document.getElementById('sprint-input-goal').value = sprint ? sprint.goal || '' : '';
-    document.getElementById('sprint-input-startdate').value = sprint ? sprint.start_date || '' : new Date().toISOString().split('T')[0];
-    document.getElementById('sprint-input-enddate').value = sprint ? sprint.end_date || '' : '';
-    document.getElementById('sprint-input-status').value = sprint ? sprint.status : 'planning';
-
-    modal.classList.remove('hidden');
-  },
-
-  closeSprintModal() {
-    document.getElementById('sprint-modal')?.classList.add('hidden');
-  },
-
-  async handleSaveSprint() {
-    const id = document.getElementById('sprint-input-id')?.value;
-    const name = document.getElementById('sprint-input-name')?.value.trim();
-    if (!name) {
-      this.showToast('Sprint name is required', 'error');
-      return;
-    }
-    const goal = document.getElementById('sprint-input-goal')?.value;
-    const startDate = document.getElementById('sprint-input-startdate')?.value || null;
-    const endDate = document.getElementById('sprint-input-enddate')?.value || null;
-    const status = document.getElementById('sprint-input-status')?.value;
-
-    const payload = { name, goal, start_date: startDate, end_date: endDate, status };
-
-    try {
-      if (id) {
-        await this.api(`/api/projects/${this.state.currentProjectId}/sprints/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload)
-        });
-      } else {
-        await this.api(`/api/projects/${this.state.currentProjectId}/sprints`, {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-      }
-      this.closeSprintModal();
-      await this.selectProject(this.state.currentProjectId);
-      this.showToast('Sprint saved', 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // ==================== MILESTONE MODAL ====================
-  openMilestoneModal() {
-    document.getElementById('milestone-input-title').value = '';
-    document.getElementById('milestone-input-duedate').value = '';
-    document.getElementById('milestone-modal')?.classList.remove('hidden');
-  },
-
-  closeMilestoneModal() {
-    document.getElementById('milestone-modal')?.classList.add('hidden');
-  },
-
-  async handleSaveMilestone() {
-    const title = document.getElementById('milestone-input-title')?.value.trim();
-    const dueDate = document.getElementById('milestone-input-duedate')?.value;
-    if (!title || !dueDate) {
-      this.showToast('Title and target date are required', 'error');
-      return;
-    }
-
-    try {
-      await this.api(`/api/projects/${this.state.currentProjectId}/milestones`, {
-        method: 'POST',
-        body: JSON.stringify({ title, due_date: dueDate })
-      });
-      this.closeMilestoneModal();
-      await this.selectProject(this.state.currentProjectId);
-      this.showToast('Milestone created', 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  // ==================== TIME LOG MODAL ====================
-  openManualTimeLogModal(params = {}) {
-    const modal = document.getElementById('timelog-modal');
-    if (!modal) return;
-
-    const taskSelect = document.getElementById('timelog-input-task');
-    const memberSelect = document.getElementById('timelog-input-member');
-
-    taskSelect.innerHTML = this.state.tasks.map(t => `<option value="${t.id}" ${t.id === params.taskId ? 'selected' : ''}>${this.escapeHtml(t.title)}</option>`).join('');
-    
-    const members = this.state.currentProject?.members || [];
-    memberSelect.innerHTML = members.map(m => `<option value="${m.id}">${this.escapeHtml(m.name)}</option>`).join('');
-
-    document.getElementById('timelog-input-hours').value = params.hours || '';
-    document.getElementById('timelog-input-date').value = new Date().toISOString().split('T')[0];
-    document.getElementById('timelog-input-desc').value = '';
-
-    modal.classList.remove('hidden');
-  },
-
-  closeManualTimeLogModal() {
-    document.getElementById('timelog-modal')?.classList.add('hidden');
-  },
-
-  async handleSaveTimeLog() {
-    const taskId = document.getElementById('timelog-input-task')?.value;
-    const memberId = document.getElementById('timelog-input-member')?.value || null;
-    const hours = parseFloat(document.getElementById('timelog-input-hours')?.value || 0);
-    const date = document.getElementById('timelog-input-date')?.value;
-    const desc = document.getElementById('timelog-input-desc')?.value;
-
-    if (!taskId || hours <= 0) {
-      this.showToast('Valid task and hours are required', 'error');
-      return;
-    }
-
-    try {
-      await this.api(`/api/tasks/${taskId}/timelogs`, {
-        method: 'POST',
-        body: JSON.stringify({
-          member_id: memberId ? Number(memberId) : null,
-          hours,
-          logged_date: date,
-          description: desc
-        })
-      });
-      this.closeManualTimeLogModal();
-      await this.fetchTasks();
-      this.showToast(`Recorded ${hours}h worklog`, 'success');
-    } catch (e) {
-      console.error(e);
-    }
-  },
 
   // ==================== GANTT EXCEL / CSV UPLOAD ====================
   openGanttUploadModal() {

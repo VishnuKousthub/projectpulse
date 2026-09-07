@@ -148,24 +148,6 @@
           <i data-lucide="calendar" class="w-4 h-4 text-purple-400"></i>
           <span>Calendar View</span>
         </button>
-      </div>
-
-      <!-- Group 2: Tracking & Execution -->
-      <div class="space-y-1 pt-1 border-t border-slate-800/60">
-        <div class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-          <span>Tracking & Execution</span>
-          <span class="text-[9px] text-slate-600 font-mono">3</span>
-        </div>
-
-        <button onclick="app.switchView('sprints')" id="nav-sprints" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
-          <i data-lucide="zap" class="w-4 h-4 text-cyan-400"></i>
-          <span>Sprints & Milestones</span>
-        </button>
-
-        <button onclick="app.switchView('timetracker')" id="nav-timetracker" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
-          <i data-lucide="clock" class="w-4 h-4 text-rose-400"></i>
-          <span>Time Tracker</span>
-        </button>
 
         <button onclick="app.switchView('analytics')" id="nav-analytics" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300">
           <i data-lucide="bar-chart-3" class="w-4 h-4 text-indigo-400"></i>
@@ -173,7 +155,7 @@
         </button>
       </div>
 
-      <!-- Group 3: Automation & Integrations -->
+      <!-- Group 2: Automation & Tools -->
       <div class="space-y-1 pt-1 border-t border-slate-800/60">
         <div class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           <span>Automation & Tools</span>
@@ -264,21 +246,9 @@
         </div>
       </div>
 
-      <!-- ZONE 2 & 3: Live Widgets, Filter Controls & Action Hub -->
+      <!-- ZONE 2 & 3: Filter Controls & Action Hub -->
       <div class="flex items-center space-x-2.5">
         
-        <!-- Live Stopwatch Timer Widget -->
-        <div id="stopwatch-widget" class="hidden sm:flex items-center space-x-2 bg-slate-100/90 dark:bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
-          <div id="timer-dot" class="w-2 h-2 rounded-full bg-slate-400"></div>
-          <span id="timer-display" class="font-mono font-bold text-slate-700 dark:text-slate-200">00:00:00</span>
-          <button id="timer-toggle-btn" onclick="app.toggleStopwatch()" class="text-blue-600 dark:text-blue-400 hover:underline font-bold text-[11px] ml-1">
-            Start
-          </button>
-        </div>
-
-        <!-- Vertical Divider -->
-        <div class="hidden md:block h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-
         <!-- Filters Control Group -->
         <div class="hidden md:flex items-center space-x-1.5 bg-slate-100/70 dark:bg-slate-800/70 p-1 rounded-lg border border-slate-200 dark:border-slate-700/80">
           <!-- Member / Assignee Filter -->
@@ -398,7 +368,6 @@
                 <span class="text-slate-500 font-medium">Layout:</span>
                 <select id="kanban-swimlane-select" onchange="app.setKanbanSwimlane(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
                   <option value="status">Standard Columns</option>
-                  <option value="sprint">Swimlanes: By Phase</option>
                   <option value="priority">Swimlanes: By Priority</option>
                 </select>
               </div>
@@ -568,11 +537,6 @@
                   class="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
               </div>
 
-              <!-- Sprint/Phase Filter -->
-              <select id="table-filter-sprint" onchange="app.setTableSprintFilter(this.value)" class="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer">
-                <option value="">All Sprints & Phases</option>
-              </select>
-
               <!-- Status Filter -->
               <select id="table-filter-status" onchange="app.setTableStatusFilter(this.value)" class="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer">
                 <option value="">All Statuses</option>
@@ -593,7 +557,6 @@
                 <span class="text-slate-500 font-medium">Order:</span>
                 <select id="table-sort-by" onchange="app.setTableSortBy(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
                   <option value="order">Process Sequence (#01 → #N)</option>
-                  <option value="sprint">Phase / Sprint</option>
                   <option value="date_asc">Start Date (Earliest First)</option>
                   <option value="due_asc">Due Date (Earliest First)</option>
                   <option value="priority">Priority (High to Low)</option>
@@ -616,15 +579,9 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[11px] font-bold border-b border-slate-200 dark:border-slate-700/80 shadow-xs select-none">
                 <tr>
-                  <th class="px-3.5 py-3 min-w-[280px]">
+                  <th class="px-3.5 py-3 min-w-[320px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('order')">
                       <span>Activity Name & Sequence</span>
-                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
-                    </div>
-                  </th>
-                  <th class="px-3.5 py-3 min-w-[170px]">
-                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('sprint')">
-                      <span>Phase / Sprint</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
@@ -640,7 +597,7 @@
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[160px]">Assignee / Role</th>
+                  <th class="px-3.5 py-3 min-w-[180px]">Assignee / Role</th>
                   <th class="px-3.5 py-3 min-w-[130px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('date_asc')">
                       <span>Start Date</span>
@@ -653,7 +610,7 @@
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[120px]">
+                  <th class="px-3.5 py-3 min-w-[130px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('hours_desc')">
                       <span>Hours (Est / Act)</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
@@ -808,97 +765,7 @@
         </div>
       </section>
 
-      <!-- 5. SPRINTS & MILESTONES VIEW -->
-      <section id="view-sprints-container" class="view-panel hidden space-y-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-base font-bold text-slate-800 dark:text-white">Sprint & Milestone Management</h2>
-            <p class="text-xs text-slate-500">Plan sprint cycles, set scope targets, and track milestones</p>
-          </div>
-          <div class="flex space-x-2">
-            <button onclick="app.openMilestoneModal()" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-              + New Milestone
-            </button>
-            <button onclick="app.openSprintModal()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition">
-              + New Sprint
-            </button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="lg:col-span-2 space-y-4" id="sprints-list-render"></div>
-          <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center justify-between">
-              <span>Project Milestones</span>
-              <i data-lucide="flag" class="w-4 h-4 text-amber-500"></i>
-            </h3>
-            <div id="milestones-list-render" class="space-y-3"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 6. TIME TRACKER VIEW -->
-      <section id="view-timetracker-container" class="view-panel hidden space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-xl p-5 shadow-md flex flex-col justify-between border border-slate-800">
-            <div>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-300">Active Task Stopwatch</span>
-              <div class="mt-3 font-mono text-3xl font-black text-white" id="main-stopwatch-display">00:00:00</div>
-              <div class="mt-2 text-xs text-slate-300 truncate" id="main-stopwatch-task-name">No task selected</div>
-            </div>
-            <div class="mt-5 flex space-x-2">
-              <button onclick="app.toggleStopwatch()" id="main-stopwatch-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-xs font-bold py-2 rounded-lg transition">
-                Start Stopwatch
-              </button>
-              <button onclick="app.saveStopwatchLog()" class="bg-emerald-600 hover:bg-emerald-700 text-xs font-bold px-3 py-2 rounded-lg transition" title="Log Recorded Time">
-                Log Time
-              </button>
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
-            <div>
-              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Project Total Time</span>
-              <div class="mt-2 text-3xl font-extrabold text-slate-800 dark:text-white" id="total-logged-hours-card">0.0h</div>
-              <p class="text-xs text-slate-400 mt-1">Recorded across all project tasks</p>
-            </div>
-            <div class="text-xs text-blue-600 font-semibold" id="est-vs-act-summary">0.0h / 0.0h estimated</div>
-          </div>
-
-          <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
-            <div>
-              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Manual Worklog</span>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">Log hours worked directly for any task and member</p>
-            </div>
-            <button onclick="app.openManualTimeLogModal()" class="w-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-xs font-semibold py-2 rounded-lg transition">
-              + Enter Worklog Entry
-            </button>
-          </div>
-        </div>
-
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 dark:border-slate-700">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Logged Work Hours Audit</h3>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 dark:bg-slate-700/50 text-slate-500 uppercase font-semibold border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th class="px-4 py-3">Date</th>
-                  <th class="px-4 py-3">Task</th>
-                  <th class="px-4 py-3">Member</th>
-                  <th class="px-4 py-3">Hours</th>
-                  <th class="px-4 py-3">Notes</th>
-                  <th class="px-4 py-3 text-right">Delete</th>
-                </tr>
-              </thead>
-              <tbody id="timelogs-table-body" class="divide-y divide-slate-200 dark:divide-slate-700 text-slate-700 dark:text-slate-200"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- 7. ANALYTICS DASHBOARD VIEW -->
+      <!-- 5. ANALYTICS DASHBOARD VIEW -->
       <section id="view-analytics-container" class="view-panel hidden space-y-6">
         
         <!-- Analytics Toolbar & Scope Controls -->
@@ -909,14 +776,6 @@
               <select id="analytics-project-select" onchange="app.handleAnalyticsProjectChange(this.value)"
                 class="bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
                 <!-- Populated dynamically -->
-              </select>
-            </div>
-
-            <div class="flex items-center space-x-2">
-              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Phase / Sprint:</span>
-              <select id="analytics-sprint-select" onchange="app.handleAnalyticsSprintChange(this.value)"
-                class="bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
-                <option value="">All Sprints & Project Lifecycle</option>
               </select>
             </div>
           </div>
@@ -962,8 +821,8 @@
           <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <div class="flex items-center justify-between">
               <div>
-                <h3 class="text-sm font-bold text-slate-800 dark:text-white">Sprint Burndown & Timeline Trajectory</h3>
-                <span class="text-xs text-slate-400" id="burndown-sprint-title">Active Sprint</span>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Progress & Completion Trajectory</h3>
+                <span class="text-xs text-slate-400" id="burndown-project-title">Project Lifecycle</span>
               </div>
               <span class="text-xs text-slate-400">Ideal vs. Actual Remaining Hours</span>
             </div>
@@ -1135,7 +994,7 @@
             class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white"></textarea>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
             <select id="task-input-status" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
@@ -1154,13 +1013,6 @@
               <option value="medium" selected>Medium</option>
               <option value="high">High</option>
               <option value="urgent">Urgent</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sprint</label>
-            <select id="task-input-sprint" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
-              <option value="">No Sprint (Backlog)</option>
             </select>
           </div>
 
@@ -1238,14 +1090,6 @@
           </div>
         </div>
 
-        <div id="task-details-footer-section" class="pt-2 border-t border-slate-200 dark:border-slate-700 hidden">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-slate-700 dark:text-slate-300">Work Logs & Time Spent</span>
-            <span id="task-logged-total-badge" class="text-xs font-bold text-blue-600 dark:text-blue-400">Total: 0.0h</span>
-          </div>
-          <div id="task-timelogs-list" class="mt-2 space-y-1 text-[11px] text-slate-500 max-h-28 overflow-y-auto"></div>
-        </div>
-
       </div>
 
       <div class="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -1304,110 +1148,7 @@
     </div>
   </div>
 
-  <!-- SPRINT MODAL -->
-  <div id="sprint-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
-        <h3 id="sprint-modal-title" class="text-base font-bold text-slate-800 dark:text-white">Create Sprint</h3>
-        <button onclick="app.closeSprintModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-      </div>
-      <div class="space-y-3 text-xs">
-        <input type="hidden" id="sprint-input-id">
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sprint Name *</label>
-          <input type="text" id="sprint-input-name" placeholder="Sprint 26: Core Refactor" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-        </div>
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Sprint Goal</label>
-          <textarea id="sprint-input-goal" rows="2" placeholder="Key deliverable objective..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></textarea>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
-            <input type="date" id="sprint-input-startdate" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-          </div>
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">End Date</label>
-            <input type="date" id="sprint-input-enddate" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-          </div>
-        </div>
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
-          <select id="sprint-input-status" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-            <option value="planning">Planning</option>
-            <option value="active">Active Sprint</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-      </div>
-      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-        <button onclick="app.closeSprintModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 rounded-lg">Cancel</button>
-        <button onclick="app.handleSaveSprint()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Sprint</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- MILESTONE MODAL -->
-  <div id="milestone-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
-        <h3 class="text-base font-bold text-slate-800 dark:text-white">New Milestone</h3>
-        <button onclick="app.closeMilestoneModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-      </div>
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Milestone Title *</label>
-          <input type="text" id="milestone-input-title" placeholder="Alpha Release to Beta Customers" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-        </div>
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Due Date *</label>
-          <input type="date" id="milestone-input-duedate" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-        </div>
-      </div>
-      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-        <button onclick="app.closeMilestoneModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-        <button onclick="app.handleSaveMilestone()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Save Milestone</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MANUAL TIME LOG MODAL -->
-  <div id="timelog-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6 space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
-        <h3 class="text-base font-bold text-slate-800 dark:text-white">Log Work Hours</h3>
-        <button onclick="app.closeManualTimeLogModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-      </div>
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Task *</label>
-          <select id="timelog-input-task" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></select>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Member</label>
-            <select id="timelog-input-member" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"></select>
-          </div>
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hours Worked *</label>
-            <input type="number" step="0.25" min="0.25" id="timelog-input-hours" placeholder="e.g. 2.5" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-          </div>
-        </div>
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Work Date</label>
-          <input type="date" id="timelog-input-date" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-        </div>
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Work Description / Summary</label>
-          <input type="text" id="timelog-input-desc" placeholder="Details of progress made..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-        </div>
-      </div>
-      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-        <button onclick="app.closeManualTimeLogModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-        <button onclick="app.handleSaveTimeLog()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Record Log</button>
-      </div>
-    </div>
-  </div>
 
   <!-- IMPORT / EXPORT MODAL -->
   <div id="import-export-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
@@ -1419,7 +1160,7 @@
 
       <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
         <h4 class="font-bold text-xs text-slate-800 dark:text-white">Export Project Backup</h4>
-        <p class="text-xs text-slate-500">Download all tasks, sprints, members, and worklogs in JSON format.</p>
+        <p class="text-xs text-slate-500">Download all tasks, members, and project data in JSON format.</p>
         <button onclick="app.exportProjectJSON()" class="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center space-x-1.5 transition">
           <i data-lucide="download" class="w-4 h-4"></i>
           <span>Download JSON Backup</span>
@@ -1917,6 +1658,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.0.3"></script>
+  <script src="/static/js/app.js?v=2.0.4"></script>
 </body>
 </html>
