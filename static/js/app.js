@@ -893,23 +893,29 @@ const app = {
     const offset = this.state.ganttOffset || 0;
     const now = new Date();
 
-    // 1. Calculate base bounds from project tasks
-    let taskMin = new Date(now.getTime() - (7 * 86400000));
-    let taskMax = new Date(now.getTime() + (30 * 86400000));
-    let hasExplicitDates = false;
+    // 1. Calculate base bounds from project tasks (First activity start to last activity end)
+    let taskMin = null;
+    let taskMax = null;
 
     this.state.tasks.forEach(t => {
       if (t.start_date) {
         const s = new Date(t.start_date + 'T00:00:00');
-        if (!hasExplicitDates || s < taskMin) taskMin = s;
-        hasExplicitDates = true;
+        if (!taskMin || s < taskMin) taskMin = s;
+        if (!taskMax || s > taskMax) taskMax = s;
       }
       if (t.due_date) {
         const d = new Date(t.due_date + 'T23:59:59');
-        if (!hasExplicitDates || d > taskMax) taskMax = d;
-        hasExplicitDates = true;
+        if (!taskMin || d < taskMin) taskMin = d;
+        if (!taskMax || d > taskMax) taskMax = d;
       }
     });
+
+    if (!taskMin) {
+      taskMin = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+    if (!taskMax || taskMax < taskMin) {
+      taskMax = new Date(taskMin.getTime() + (28 * 86400000));
+    }
 
     let timelineMin, timelineMax;
     let topHeaders = [];
@@ -919,14 +925,16 @@ const app = {
     // 2. Build timescale columns based on mode
     if (scale === 'day') {
       // DAILY SCALE
-      const baseStart = new Date(taskMin.getTime() + (offset * 7 * 86400000));
-      timelineMin = new Date(baseStart.getFullYear(), baseStart.getMonth(), baseStart.getDate());
-      const daysCount = Math.max(Math.ceil((taskMax - taskMin) / 86400000) + 4, 18);
+      const baseStart = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate());
+      timelineMin = new Date(baseStart.getTime() + (offset * 86400000));
+      const daysCount = Math.max(Math.ceil((taskMax.getTime() - baseStart.getTime()) / 86400000) + 1, 7);
       totalCols = daysCount;
       timelineMax = new Date(timelineMin.getTime() + (daysCount * 86400000));
 
       if (rangeLabel) {
-        rangeLabel.textContent = `Daily View • ${timelineMin.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${timelineMax.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        const startFormatted = timelineMin.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const endFormatted = new Date(timelineMax.getTime() - 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        rangeLabel.textContent = `Daily View • ${startFormatted} to ${endFormatted}`;
       }
 
       // Group days by month for top header
@@ -962,18 +970,25 @@ const app = {
       }
 
     } else if (scale === 'week') {
-      // WEEKLY SCALE (Default)
+      // WEEKLY SCALE (Project-Relative: Starts at Week 1 from first activity start date through project end date)
       const dayOfWeek = taskMin.getDay();
-      const mondayOffset = (dayOfWeek + 6) % 7; // align to Monday
-      const startMonday = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate() - mondayOffset + (offset * 28));
-      timelineMin = startMonday;
+      const mondayOffset = (dayOfWeek + 6) % 7; // Align to Monday of first activity's week
+      const projectStartMonday = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate() - mondayOffset);
       
-      const weeksCount = Math.max(Math.ceil((taskMax - taskMin) / (7 * 86400000)) + 2, 8);
+      // Total weeks needed to span from projectStartMonday through taskMax
+      const totalDays = Math.max(1, Math.ceil((taskMax.getTime() - projectStartMonday.getTime()) / 86400000));
+      const totalProjectWeeks = Math.max(1, Math.ceil(totalDays / 7));
+
+      // Apply offset navigation (shifts by 1 week per click)
+      timelineMin = new Date(projectStartMonday.getTime() + (offset * 7 * 86400000));
+      const weeksCount = totalProjectWeeks;
       totalCols = weeksCount;
       timelineMax = new Date(timelineMin.getTime() + (weeksCount * 7 * 86400000));
 
       if (rangeLabel) {
-        rangeLabel.textContent = `Weekly View • ${timelineMin.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${timelineMax.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        const startFormatted = taskMin.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const endFormatted = taskMax.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        rangeLabel.textContent = `Project Timeline • ${totalProjectWeeks} Week${totalProjectWeeks > 1 ? 's' : ''} (Week 1 to Week ${totalProjectWeeks}) • ${startFormatted} to ${endFormatted}`;
       }
 
       let curMonth = -1;
@@ -982,20 +997,14 @@ const app = {
 
       for (let w = 0; w < weeksCount; w++) {
         const wStart = new Date(timelineMin.getTime() + (w * 7 * 86400000));
-        const wEnd = new Date(wStart.getTime() + (5 * 86400000)); // Sat
-        const isCurrentWeek = now >= wStart && now <= new Date(wStart.getTime() + (7 * 86400000));
-
-        // Get ISO week number
-        const tempD = new Date(Date.UTC(wStart.getFullYear(), wStart.getMonth(), wStart.getDate()));
-        const dayNum = tempD.getUTCDay() || 7;
-        tempD.setUTCDate(tempD.getUTCDate() + 4 - dayNum);
-        const yearStart = new Date(Date.UTC(tempD.getUTCFullYear(), 0, 1));
-        const weekNo = Math.ceil((((tempD - yearStart) / 86400000) + 1) / 7);
+        const wEnd = new Date(wStart.getTime() + (6 * 86400000)); // Sunday
+        const isCurrentWeek = now >= wStart && now < new Date(wStart.getTime() + (7 * 86400000));
+        const projectWeekNum = w + 1 + offset;
 
         bottomHeaders.push(`
           <div class="flex-1 min-w-[90px] text-center border-r border-slate-100 dark:border-slate-700/60 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}">
-            <div class="text-[10px] font-bold">W${weekNo}</div>
-            <div class="text-[9px] text-slate-400">${wStart.getDate()} ${wStart.toLocaleDateString('en-US', { month: 'short' })} - ${wEnd.getDate()} ${wEnd.toLocaleDateString('en-US', { month: 'short' })}</div>
+            <div class="text-[10px] font-extrabold ${isCurrentWeek ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}">Week ${projectWeekNum}</div>
+            <div class="text-[9px] text-slate-400 dark:text-slate-400 font-medium">${wStart.getDate()} ${wStart.toLocaleDateString('en-US', { month: 'short' })} - ${wEnd.getDate()} ${wEnd.toLocaleDateString('en-US', { month: 'short' })}</div>
           </div>
         `);
 
@@ -1016,12 +1025,12 @@ const app = {
 
     } else if (scale === 'month') {
       // MONTHLY SCALE
-      const baseMonth = new Date(taskMin.getFullYear(), taskMin.getMonth() + (offset * 3), 1);
+      const baseMonth = new Date(taskMin.getFullYear(), taskMin.getMonth() + offset, 1);
       timelineMin = baseMonth;
       
       const totalMonths = Math.max(
-        ((taskMax.getFullYear() - taskMin.getFullYear()) * 12) + (taskMax.getMonth() - taskMin.getMonth()) + 3,
-        6
+        ((taskMax.getFullYear() - taskMin.getFullYear()) * 12) + (taskMax.getMonth() - taskMin.getMonth()) + 1,
+        1
       );
       totalCols = totalMonths;
       timelineMax = new Date(timelineMin.getFullYear(), timelineMin.getMonth() + totalMonths, 0, 23, 59, 59);
@@ -1061,7 +1070,7 @@ const app = {
     } else if (scale === 'year') {
       // YEARLY / MULTI-YEAR SCALE (Quarters)
       const startYear = taskMin.getFullYear() + offset;
-      const endYear = Math.max(taskMax.getFullYear() + 1, startYear + 2);
+      const endYear = Math.max(taskMax.getFullYear(), startYear);
       timelineMin = new Date(startYear, 0, 1);
       timelineMax = new Date(endYear, 11, 31, 23, 59, 59);
       const totalYears = endYear - startYear + 1;
