@@ -1637,13 +1637,32 @@ const app = {
 
   async inlineDeleteTask(taskId) {
     if (!confirm('Are you sure you want to delete this activity?')) return;
+    const numId = Number(taskId);
+    const deletedTask = this.state.tasks.find(t => t.id === numId);
+    const prevTasks = [...this.state.tasks];
+
+    // 1. Optimistic UI update (0ms instant response)
+    this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
+    const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
+    if (curProj && curProj.total_tasks > 0) {
+      curProj.total_tasks--;
+      if (deletedTask?.status === 'done' && curProj.completed_tasks > 0) curProj.completed_tasks--;
+    }
+    this.renderProjectsSidebar();
+    this.renderCurrentView();
+    this.syncCurrentProjectCache();
+    this.showToast('Activity deleted', 'success');
+
+    // 2. Background server deletion
     try {
-      await this.api(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      this.state.tasks = this.state.tasks.filter(t => t.id !== taskId);
-      this.renderCurrentView();
-      this.showToast('Activity deleted', 'success');
+      await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
     } catch (e) {
-      console.error(e);
+      console.error('Failed to delete activity on server:', e);
+      this.state.tasks = prevTasks;
+      if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
+      this.renderProjectsSidebar();
+      this.renderCurrentView();
+      this.showToast('Failed to delete activity on server', 'error');
     }
   },
 
@@ -2776,9 +2795,9 @@ const app = {
     }
 
     const taskId = document.getElementById('task-input-id')?.value;
-    const desc = document.getElementById('task-input-description')?.value;
-    const status = document.getElementById('task-input-status')?.value;
-    const priority = document.getElementById('task-input-priority')?.value;
+    const desc = document.getElementById('task-input-description')?.value || '';
+    const status = document.getElementById('task-input-status')?.value || 'todo';
+    const priority = document.getElementById('task-input-priority')?.value || 'medium';
     const assigneeId = document.getElementById('task-input-assignee')?.value || null;
     const startDate = document.getElementById('task-input-startdate')?.value || null;
     const dueDate = document.getElementById('task-input-duedate')?.value || null;
@@ -2788,7 +2807,6 @@ const app = {
     const tags = tagsRaw.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean);
 
     const tempSubtasks = Array.from(document.querySelectorAll('.temporary-subtask')).map(el => el.textContent);
-
     const position = document.getElementById('task-input-position')?.value || 'end';
 
     const payload = {
@@ -2806,18 +2824,23 @@ const app = {
       subtasks: tempSubtasks
     };
 
-    // Close modal immediately (instant UX)
+    // Close modal immediately (instant 0ms UX)
     this.closeTaskModal();
 
     if (taskId) {
-      const localTask = this.state.tasks.find(t => t.id === Number(taskId));
+      // EDIT EXISTING TASK (Optimistic)
+      const numId = Number(taskId);
+      const localTask = this.state.tasks.find(t => t.id === numId);
+      const prevCopy = localTask ? { ...localTask } : null;
       if (localTask) {
         Object.assign(localTask, payload);
         const member = this.state.currentProject?.members?.find(m => m.id === payload.assignee_id);
         localTask.assignee_name = member ? member.name : null;
         localTask.assignee_avatar = member ? member.avatar_color : null;
         this.renderCurrentView();
+        this.syncCurrentProjectCache();
       }
+      this.showToast('Task updated successfully', 'success');
 
       try {
         const updated = await this.api(`/api/tasks/${taskId}`, {
@@ -2826,26 +2849,98 @@ const app = {
         });
         if (localTask && updated) {
           Object.assign(localTask, updated);
-          this.renderCurrentView();
+          this.syncCurrentProjectCache();
         }
-        this.showToast('Task updated successfully', 'success');
       } catch (e) {
         console.error('Failed to update task:', e);
-        this.showToast('Failed to save task update', 'error');
-        this.fetchTasks();
+        if (localTask && prevCopy) {
+          Object.assign(localTask, prevCopy);
+          this.renderCurrentView();
+        }
+        this.showToast('Failed to save task update on server', 'error');
       }
     } else {
+      // CREATE NEW TASK (Optimistic 0ms UI insertion)
+      const tempId = -Date.now();
+      const member = this.state.currentProject?.members?.find(m => m.id === payload.assignee_id);
+      const optimisticTask = {
+        id: tempId,
+        project_id: this.state.currentProjectId,
+        title,
+        description: desc,
+        status: status,
+        priority: priority,
+        assignee_id: payload.assignee_id,
+        assignee_name: member ? member.name : null,
+        assignee_avatar: member ? member.avatar_color : null,
+        start_date: startDate,
+        due_date: dueDate,
+        estimated_hours: estHours,
+        actual_hours: actHours,
+        tags,
+        subtask_count: tempSubtasks.length,
+        subtask_completed_count: 0,
+        subtasks_list: tempSubtasks.map((st, i) => ({ id: i + 1, task_id: tempId, title: st, completed: 0, order_index: i })),
+        logged_hours_sum: 0,
+        order_index: 999999,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Position logic
+      if (position === 'start') {
+        this.state.tasks.unshift(optimisticTask);
+      } else if (position.startsWith('after_')) {
+        const afterId = Number(position.split('_')[1]);
+        const idx = this.state.tasks.findIndex(t => t.id === afterId);
+        if (idx !== -1) {
+          this.state.tasks.splice(idx + 1, 0, optimisticTask);
+        } else {
+          this.state.tasks.push(optimisticTask);
+        }
+      } else if (position.startsWith('before_')) {
+        const beforeId = Number(position.split('_')[1]);
+        const idx = this.state.tasks.findIndex(t => t.id === beforeId);
+        if (idx !== -1) {
+          this.state.tasks.splice(idx, 0, optimisticTask);
+        } else {
+          this.state.tasks.push(optimisticTask);
+        }
+      } else {
+        this.state.tasks.push(optimisticTask);
+      }
+
+      // Re-index order_index locally
+      this.state.tasks.forEach((t, i) => { t.order_index = i; });
+
+      // Update project counts
+      const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
+      if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
+
+      this.renderProjectsSidebar();
+      this.renderCurrentView();
+      this.syncCurrentProjectCache();
+      this.showToast('Activity created successfully', 'success');
+
       try {
         const created = await this.api(`/api/projects/${this.state.currentProjectId}/tasks`, {
           method: 'POST',
           body: JSON.stringify(payload)
         });
-        this.showToast('Activity created successfully', 'success');
-        await this.fetchTasks();
+        if (created) {
+          const idx = this.state.tasks.findIndex(t => t.id === tempId);
+          if (idx !== -1) {
+            this.state.tasks[idx] = created;
+          }
+          this.syncCurrentProjectCache();
+        }
       } catch (e) {
-        console.error('Failed to create task:', e);
-        this.showToast('Failed to create task', 'error');
-        this.fetchTasks();
+        console.error('Failed to create task on server:', e);
+        this.state.tasks = this.state.tasks.filter(t => t.id !== tempId);
+        if (curProj && curProj.total_tasks > 0) curProj.total_tasks--;
+        this.renderProjectsSidebar();
+        this.renderCurrentView();
+        this.showToast('Failed to create task on server', 'error');
       }
     }
   },
@@ -2855,13 +2950,32 @@ const app = {
     if (!taskId) return;
     if (!confirm('Are you sure you want to delete this task?')) return;
 
+    const numId = Number(taskId);
+    const deletedTask = this.state.tasks.find(t => t.id === numId);
+    const prevTasks = [...this.state.tasks];
+
+    // Optimistic UI update (0ms instant response)
+    this.closeTaskModal();
+    this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
+    const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
+    if (curProj && curProj.total_tasks > 0) {
+      curProj.total_tasks--;
+      if (deletedTask?.status === 'done' && curProj.completed_tasks > 0) curProj.completed_tasks--;
+    }
+    this.renderProjectsSidebar();
+    this.renderCurrentView();
+    this.syncCurrentProjectCache();
+    this.showToast('Task deleted', 'success');
+
     try {
-      await this.api(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      this.closeTaskModal();
-      await this.fetchTasks();
-      this.showToast('Task deleted', 'success');
+      await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
     } catch (e) {
-      console.error(e);
+      console.error('Failed to delete task on server:', e);
+      this.state.tasks = prevTasks;
+      if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
+      this.renderProjectsSidebar();
+      this.renderCurrentView();
+      this.showToast('Failed to delete task on server', 'error');
     }
   },
 
@@ -2913,30 +3027,67 @@ const app = {
       this.showToast('Please enter a project name', 'error');
       return;
     }
-    const description = document.getElementById('project-input-description')?.value;
-    const color = document.getElementById('project-input-color')?.value;
+    const description = document.getElementById('project-input-description')?.value || '';
+    const color = document.getElementById('project-input-color')?.value || '#3B82F6';
 
-    try {
-      if (id) {
+    this.closeProjectModal();
+
+    if (id) {
+      // Edit existing project (Optimistic)
+      const numId = Number(id);
+      const proj = this.state.projects.find(p => p.id === numId);
+      if (proj) {
+        proj.name = name;
+        proj.description = description;
+        proj.color = color;
+      }
+      if (this.state.currentProject && this.state.currentProject.id === numId) {
+        this.state.currentProject.name = name;
+        this.state.currentProject.description = description;
+        this.state.currentProject.color = color;
+      }
+      this.renderProjectsDropdown();
+      this.renderProjectsSidebar();
+      this.showToast('Project updated successfully', 'success');
+
+      try {
         await this.api(`/api/projects/${id}`, {
           method: 'PUT',
           body: JSON.stringify({ name, description, color })
         });
-        this.closeProjectModal();
-        await this.fetchProjects(Number(id));
-        this.showToast('Project updated successfully', 'success');
-      } else {
+      } catch (e) {
+        console.error('Failed to update project on server:', e);
+        this.showToast('Failed to update project settings', 'error');
+      }
+    } else {
+      // Create new project (Instant UI Switch & fast backend call)
+      try {
         const project = await this.api('/api/projects', {
           method: 'POST',
           body: JSON.stringify({ name, description, color })
         });
-        this.closeProjectModal();
-        await this.fetchProjects(project.id);
+
+        // Add to projects list
+        this.state.projects.unshift(project);
+        localStorage.setItem('projectpulse_cached_projects', JSON.stringify(this.state.projects));
+
+        // Switch to the newly created project immediately (0 extra roundtrips!)
+        this.state.currentProjectId = project.id;
+        this.state.currentProject = project;
+        this.state.tasks = [];
+        localStorage.setItem('projectpulse_active_project', project.id);
+        this.syncCurrentProjectCache();
+
+        this.renderProjectsDropdown();
+        this.renderProjectsSidebar();
+        this.populateFilterDropdowns();
+        this.renderCurrentView();
+
         this.showToast('Project created successfully', 'success');
+      } catch (e) {
+        console.error('Failed to create project:', e);
+        this.showToast('Failed to create project', 'error');
       }
-    } catch (e) {
-      console.error(e);
-      this.showToast('Failed to save project', 'error');
     }
   },
 
@@ -2994,26 +3145,11 @@ const app = {
 
     // 2. Background server deletion
     try {
-      const res = await this.api(`/api/projects/${projectId}`, { method: 'DELETE' });
-      if (res && res.projects) {
-        this.state.projects = res.projects;
-        localStorage.setItem('projectpulse_cached_projects', JSON.stringify(res.projects));
-        if (res.current_project) {
-          this.state.currentProject = res.current_project;
-          this.state.currentProjectId = res.current_project.id;
-          this.state.tasks = res.tasks || [];
-          this.renderProjectsDropdown();
-          this.renderProjectsSidebar();
-          this.populateFilterDropdowns();
-          this.renderCurrentView();
-        }
-      }
+      await this.api(`/api/projects/${projectId}`, { method: 'DELETE' });
     } catch (e) {
-      console.error('Delete project error:', e);
+      console.error('Failed to delete project on server:', e);
     }
   },
-
-
 
   // ==================== GANTT EXCEL / CSV UPLOAD ====================
   openGanttUploadModal() {

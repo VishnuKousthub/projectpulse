@@ -389,7 +389,18 @@ def create_project():
 
         record_activity(conn, p_id, "System", "Project Created", f'Created project "{name}"')
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (p_id,)).fetchone()
-        return json_response(project, status=201)
+        members = conn.execute("SELECT * FROM members WHERE project_id = ?", (p_id,)).fetchall()
+        
+        proj_dict = dict(project)
+        proj_dict["members"] = members
+        proj_dict["sprints"] = []
+        proj_dict["milestones"] = []
+        proj_dict["total_tasks"] = 0
+        proj_dict["completed_tasks"] = 0
+        proj_dict["overdue_tasks"] = 0
+        proj_dict["total_actual_hours"] = 0
+        proj_dict["total_estimated_hours"] = 0
+        return json_response(proj_dict, status=201)
 
 @app.get("/api/projects/<project_id:int>")
 def get_project(project_id):
@@ -433,17 +444,14 @@ def update_project(project_id):
 @app.delete("/api/projects/<project_id:int>")
 def delete_project(project_id):
     with get_db() as conn:
-        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
             return json_response({"error": "Project not found"}, status=404)
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-        bootstrap = get_bootstrap_payload(conn)
         return json_response({
             "success": True,
             "message": "Project deleted",
-            "projects": bootstrap["projects"],
-            "current_project": bootstrap["current_project"],
-            "tasks": bootstrap["tasks"]
+            "deleted_id": project_id
         })
 
 # ==================== MEMBERS ====================
@@ -817,14 +825,21 @@ def get_task_dict(conn, task_id: int):
     except Exception:
         t_dict["tags"] = []
 
-    t_dict["subtasks"] = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (task_id,)).fetchall()
-    t_dict["timelogs"] = conn.execute("""
+    subtasks_list = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (task_id,)).fetchall()
+    timelogs_list = conn.execute("""
         SELECT tl.*, m.name as member_name, m.avatar_color as member_avatar
         FROM timelogs tl
         LEFT JOIN members m ON tl.member_id = m.id
         WHERE tl.task_id = ?
         ORDER BY tl.logged_date DESC, tl.id DESC
     """, (task_id,)).fetchall()
+
+    t_dict["subtasks"] = subtasks_list
+    t_dict["subtasks_list"] = subtasks_list
+    t_dict["subtask_count"] = len(subtasks_list)
+    t_dict["subtask_completed_count"] = sum(1 for s in subtasks_list if s.get("completed") == 1)
+    t_dict["timelogs"] = timelogs_list
+    t_dict["logged_hours_sum"] = sum(float(tl.get("hours") or 0.0) for tl in timelogs_list)
     t_dict["activities"] = conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()
 
     return t_dict
