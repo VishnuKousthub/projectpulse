@@ -701,13 +701,66 @@ def create_task(project_id):
     subtasks = data.get("subtasks", [])
     now_str = get_now_iso()
 
+    position = data.get("position")  # "end", "start", "after_<id>", "before_<id>"
+    insert_after_id = data.get("insert_after_id")
+    insert_before_id = data.get("insert_before_id")
+    custom_order_index = data.get("order_index")
+
+    if position and isinstance(position, str):
+        if position.startswith("after_"):
+            try:
+                insert_after_id = int(position.split("_")[1])
+            except ValueError:
+                pass
+        elif position.startswith("before_"):
+            try:
+                insert_before_id = int(position.split("_")[1])
+            except ValueError:
+                pass
+
     with get_db() as conn:
         cursor = conn.cursor()
-        max_order = conn.execute(
-            "SELECT COALESCE(MAX(order_index), -1) as max_idx FROM tasks WHERE project_id = ? AND status = ?",
-            (project_id, status)
-        ).fetchone()["max_idx"]
-        next_order = max_order + 1
+        
+        target_order = None
+        if insert_after_id:
+            pred = conn.execute("SELECT order_index FROM tasks WHERE id = ? AND project_id = ?", (insert_after_id, project_id)).fetchone()
+            if pred:
+                target_order = pred["order_index"] + 1
+                conn.execute(
+                    "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
+                    (project_id, target_order)
+                )
+        elif insert_before_id:
+            succ = conn.execute("SELECT order_index FROM tasks WHERE id = ? AND project_id = ?", (insert_before_id, project_id)).fetchone()
+            if succ:
+                target_order = succ["order_index"]
+                conn.execute(
+                    "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
+                    (project_id, target_order)
+                )
+        elif position == "start":
+            first_t = conn.execute("SELECT order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC LIMIT 1", (project_id,)).fetchone()
+            if first_t:
+                target_order = first_t["order_index"]
+                conn.execute(
+                    "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
+                    (project_id, target_order)
+                )
+            else:
+                target_order = 0
+        elif custom_order_index is not None:
+            target_order = int(custom_order_index)
+            conn.execute(
+                "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
+                (project_id, target_order)
+            )
+
+        if target_order is None:
+            max_order = conn.execute(
+                "SELECT COALESCE(MAX(order_index), -1) as max_idx FROM tasks WHERE project_id = ?",
+                (project_id,)
+            ).fetchone()["max_idx"]
+            target_order = max_order + 1
 
         cursor.execute("""
             INSERT INTO tasks (
@@ -718,7 +771,7 @@ def create_task(project_id):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id, sprint_id, title, desc, status, priority,
-            next_order, start_date, due_date, est_hours, 0.0,
+            target_order, start_date, due_date, est_hours, 0.0,
             assignee_id, tags_json, now_str, now_str
         ))
         t_id = cursor.lastrowid
@@ -886,6 +939,41 @@ def reorder_tasks():
                     except Exception as e:
                         print(f"[Notifier] Error sending completion notification: {e}")
         return json_response({"success": True})
+
+@app.post("/api/tasks/<task_id:int>/move")
+def move_task(task_id):
+    data = request.json or {}
+    direction = data.get("direction", "down")  # "up" or "down"
+    
+    with get_db() as conn:
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            return json_response({"error": "Task not found"}, status=404)
+        
+        project_id = task["project_id"]
+        tasks = conn.execute(
+            "SELECT id, order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC",
+            (project_id,)
+        ).fetchall()
+        
+        task_list = [dict(t) for t in tasks]
+        idx = next((i for i, t in enumerate(task_list) if t["id"] == task_id), None)
+        if idx is None:
+            return json_response({"error": "Task not found in project"}, status=404)
+        
+        target_idx = idx - 1 if direction == "up" else idx + 1
+        if 0 <= target_idx < len(task_list):
+            task_list[idx], task_list[target_idx] = task_list[target_idx], task_list[idx]
+            now_str = get_now_iso()
+            for i, t in enumerate(task_list):
+                conn.execute("UPDATE tasks SET order_index = ?, updated_at = ? WHERE id = ?", (i, now_str, t["id"]))
+        
+        bootstrap = get_bootstrap_payload(conn, active_project_id=project_id)
+        return json_response({
+            "success": True,
+            "tasks": bootstrap["tasks"],
+            "current_project": bootstrap["current_project"]
+        })
 
 @app.delete("/api/tasks/<task_id:int>")
 def delete_task(task_id):

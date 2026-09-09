@@ -1129,6 +1129,9 @@ const app = {
                 <span class="text-[10px] text-slate-400 font-mono flex-shrink-0">#${idx + 1}</span>
                 ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0" style="background-color: ${t.assignee_avatar || '#6366F1'}">${t.assignee_name.charAt(0)}</span>` : ''}
                 <span class="truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition font-semibold">${this.escapeHtml(t.title)}</span>
+                <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-emerald-500 rounded transition ml-auto flex-shrink-0">
+                  <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
+                </button>
               </div>
               <div class="text-[10px] text-slate-400 flex items-center space-x-1.5 mt-0.5">
                 <span class="capitalize px-1.5 py-0.2 rounded text-[9px] font-semibold ${isCompleted ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}">${t.status.replace('_', ' ')}</span>
@@ -1427,7 +1430,19 @@ const app = {
                 title="${isDone ? 'Mark as in progress' : 'Mark as completed'}">
                 ${isDone ? '<i data-lucide="check" class="w-3 h-3"></i>' : ''}
               </button>
-              <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 font-bold flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
+              
+              <div class="flex items-center space-x-1 flex-shrink-0">
+                <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 font-bold">#${(idx + 1).toString().padStart(2, '0')}</span>
+                <div class="opacity-0 group-hover:opacity-100 flex flex-col -space-y-1 transition">
+                  <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'up')" title="Move Up" class="p-0.5 hover:text-blue-600 text-slate-400 ${idx === 0 ? 'invisible pointer-events-none' : ''}">
+                    <i data-lucide="chevron-up" class="w-3 h-3"></i>
+                  </button>
+                  <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'down')" title="Move Down" class="p-0.5 hover:text-blue-600 text-slate-400 ${idx === filtered.length - 1 ? 'invisible pointer-events-none' : ''}">
+                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
               <div class="min-w-0 flex-1">
                 <div class="flex items-center space-x-1.5">
                   <span onclick="app.openTaskModal({id: ${t.id}})"
@@ -1540,6 +1555,10 @@ const app = {
           <!-- 8. Actions -->
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
             <div class="flex items-center justify-end space-x-1">
+              <button onclick="app.openTaskModal({ insert_after_id: ${t.id} })" class="p-1 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition flex items-center space-x-1" title="Insert New Activity Below This">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
+                <span class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hidden xl:inline">Insert Below</span>
+              </button>
               <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details">
                 <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
               </button>
@@ -2439,7 +2458,45 @@ const app = {
     });
   },
 
-  // ==================== TASK MODAL CRUD ====================
+  // ==================== TASK MODAL CRUD & SEQUENCING ====================
+  async moveTaskOrder(taskId, direction) {
+    const allTasks = [...(this.state.tasks || [])].sort((a, b) => {
+      const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
+      const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.id - b.id;
+    });
+
+    const idx = allTasks.findIndex(t => t.id === taskId);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= allTasks.length) return;
+
+    // Optimistic swap
+    const currentTask = allTasks[idx];
+    const targetTask = allTasks[targetIdx];
+    const tempOrder = currentTask.order_index;
+    currentTask.order_index = targetTask.order_index;
+    targetTask.order_index = tempOrder;
+
+    this.renderCurrentView();
+
+    try {
+      const res = await this.api(`/api/tasks/${taskId}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ direction })
+      });
+      if (res && res.tasks) {
+        this.state.tasks = res.tasks;
+        this.syncCurrentProjectCache();
+        this.renderCurrentView();
+      }
+    } catch (e) {
+      console.error('Failed to move task order:', e);
+      this.fetchTasks();
+    }
+  },
+
   async openTaskModal(params = {}) {
     const modal = document.getElementById('task-modal');
     if (!modal) return;
@@ -2458,14 +2515,34 @@ const app = {
     const actInput = document.getElementById('task-input-acthours');
     const tagsInput = document.getElementById('task-input-tags');
     const delBtn = document.getElementById('task-delete-btn');
+    const posWrapper = document.getElementById('task-position-wrapper');
+    const posSelect = document.getElementById('task-input-position');
 
     document.getElementById('subtasks-container').innerHTML = '';
     document.getElementById('new-subtask-input').value = '';
+
+    const sortedTasks = [...(this.state.tasks || [])].sort((a, b) => {
+      const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
+      const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.id - b.id;
+    });
+
+    if (posSelect) {
+      posSelect.innerHTML = `
+        <option value="end">At the end of the project (default)</option>
+        <option value="start">At the very beginning (Before #01)</option>
+        ${sortedTasks.map((t, i) => `
+          <option value="after_${t.id}">After #${(i + 1).toString().padStart(2, '0')}: ${this.escapeHtml(t.title)}</option>
+        `).join('')}
+      `;
+    }
 
     if (params.id) {
       document.getElementById('task-modal-title').textContent = 'Edit Task Details';
       document.getElementById('task-modal-type-badge').textContent = 'Task #' + params.id;
       if (delBtn) delBtn.classList.remove('hidden');
+      if (posWrapper) posWrapper.classList.add('hidden');
 
       // 1. Instantly populate modal from local state cache (0ms latency!)
       const localTask = this.state.tasks.find(t => t.id === Number(params.id));
@@ -2515,6 +2592,7 @@ const app = {
       document.getElementById('task-modal-title').textContent = 'Create New Task';
       document.getElementById('task-modal-type-badge').textContent = 'New Task';
       if (delBtn) delBtn.classList.add('hidden');
+      if (posWrapper) posWrapper.classList.remove('hidden');
 
       idInput.value = '';
       titleInput.value = '';
@@ -2528,6 +2606,18 @@ const app = {
       estInput.value = '4.0';
       if (actInput) actInput.value = '0.0';
       tagsInput.value = '';
+
+      if (params.insert_after_id && posSelect) {
+        posSelect.value = `after_${params.insert_after_id}`;
+        const pred = sortedTasks.find(t => t.id === Number(params.insert_after_id));
+        if (pred) {
+          if (pred.due_date && !params.start_date) {
+            startInput.value = pred.due_date;
+          }
+        }
+      } else if (params.position && posSelect) {
+        posSelect.value = params.position;
+      }
     }
 
     this.updateTaskModalDateBadges();
@@ -2690,11 +2780,14 @@ const app = {
 
     const tempSubtasks = Array.from(document.querySelectorAll('.temporary-subtask')).map(el => el.textContent);
 
+    const position = document.getElementById('task-input-position')?.value || 'end';
+
     const payload = {
       title,
       description: desc,
       status,
       priority,
+      position,
       assignee_id: assigneeId ? Number(assigneeId) : null,
       start_date: startDate,
       due_date: dueDate,
@@ -2738,11 +2831,8 @@ const app = {
           method: 'POST',
           body: JSON.stringify(payload)
         });
-        if (created) {
-          this.state.tasks.push(created);
-          this.renderCurrentView();
-        }
-        this.showToast('Task created successfully', 'success');
+        this.showToast('Activity created successfully', 'success');
+        await this.fetchTasks();
       } catch (e) {
         console.error('Failed to create task:', e);
         this.showToast('Failed to create task', 'error');

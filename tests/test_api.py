@@ -140,6 +140,27 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(res["success"])
 
+    def test_04b_positional_insert_and_move(self):
+        # 1. Insert task after task 1
+        status, task = self.request("/api/projects/1/tasks", method="POST", body={
+            "title": "Inserted In-Between Task",
+            "position": "after_1",
+            "status": "todo"
+        })
+        self.assertEqual(status, 200)
+        new_id = task["id"]
+        self.assertGreater(task["order_index"], 0)
+
+        # 2. Move task up
+        status, move_res = self.request(f"/api/tasks/{new_id}/move", method="POST", body={
+            "direction": "up"
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(move_res["success"])
+
+        # Clean up
+        self.request(f"/api/tasks/{new_id}", method="DELETE")
+
     def test_05_analytics_and_burndown(self):
         status, analytics = self.request("/api/projects/1/analytics")
         self.assertEqual(status, 200)
