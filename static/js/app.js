@@ -1494,10 +1494,12 @@ const app = {
           <!-- 4. Assignee / Role -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[170px]">
-              <select onchange="app.inlineUpdateTask(${t.id}, 'assignee_id', this.value ? Number(this.value) : null)"
+              <select onchange="app.handleTableAssigneeChange(${t.id}, this.value)"
                 class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate">
-                <option value="">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</option>
+                <option value="">Unassigned</option>
                 ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
+                ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(t.assignee_name)} (Custom)</option>` : ''}
+                <option value="__add_new__" class="font-bold text-blue-600 dark:text-blue-400">+ Type Custom Assignee...</option>
               </select>
             </div>
           </td>
@@ -1632,6 +1634,53 @@ const app = {
       t.assignee_avatar = prevAssigneeAvatar;
       this.renderCurrentView();
       this.showToast(`Failed to update ${field.replace('_', ' ')}`, 'error');
+    }
+  },
+
+  async handleTableAssigneeChange(taskId, value) {
+    if (value === '__current__') return;
+    if (value === '__add_new__') {
+      const name = prompt('Enter new / custom assignee name for this activity:');
+      if (!name || !name.trim()) {
+        this.renderTable();
+        return;
+      }
+      const cleanedName = name.trim();
+      const t = this.state.tasks.find(x => x.id === taskId);
+      if (t) {
+        t.assignee_name = cleanedName;
+        t.assignee_avatar = '#3B82F6';
+        this.renderCurrentView();
+      }
+      try {
+        const updated = await this.api(`/api/tasks/${taskId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ assignee_name: cleanedName })
+        });
+        if (updated) {
+          const idx = this.state.tasks.findIndex(x => x.id === taskId);
+          if (idx !== -1) this.state.tasks[idx] = updated;
+          if (this.state.currentProject && updated.assignee_id) {
+            if (!this.state.currentProject.members.some(m => m.id === updated.assignee_id)) {
+              this.state.currentProject.members.push({
+                id: updated.assignee_id,
+                name: updated.assignee_name,
+                role: 'Member',
+                avatar_color: updated.assignee_avatar || '#3B82F6'
+              });
+            }
+          }
+          this.syncCurrentProjectCache();
+          this.renderCurrentView();
+        }
+        this.showToast(`Assigned to "${cleanedName}"`, 'success');
+      } catch (e) {
+        console.error('Failed to assign new member:', e);
+        this.showToast('Failed to assign member', 'error');
+        this.fetchTasks();
+      }
+    } else {
+      this.inlineUpdateTask(taskId, 'assignee_id', value ? Number(value) : null);
     }
   },
 
@@ -2537,6 +2586,7 @@ const app = {
     const statusSelect = document.getElementById('task-input-status');
     const prioritySelect = document.getElementById('task-input-priority');
     const assigneeSelect = document.getElementById('task-input-assignee');
+    const manualAssigneeInput = document.getElementById('task-input-assignee-manual');
     const startInput = document.getElementById('task-input-startdate');
     const dueInput = document.getElementById('task-input-duedate');
     const estInput = document.getElementById('task-input-esthours');
@@ -2548,6 +2598,10 @@ const app = {
 
     document.getElementById('subtasks-container').innerHTML = '';
     document.getElementById('new-subtask-input').value = '';
+
+    // Reset manual assignee mode
+    this.toggleTaskAssigneeManualMode(false);
+    if (manualAssigneeInput) manualAssigneeInput.value = '';
 
     const sortedTasks = [...(this.state.tasks || [])].sort((a, b) => {
       const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
@@ -2580,7 +2634,18 @@ const app = {
         descInput.value = localTask.description || '';
         statusSelect.value = localTask.status || 'todo';
         prioritySelect.value = localTask.priority || 'medium';
-        assigneeSelect.value = localTask.assignee_id || '';
+        
+        // Handle Assignee matching
+        const matchedMember = localTask.assignee_id ? this.state.currentProject?.members?.find(m => m.id === localTask.assignee_id) : null;
+        if (matchedMember) {
+          if (assigneeSelect) assigneeSelect.value = String(matchedMember.id);
+        } else if (localTask.assignee_name) {
+          if (manualAssigneeInput) manualAssigneeInput.value = localTask.assignee_name;
+          this.toggleTaskAssigneeManualMode(true);
+        } else {
+          if (assigneeSelect) assigneeSelect.value = '';
+        }
+
         startInput.value = localTask.start_date || '';
         dueInput.value = localTask.due_date || '';
         estInput.value = localTask.estimated_hours || 0;
@@ -2603,7 +2668,17 @@ const app = {
           descInput.value = task.description || '';
           statusSelect.value = task.status || 'todo';
           prioritySelect.value = task.priority || 'medium';
-          assigneeSelect.value = task.assignee_id || '';
+          
+          const matchedMember = task.assignee_id ? this.state.currentProject?.members?.find(m => m.id === task.assignee_id) : null;
+          if (matchedMember) {
+            if (assigneeSelect) assigneeSelect.value = String(matchedMember.id);
+          } else if (task.assignee_name) {
+            if (manualAssigneeInput) manualAssigneeInput.value = task.assignee_name;
+            this.toggleTaskAssigneeManualMode(true);
+          } else {
+            if (assigneeSelect) assigneeSelect.value = '';
+          }
+
           startInput.value = task.start_date || '';
           dueInput.value = task.due_date || '';
           estInput.value = task.estimated_hours || 0;
@@ -2627,7 +2702,13 @@ const app = {
       descInput.value = '';
       statusSelect.value = params.status || 'todo';
       prioritySelect.value = 'medium';
-      assigneeSelect.value = '';
+      
+      if (params.assignee_name) {
+        if (manualAssigneeInput) manualAssigneeInput.value = params.assignee_name;
+        this.toggleTaskAssigneeManualMode(true);
+      } else if (assigneeSelect) {
+        assigneeSelect.value = params.assignee_id ? String(params.assignee_id) : '';
+      }
       
       startInput.value = params.start_date || '';
       dueInput.value = params.due_date || '';
@@ -2695,10 +2776,53 @@ const app = {
   populateTaskModalDropdowns() {
     const p = this.state.currentProject;
     const assigneeSelect = document.getElementById('task-input-assignee');
+    const membersDatalist = document.getElementById('project-members-datalist');
 
     if (assigneeSelect && p) {
       assigneeSelect.innerHTML = `<option value="">Unassigned</option>` +
-        (p.members || []).map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${m.role})</option>`).join('');
+        (p.members || []).map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${m.role})</option>`).join('') +
+        `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>`;
+    }
+
+    if (membersDatalist && p) {
+      membersDatalist.innerHTML = (p.members || []).map(m => `<option value="${this.escapeHtml(m.name)}">`).join('');
+    }
+  },
+
+  toggleTaskAssigneeManualMode(forceMode = null) {
+    const selectCont = document.getElementById('task-assignee-select-container');
+    const manualCont = document.getElementById('task-assignee-manual-container');
+    const toggleLabel = document.getElementById('task-assignee-toggle-label');
+    const manualInput = document.getElementById('task-input-assignee-manual');
+    const selectEl = document.getElementById('task-input-assignee');
+
+    const isCurrentlyManual = !manualCont?.classList.contains('hidden');
+    const willBeManual = forceMode !== null ? forceMode : !isCurrentlyManual;
+
+    if (willBeManual) {
+      selectCont?.classList.add('hidden');
+      manualCont?.classList.remove('hidden');
+      if (toggleLabel) toggleLabel.textContent = 'Choose List';
+      if (manualInput) {
+        if (selectEl && selectEl.value && selectEl.value !== '__manual__') {
+          const m = this.state.currentProject?.members?.find(x => String(x.id) === String(selectEl.value));
+          if (m && !manualInput.value) manualInput.value = m.name;
+        }
+        manualInput.focus();
+      }
+    } else {
+      manualCont?.classList.add('hidden');
+      selectCont?.classList.remove('hidden');
+      if (toggleLabel) toggleLabel.textContent = '+ Custom Name';
+      if (selectEl && selectEl.value === '__manual__') {
+        selectEl.value = '';
+      }
+    }
+  },
+
+  handleTaskAssigneeSelectChange(value) {
+    if (value === '__manual__') {
+      this.toggleTaskAssigneeManualMode(true);
     }
   },
 
@@ -2798,7 +2922,34 @@ const app = {
     const desc = document.getElementById('task-input-description')?.value || '';
     const status = document.getElementById('task-input-status')?.value || 'todo';
     const priority = document.getElementById('task-input-priority')?.value || 'medium';
-    const assigneeId = document.getElementById('task-input-assignee')?.value || null;
+
+    // Assignee resolution (handles both select dropdown and manual custom text input)
+    const isManualAssignee = !document.getElementById('task-assignee-manual-container')?.classList.contains('hidden');
+    const manualAssigneeName = document.getElementById('task-input-assignee-manual')?.value.trim();
+    const selectAssigneeVal = document.getElementById('task-input-assignee')?.value;
+
+    let assigneeId = null;
+    let assigneeName = null;
+    let assigneeAvatar = null;
+
+    if (isManualAssignee && manualAssigneeName) {
+      assigneeName = manualAssigneeName;
+      // Check if matches an existing member
+      const matched = this.state.currentProject?.members?.find(m => m.name.toLowerCase() === manualAssigneeName.toLowerCase());
+      if (matched) {
+        assigneeId = matched.id;
+        assigneeAvatar = matched.avatar_color;
+      } else {
+        assigneeId = null;
+        assigneeAvatar = '#3B82F6';
+      }
+    } else if (!isManualAssignee && selectAssigneeVal && selectAssigneeVal !== '__manual__') {
+      assigneeId = Number(selectAssigneeVal);
+      const matched = this.state.currentProject?.members?.find(m => m.id === assigneeId);
+      assigneeName = matched ? matched.name : null;
+      assigneeAvatar = matched ? matched.avatar_color : null;
+    }
+
     const startDate = document.getElementById('task-input-startdate')?.value || null;
     const dueDate = document.getElementById('task-input-duedate')?.value || null;
     const estHours = parseFloat(document.getElementById('task-input-esthours')?.value || 0);
@@ -2815,7 +2966,8 @@ const app = {
       status,
       priority,
       position,
-      assignee_id: assigneeId ? Number(assigneeId) : null,
+      assignee_id: assigneeId,
+      assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : undefined,
       start_date: startDate,
       due_date: dueDate,
       estimated_hours: estHours,
@@ -2833,10 +2985,20 @@ const app = {
       const localTask = this.state.tasks.find(t => t.id === numId);
       const prevCopy = localTask ? { ...localTask } : null;
       if (localTask) {
-        Object.assign(localTask, payload);
-        const member = this.state.currentProject?.members?.find(m => m.id === payload.assignee_id);
-        localTask.assignee_name = member ? member.name : null;
-        localTask.assignee_avatar = member ? member.avatar_color : null;
+        Object.assign(localTask, {
+          title,
+          description: desc,
+          status,
+          priority,
+          assignee_id: assigneeId,
+          assignee_name: assigneeName,
+          assignee_avatar: assigneeAvatar,
+          start_date: startDate,
+          due_date: dueDate,
+          estimated_hours: estHours,
+          actual_hours: actHours,
+          tags
+        });
         this.renderCurrentView();
         this.syncCurrentProjectCache();
       }
@@ -2849,7 +3011,18 @@ const app = {
         });
         if (localTask && updated) {
           Object.assign(localTask, updated);
+          if (this.state.currentProject && updated.assignee_id && updated.assignee_name) {
+            if (!this.state.currentProject.members.some(m => m.id === updated.assignee_id)) {
+              this.state.currentProject.members.push({
+                id: updated.assignee_id,
+                name: updated.assignee_name,
+                role: 'Member',
+                avatar_color: updated.assignee_avatar || '#3B82F6'
+              });
+            }
+          }
           this.syncCurrentProjectCache();
+          this.renderCurrentView();
         }
       } catch (e) {
         console.error('Failed to update task:', e);
@@ -2862,7 +3035,6 @@ const app = {
     } else {
       // CREATE NEW TASK (Optimistic 0ms UI insertion)
       const tempId = -Date.now();
-      const member = this.state.currentProject?.members?.find(m => m.id === payload.assignee_id);
       const optimisticTask = {
         id: tempId,
         project_id: this.state.currentProjectId,
@@ -2870,9 +3042,9 @@ const app = {
         description: desc,
         status: status,
         priority: priority,
-        assignee_id: payload.assignee_id,
-        assignee_name: member ? member.name : null,
-        assignee_avatar: member ? member.avatar_color : null,
+        assignee_id: assigneeId,
+        assignee_name: assigneeName,
+        assignee_avatar: assigneeAvatar,
         start_date: startDate,
         due_date: dueDate,
         estimated_hours: estHours,
@@ -2932,7 +3104,18 @@ const app = {
           if (idx !== -1) {
             this.state.tasks[idx] = created;
           }
+          if (this.state.currentProject && created.assignee_id && created.assignee_name) {
+            if (!this.state.currentProject.members.some(m => m.id === created.assignee_id)) {
+              this.state.currentProject.members.push({
+                id: created.assignee_id,
+                name: created.assignee_name,
+                role: 'Member',
+                avatar_color: created.assignee_avatar || '#3B82F6'
+              });
+            }
+          }
           this.syncCurrentProjectCache();
+          this.renderCurrentView();
         }
       } catch (e) {
         console.error('Failed to create task on server:', e);

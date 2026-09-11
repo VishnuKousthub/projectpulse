@@ -1030,10 +1030,32 @@
           </div>
 
           <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Assignee</label>
-            <select id="task-input-assignee" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
-              <option value="">Unassigned</option>
-            </select>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 text-xs">Assignee</label>
+              <button type="button" id="task-assignee-toggle-btn" onclick="app.toggleTaskAssigneeManualMode()" class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-semibold flex items-center gap-1" title="Type a custom assignee name">
+                <i data-lucide="user-plus" class="w-3 h-3"></i>
+                <span id="task-assignee-toggle-label">+ Custom Name</span>
+              </button>
+            </div>
+            
+            <!-- Standard Select Mode -->
+            <div id="task-assignee-select-container">
+              <select id="task-input-assignee" onchange="app.handleTaskAssigneeSelectChange(this.value)" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white text-xs">
+                <option value="">Unassigned</option>
+              </select>
+            </div>
+
+            <!-- Manual Custom Input Mode -->
+            <div id="task-assignee-manual-container" class="hidden space-y-1">
+              <div class="relative flex items-center">
+                <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5"></i>
+                <input type="text" id="task-input-assignee-manual" list="project-members-datalist" placeholder="Type assignee name..." class="w-full pl-8 pr-16 py-1.5 bg-slate-50 dark:bg-slate-900 border border-blue-400 dark:border-blue-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white text-xs font-medium">
+                <button type="button" onclick="app.toggleTaskAssigneeManualMode(false)" class="absolute right-1.5 px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-semibold bg-slate-200 dark:bg-slate-700 rounded" title="Choose from existing members list">
+                  List
+                </button>
+              </div>
+              <datalist id="project-members-datalist"></datalist>
+            </div>
           </div>
         </div>
 
@@ -1674,6 +1696,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.1.6"></script>
+  <script src="/static/js/app.js?v=2.1.7"></script>
 </body>
 </html>

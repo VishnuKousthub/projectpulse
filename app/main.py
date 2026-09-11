@@ -728,6 +728,30 @@ def create_task(project_id):
 
     with get_db() as conn:
         cursor = conn.cursor()
+
+        # Handle manual assignee name input (e.g. typing custom assignee name directly in task)
+        assignee_name_input = (data.get("assignee_name") or data.get("new_assignee_name") or "").strip()
+        if assignee_name_input:
+            existing_m = conn.execute(
+                "SELECT id FROM members WHERE project_id = ? AND LOWER(name) = LOWER(?)",
+                (project_id, assignee_name_input)
+            ).fetchone()
+            if existing_m:
+                assignee_id = existing_m["id"]
+            else:
+                avatar_colors = ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#10B981", "#F59E0B", "#14B8A6", "#F97316"]
+                import random
+                color = random.choice(avatar_colors)
+                cursor.execute("""
+                    INSERT INTO members (project_id, name, email, role, avatar_color)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (project_id, assignee_name_input, "", "Member", color))
+                assignee_id = cursor.lastrowid
+                record_activity(conn, project_id, "User", "Member Added", f'Added member "{assignee_name_input}"')
+        elif assignee_id and str(assignee_id).isdigit():
+            assignee_id = int(assignee_id)
+        else:
+            assignee_id = None
         
         target_order = None
         if insert_after_id:
@@ -870,8 +894,31 @@ def update_task(task_id):
         sprint_val = data["sprint_id"] if "sprint_id" in data else task["sprint_id"]
         sprint_id = int(sprint_val) if sprint_val and str(sprint_val).isdigit() else None
         
-        assignee_val = data["assignee_id"] if "assignee_id" in data else task["assignee_id"]
-        assignee_id = int(assignee_val) if assignee_val and str(assignee_val).isdigit() else None
+        cursor = conn.cursor()
+
+        assignee_name_input = (data.get("assignee_name") or data.get("new_assignee_name") or "").strip()
+        if assignee_name_input:
+            existing_m = conn.execute(
+                "SELECT id FROM members WHERE project_id = ? AND LOWER(name) = LOWER(?)",
+                (project_id, assignee_name_input)
+            ).fetchone()
+            if existing_m:
+                assignee_id = existing_m["id"]
+            else:
+                avatar_colors = ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#10B981", "#F59E0B", "#14B8A6", "#F97316"]
+                import random
+                color = random.choice(avatar_colors)
+                cursor.execute("""
+                    INSERT INTO members (project_id, name, email, role, avatar_color)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (project_id, assignee_name_input, "", "Member", color))
+                assignee_id = cursor.lastrowid
+                record_activity(conn, project_id, "User", "Member Added", f'Added member "{assignee_name_input}"')
+        elif "assignee_id" in data:
+            assignee_val = data["assignee_id"]
+            assignee_id = int(assignee_val) if assignee_val and str(assignee_val).isdigit() else None
+        else:
+            assignee_id = task["assignee_id"]
         
         order_index = int(data["order_index"]) if "order_index" in data else task["order_index"]
         

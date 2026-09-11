@@ -636,6 +636,45 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertIn("current_project", boot_data)
         self.assertIn("tasks", boot_data)
 
+    def test_18_manual_custom_assignee_creation_and_update(self):
+        # 1. Create a task with a new custom assignee name
+        status, task = self.request("/api/projects/1/tasks", method="POST", body={
+            "title": "Evaluate Chromatography Samples",
+            "assignee_name": "Dr. Marcus Vance",
+            "status": "in_progress",
+            "priority": "high"
+        })
+        self.assertEqual(status, 200)
+        self.assertIsNotNone(task["assignee_id"])
+        self.assertEqual(task["assignee_name"], "Dr. Marcus Vance")
+        t_id = task["id"]
+        member_id_1 = task["assignee_id"]
+
+        # Verify member was added to project members
+        status, members = self.request("/api/projects/1/members")
+        self.assertEqual(status, 200)
+        member_names = [m["name"] for m in members]
+        self.assertIn("Dr. Marcus Vance", member_names)
+
+        # 2. Update task with another new custom assignee
+        status, updated_task = self.request(f"/api/tasks/{t_id}", method="PUT", body={
+            "assignee_name": "Sarah Connor"
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(updated_task["assignee_name"], "Sarah Connor")
+        member_id_2 = updated_task["assignee_id"]
+        self.assertNotEqual(member_id_1, member_id_2)
+
+        # 3. Update task with existing member using case-insensitive name
+        status, updated_task_2 = self.request(f"/api/tasks/{t_id}", method="PUT", body={
+            "assignee_name": "dr. marcus vance"
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(updated_task_2["assignee_id"], member_id_1)
+
+        # Cleanup task
+        self.request(f"/api/tasks/{t_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 
