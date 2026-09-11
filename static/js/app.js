@@ -152,18 +152,35 @@ const app = {
 
   async api(endpoint, options = {}) {
     try {
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(options.headers || {})
-      };
-      if (this.state.authToken) {
-        headers['Authorization'] = `Bearer ${this.state.authToken}`;
+      const opts = { ...options };
+      const headers = { ...(opts.headers || {}) };
+
+      // Handle request body and Content-Type intelligently
+      if (opts.body !== undefined && opts.body !== null) {
+        if (typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+          opts.body = JSON.stringify(opts.body);
+          if (!headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+          }
+        } else if (typeof opts.body === 'string' && !headers['Content-Type']) {
+          headers['Content-Type'] = 'application/json';
+        }
+      } else {
+        const method = (opts.method || 'GET').toUpperCase();
+        if (['POST', 'PUT', 'PATCH'].includes(method)) {
+          opts.body = '{}';
+          if (!headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+          }
+        }
       }
 
-      const response = await fetch(endpoint, {
-        ...options,
-        headers
-      });
+      if (this.state.authToken && !headers['Authorization']) {
+        headers['Authorization'] = `Bearer ${this.state.authToken}`;
+      }
+      opts.headers = headers;
+
+      const response = await fetch(endpoint, opts);
 
       if (response.status === 401 && !endpoint.startsWith('/api/auth/')) {
         this.handleSessionExpired();
@@ -171,10 +188,28 @@ const app = {
       }
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || errData.detail || `Request failed with status ${response.status}`);
+        let errMsg = `Request failed with status ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData && (errData.error || errData.message || errData.detail)) {
+            errMsg = errData.error || errData.message || errData.detail;
+          }
+        } catch (_) {
+          try {
+            const rawText = await response.text();
+            if (rawText && rawText.length < 200 && !rawText.includes('<html') && !rawText.includes('<!DOCTYPE')) {
+              errMsg = rawText;
+            }
+          } catch (__) {}
+        }
+        throw new Error(errMsg);
       }
-      return await response.json();
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return await response.json();
+      }
+      return await response.text();
     } catch (err) {
       if (!endpoint.startsWith('/api/auth/')) {
         this.showToast(err.message, 'error');
@@ -831,7 +866,8 @@ const app = {
   },
 
   async handleTaskMove(taskId, newStatus) {
-    const task = this.state.tasks.find(t => t.id === taskId);
+    const numId = Number(taskId);
+    const task = this.state.tasks.find(t => t.id === numId || t.id === taskId);
     if (!task) return;
     const prevStatus = task.status;
     if (prevStatus === newStatus) return;
@@ -840,17 +876,19 @@ const app = {
     task.status = newStatus;
     this.renderKanban();
 
-    try {
-      await this.api(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: newStatus })
-      });
-      this.showToast(`Moved to ${newStatus.replace('_', ' ')}`, 'success');
-    } catch (e) {
-      console.error('Failed to move task:', e);
-      task.status = prevStatus;
-      this.renderKanban();
-      this.showToast('Failed to update task status', 'error');
+    if (numId > 0) {
+      try {
+        await this.api(`/api/tasks/${numId}`, {
+          method: 'PUT',
+          body: { status: newStatus }
+        });
+        this.showToast(`Moved to ${newStatus.replace('_', ' ')}`, 'success');
+      } catch (e) {
+        console.error('Failed to move task:', e);
+        task.status = prevStatus;
+        this.renderKanban();
+        this.showToast('Failed to update task status', 'error');
+      }
     }
   },
 
@@ -1610,7 +1648,8 @@ const app = {
   },
 
   async inlineUpdateTask(taskId, field, value, extraPayload = {}) {
-    const t = this.state.tasks.find(x => x.id === taskId);
+    const numId = Number(taskId);
+    const t = this.state.tasks.find(x => x.id === numId || x.id === taskId);
     if (!t) return;
 
     const previousValue = t[field];
@@ -1631,47 +1670,49 @@ const app = {
     this.syncCurrentProjectCache();
 
     // 3. Send update to server in background
-    try {
-      const payload = { [field]: value, ...extraPayload };
-      const updated = await this.api(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload)
-      });
-      
-      if (updated) {
-        Object.assign(t, updated);
-        if (this.state.currentProject && updated.assignee_id && updated.assignee_name) {
-          if (!this.state.currentProject.members) this.state.currentProject.members = [];
-          const cleanName = updated.assignee_name.trim().toLowerCase();
-          const existingIdx = this.state.currentProject.members.findIndex(m => 
-            m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
-          );
-          if (existingIdx !== -1) {
-            this.state.currentProject.members[existingIdx].id = updated.assignee_id;
-            this.state.currentProject.members[existingIdx].name = updated.assignee_name;
-            if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
-          } else {
-            this.state.currentProject.members.push({
-              id: updated.assignee_id,
-              name: updated.assignee_name,
-              role: 'Member',
-              avatar_color: updated.assignee_avatar || '#3B82F6'
-            });
+    if (numId > 0) {
+      try {
+        const payload = { [field]: value, ...extraPayload };
+        const updated = await this.api(`/api/tasks/${numId}`, {
+          method: 'PUT',
+          body: payload
+        });
+        
+        if (updated) {
+          Object.assign(t, updated);
+          if (this.state.currentProject && updated.assignee_id && updated.assignee_name) {
+            if (!this.state.currentProject.members) this.state.currentProject.members = [];
+            const cleanName = updated.assignee_name.trim().toLowerCase();
+            const existingIdx = this.state.currentProject.members.findIndex(m => 
+              m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+            );
+            if (existingIdx !== -1) {
+              this.state.currentProject.members[existingIdx].id = updated.assignee_id;
+              this.state.currentProject.members[existingIdx].name = updated.assignee_name;
+              if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
+            } else {
+              this.state.currentProject.members.push({
+                id: updated.assignee_id,
+                name: updated.assignee_name,
+                role: 'Member',
+                avatar_color: updated.assignee_avatar || '#3B82F6'
+              });
+            }
           }
+          this.syncCurrentProjectCache();
+          this.renderCurrentView();
         }
+        this.showToast(`Updated ${field.replace('_', ' ')}`, 'success');
+      } catch (e) {
+        console.error('Failed to update task:', e);
+        // Rollback on failure
+        t[field] = previousValue;
+        t.assignee_name = prevAssigneeName;
+        t.assignee_avatar = prevAssigneeAvatar;
         this.syncCurrentProjectCache();
         this.renderCurrentView();
+        this.showToast(`Failed to update ${field.replace('_', ' ')}`, 'error');
       }
-      this.showToast(`Updated ${field.replace('_', ' ')}`, 'success');
-    } catch (e) {
-      console.error('Failed to update task:', e);
-      // Rollback on failure
-      t[field] = previousValue;
-      t.assignee_name = prevAssigneeName;
-      t.assignee_avatar = prevAssigneeAvatar;
-      this.syncCurrentProjectCache();
-      this.renderCurrentView();
-      this.showToast(`Failed to update ${field.replace('_', ' ')}`, 'error');
     }
   },
 
@@ -1689,47 +1730,50 @@ const app = {
         return;
       }
       const cleanedName = name.trim();
-      const t = this.state.tasks.find(x => x.id === taskId);
+      const numId = Number(taskId);
+      const t = this.state.tasks.find(x => x.id === numId || x.id === taskId);
       if (t) {
         t.assignee_name = cleanedName;
         t.assignee_avatar = '#3B82F6';
         this.renderCurrentView();
       }
-      try {
-        const updated = await this.api(`/api/tasks/${taskId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ assignee_name: cleanedName })
-        });
-        if (updated) {
-          const idx = this.state.tasks.findIndex(x => x.id === taskId);
-          if (idx !== -1) this.state.tasks[idx] = updated;
-          if (this.state.currentProject && updated.assignee_id) {
-            if (!this.state.currentProject.members) this.state.currentProject.members = [];
-            const cleanName = (updated.assignee_name || cleanedName).trim().toLowerCase();
-            const existingIdx = this.state.currentProject.members.findIndex(m => 
-              m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
-            );
-            if (existingIdx !== -1) {
-              this.state.currentProject.members[existingIdx].id = updated.assignee_id;
-              this.state.currentProject.members[existingIdx].name = updated.assignee_name || cleanedName;
-              if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
-            } else {
-              this.state.currentProject.members.push({
-                id: updated.assignee_id,
-                name: updated.assignee_name || cleanedName,
-                role: 'Member',
-                avatar_color: updated.assignee_avatar || '#3B82F6'
-              });
+      if (numId > 0) {
+        try {
+          const updated = await this.api(`/api/tasks/${numId}`, {
+            method: 'PUT',
+            body: { assignee_name: cleanedName }
+          });
+          if (updated) {
+            const idx = this.state.tasks.findIndex(x => x.id === numId || x.id === taskId);
+            if (idx !== -1) this.state.tasks[idx] = updated;
+            if (this.state.currentProject && updated.assignee_id) {
+              if (!this.state.currentProject.members) this.state.currentProject.members = [];
+              const cleanName = (updated.assignee_name || cleanedName).trim().toLowerCase();
+              const existingIdx = this.state.currentProject.members.findIndex(m => 
+                m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+              );
+              if (existingIdx !== -1) {
+                this.state.currentProject.members[existingIdx].id = updated.assignee_id;
+                this.state.currentProject.members[existingIdx].name = updated.assignee_name || cleanedName;
+                if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
+              } else {
+                this.state.currentProject.members.push({
+                  id: updated.assignee_id,
+                  name: updated.assignee_name || cleanedName,
+                  role: 'Member',
+                  avatar_color: updated.assignee_avatar || '#3B82F6'
+                });
+              }
             }
+            this.syncCurrentProjectCache();
+            this.renderCurrentView();
           }
-          this.syncCurrentProjectCache();
-          this.renderCurrentView();
+          this.showToast(`Assigned to "${cleanedName}"`, 'success');
+        } catch (e) {
+          console.error('Failed to assign new member:', e);
+          this.showToast('Failed to assign member', 'error');
+          this.fetchTasks();
         }
-        this.showToast(`Assigned to "${cleanedName}"`, 'success');
-      } catch (e) {
-        console.error('Failed to assign new member:', e);
-        this.showToast('Failed to assign member', 'error');
-        this.fetchTasks();
       }
     } else {
       const memberId = value ? Number(value) : null;
@@ -3155,13 +3199,14 @@ const app = {
     if (!title) return;
 
     const taskId = document.getElementById('task-input-id')?.value;
-    if (taskId) {
+    const numTaskId = taskId ? Number(taskId) : null;
+    if (numTaskId && numTaskId > 0) {
       try {
-        await this.api(`/api/tasks/${taskId}/subtasks`, {
+        await this.api(`/api/tasks/${numTaskId}/subtasks`, {
           method: 'POST',
-          body: JSON.stringify({ title })
+          body: { title }
         });
-        const task = await this.api(`/api/tasks/${taskId}`);
+        const task = await this.api(`/api/tasks/${numTaskId}`);
         this.renderSubtaskList(task.subtasks || []);
         input.value = '';
       } catch (e) {
@@ -3185,11 +3230,12 @@ const app = {
     try {
       await this.api(`/api/subtasks/${subtaskId}`, {
         method: 'PUT',
-        body: JSON.stringify({ completed })
+        body: { completed }
       });
       const taskId = document.getElementById('task-input-id')?.value;
-      if (taskId) {
-        const task = await this.api(`/api/tasks/${taskId}`);
+      const numTaskId = taskId ? Number(taskId) : null;
+      if (numTaskId && numTaskId > 0) {
+        const task = await this.api(`/api/tasks/${numTaskId}`);
         this.renderSubtaskList(task.subtasks || []);
       }
       this.fetchTasks();
@@ -3202,8 +3248,9 @@ const app = {
     try {
       await this.api(`/api/subtasks/${subtaskId}`, { method: 'DELETE' });
       const taskId = document.getElementById('task-input-id')?.value;
-      if (taskId) {
-        const task = await this.api(`/api/tasks/${taskId}`);
+      const numTaskId = taskId ? Number(taskId) : null;
+      if (numTaskId && numTaskId > 0) {
+        const task = await this.api(`/api/tasks/${numTaskId}`);
         this.renderSubtaskList(task.subtasks || []);
       }
       this.fetchTasks();
@@ -3280,10 +3327,12 @@ const app = {
     // Close modal immediately (instant 0ms UX)
     this.closeTaskModal();
 
-    if (taskId) {
+    const numTaskId = taskId ? Number(taskId) : null;
+    const isExistingTask = numTaskId && numTaskId > 0;
+
+    if (isExistingTask) {
       // EDIT EXISTING TASK (Optimistic)
-      const numId = Number(taskId);
-      const localTask = this.state.tasks.find(t => t.id === numId);
+      const localTask = this.state.tasks.find(t => t.id === numTaskId);
       const prevCopy = localTask ? { ...localTask } : null;
       if (localTask) {
         Object.assign(localTask, {
@@ -3306,9 +3355,9 @@ const app = {
       this.showToast('Task updated successfully', 'success');
 
       try {
-        const updated = await this.api(`/api/tasks/${taskId}`, {
+        const updated = await this.api(`/api/tasks/${numTaskId}`, {
           method: 'PUT',
-          body: JSON.stringify(payload)
+          body: payload
         });
         if (localTask && updated) {
           Object.assign(localTask, updated);
@@ -3407,7 +3456,7 @@ const app = {
       try {
         const created = await this.api(`/api/projects/${this.state.currentProjectId}/tasks`, {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: payload
         });
         if (created) {
           const idx = this.state.tasks.findIndex(t => t.id === tempId);
@@ -3469,15 +3518,17 @@ const app = {
     this.syncCurrentProjectCache();
     this.showToast('Task deleted', 'success');
 
-    try {
-      await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
-    } catch (e) {
-      console.error('Failed to delete task on server:', e);
-      this.state.tasks = prevTasks;
-      if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
-      this.renderProjectsSidebar();
-      this.renderCurrentView();
-      this.showToast('Failed to delete task on server', 'error');
+    if (numId > 0) {
+      try {
+        await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
+      } catch (e) {
+        console.error('Failed to delete task on server:', e);
+        this.state.tasks = prevTasks;
+        if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
+        this.renderProjectsSidebar();
+        this.renderCurrentView();
+        this.showToast('Failed to delete task on server', 'error');
+      }
     }
   },
 

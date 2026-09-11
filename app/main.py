@@ -1950,6 +1950,31 @@ def get_notification_log_detail(log_id):
             return json_response({"error": "Log not found"}, status=404)
         return json_response(dict(log))
 
+# ==================== GLOBAL JSON ERROR HANDLERS ====================
+
+@app.error(400)
+def error_400(error):
+    response.content_type = "application/json"
+    msg = str(error.body) if (error.body and not str(error.body).startswith("<!DOCTYPE")) else "Bad Request"
+    return json.dumps({"error": msg, "status": 400})
+
+@app.error(404)
+def error_404(error):
+    response.content_type = "application/json"
+    msg = str(error.body) if (error.body and not str(error.body).startswith("<!DOCTYPE")) else "Resource not found"
+    return json.dumps({"error": msg, "status": 404})
+
+@app.error(405)
+def error_405(error):
+    response.content_type = "application/json"
+    return json.dumps({"error": "Method Not Allowed", "status": 405})
+
+@app.error(500)
+def error_500(error):
+    response.content_type = "application/json"
+    msg = str(error.body) if (error.body and not str(error.body).startswith("<!DOCTYPE")) else "Internal Server Error"
+    return json.dumps({"error": msg, "status": 500})
+
 def init_app():
     try:
         init_db()
