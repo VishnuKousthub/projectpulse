@@ -756,8 +756,67 @@ class TestProjectPulseAPI(unittest.TestCase):
         # Cleanup task
         self.request(f"/api/tasks/{t_id}", method="DELETE")
 
+    def test_21_robust_task_updates_and_edge_cases(self):
+        # 1. Create a task with complex/empty inputs
+        status, task = self.request("/api/projects/1/tasks", method="POST", body={
+            "title": "Edge Case Task Testing",
+            "estimated_hours": "12.5",
+            "actual_hours": "",
+            "start_date": "null",
+            "due_date": "",
+            "tags": ["frontend", "#ui", " "],
+            "assignee_name": "  Dr. Robust Tester  "
+        })
+        self.assertEqual(status, 200)
+        t_id = task["id"]
+        self.assertEqual(task["estimated_hours"], 12.5)
+        self.assertEqual(task["actual_hours"], 0.0)
+        self.assertIsNone(task["start_date"])
+        self.assertIsNone(task["due_date"])
+        self.assertEqual(task["assignee_name"], "Dr. Robust Tester")
+        self.assertIn("frontend", task["tags"])
+        self.assertIn("ui", task["tags"])
+
+        # 2. Update with malformed/empty string values (should never 500 error!)
+        status, updated_1 = self.request(f"/api/tasks/{t_id}", method="PUT", body={
+            "estimated_hours": "",
+            "actual_hours": "NaN",
+            "start_date": "2026-09-15",
+            "due_date": "undefined",
+            "order_index": "not_an_int"
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(updated_1["start_date"], "2026-09-15")
+        self.assertIsNone(updated_1["due_date"])
+
+        # 3. Change assignee to unassigned
+        status, updated_2 = self.request(f"/api/tasks/{t_id}", method="PUT", body={
+            "assignee_id": None
+        })
+        self.assertEqual(status, 200)
+        self.assertIsNone(updated_2["assignee_id"])
+        self.assertIsNone(updated_2["assignee_name"])
+
+        # 4. Change assignee by ID back to Dr. Robust Tester
+        status, members = self.request("/api/projects/1/members")
+        self.assertEqual(status, 200)
+        tester_m = [m for m in members if m["name"] == "Dr. Robust Tester"][0]
+        
+        status, updated_3 = self.request(f"/api/tasks/{t_id}", method="PUT", body={
+            "assignee_id": tester_m["id"],
+            "assignee_name": "Dr. Robust Tester"
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(updated_3["assignee_id"], tester_m["id"])
+        self.assertEqual(updated_3["assignee_name"], "Dr. Robust Tester")
+
+        # Cleanup
+        self.request(f"/api/tasks/{t_id}", method="DELETE")
+        self.request(f"/api/projects/1/members/{tester_m['id']}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

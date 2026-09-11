@@ -28,6 +28,30 @@ def json_response(data, status=200):
     response.content_type = "application/json"
     return json.dumps(data)
 
+import math
+
+def safe_float(val, default=0.0):
+    if val is None or val == "":
+        return default
+    try:
+        f = float(val)
+        return default if (math.isnan(f) or math.isinf(f)) else f
+    except (ValueError, TypeError):
+        return default
+
+def safe_int(val, default=None):
+    if val is None or val == "":
+        return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+def clean_text(val):
+    if val is None:
+        return ""
+    return " ".join(str(val).strip().split())
+
 def record_activity(conn, project_id, user_name, action, details, task_id=None):
     now_str = get_now_iso()
     conn.execute("""
@@ -762,28 +786,49 @@ def get_tasks(project_id):
 
 @app.post("/api/projects/<project_id:int>/tasks")
 def create_task(project_id):
-    data = request.json or {}
-    title = data.get("title", "").strip()
+    try:
+        data = request.json or {}
+    except Exception:
+        data = {}
+        
+    title = clean_text(data.get("title"))
     if not title:
         return json_response({"error": "Task title is required"}, status=400)
     
-    desc = data.get("description", "")
-    status = data.get("status", "todo")
-    priority = data.get("priority", "medium")
-    sprint_id = data.get("sprint_id")
-    assignee_id = data.get("assignee_id")
+    desc = str(data.get("description") or "")
+    status = str(data.get("status") or "todo")
+    priority = str(data.get("priority") or "medium")
+    
+    sprint_val = data.get("sprint_id")
+    sprint_id = safe_int(sprint_val)
+    if sprint_id is not None and sprint_id <= 0:
+        sprint_id = None
+        
     start_date = data.get("start_date")
+    start_date = str(start_date).strip() if start_date and str(start_date).strip() not in ("", "null", "undefined", "None") else None
+    
     due_date = data.get("due_date")
-    est_hours = float(data.get("estimated_hours") or 0.0)
-    tags = data.get("tags", [])
-    tags_json = json.dumps(tags if isinstance(tags, list) else [])
+    due_date = str(due_date).strip() if due_date and str(due_date).strip() not in ("", "null", "undefined", "None") else None
+    
+    est_hours = safe_float(data.get("estimated_hours"), 0.0)
+    act_hours = safe_float(data.get("actual_hours"), 0.0)
+    
+    raw_tags = data.get("tags", [])
+    if isinstance(raw_tags, list):
+        tags_list = [str(t).strip().lstrip('#') for t in raw_tags if str(t).strip()]
+    elif isinstance(raw_tags, str):
+        tags_list = [t.strip().lstrip('#') for t in raw_tags.split(',') if t.strip()]
+    else:
+        tags_list = []
+    tags_json = json.dumps(tags_list)
+    
     subtasks = data.get("subtasks", [])
     now_str = get_now_iso()
 
     position = data.get("position")  # "end", "start", "after_<id>", "before_<id>"
-    insert_after_id = data.get("insert_after_id")
-    insert_before_id = data.get("insert_before_id")
-    custom_order_index = data.get("order_index")
+    insert_after_id = safe_int(data.get("insert_after_id"))
+    insert_before_id = safe_int(data.get("insert_before_id"))
+    custom_order_index = safe_int(data.get("order_index"))
 
     if position and isinstance(position, str):
         if position.startswith("after_"):
@@ -800,8 +845,11 @@ def create_task(project_id):
     with get_db() as conn:
         cursor = conn.cursor()
 
-        # Handle manual assignee name input (e.g. typing custom assignee name directly in task)
-        assignee_name_input = " ".join((data.get("assignee_name") or data.get("new_assignee_name") or "").strip().split())
+        # Handle assignee resolution with high reliability
+        assignee_id = None
+        assignee_name_input = clean_text(data.get("assignee_name") or data.get("new_assignee_name"))
+        raw_assignee_id = data.get("assignee_id")
+        
         if assignee_name_input:
             existing_m = conn.execute(
                 "SELECT id FROM members WHERE project_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id ASC LIMIT 1",
@@ -819,10 +867,12 @@ def create_task(project_id):
                 """, (project_id, assignee_name_input, "", "Member", color))
                 assignee_id = cursor.lastrowid
                 record_activity(conn, project_id, "User", "Member Added", f'Added member "{assignee_name_input}"')
-        elif assignee_id and str(assignee_id).isdigit():
-            assignee_id = int(assignee_id)
-        else:
-            assignee_id = None
+        elif raw_assignee_id is not None:
+            parsed_aid = safe_int(raw_assignee_id)
+            if parsed_aid and parsed_aid > 0:
+                m_check = conn.execute("SELECT id FROM members WHERE id = ? AND project_id = ?", (parsed_aid, project_id)).fetchone()
+                if m_check:
+                    assignee_id = m_check["id"]
         
         target_order = None
         if insert_after_id:
@@ -852,7 +902,7 @@ def create_task(project_id):
             else:
                 target_order = 0
         elif custom_order_index is not None:
-            target_order = int(custom_order_index)
+            target_order = custom_order_index
             conn.execute(
                 "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
                 (project_id, target_order)
@@ -874,7 +924,7 @@ def create_task(project_id):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id, sprint_id, title, desc, status, priority,
-            target_order, start_date, due_date, est_hours, 0.0,
+            target_order, start_date, due_date, est_hours, act_hours,
             assignee_id, tags_json, now_str, now_str
         ))
         t_id = cursor.lastrowid
@@ -949,25 +999,37 @@ def get_task(task_id):
 
 @app.put("/api/tasks/<task_id:int>")
 def update_task(task_id):
-    data = request.json or {}
+    try:
+        data = request.json or {}
+    except Exception:
+        data = {}
+        
     with get_db() as conn:
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
 
         project_id = task["project_id"]
-        
-        title = data["title"].strip() if "title" in data and data["title"] else task["title"]
-        desc = data["description"] if "description" in data else task["description"]
-        status = data["status"] if "status" in data else task["status"]
-        priority = data["priority"] if "priority" in data else task["priority"]
-        
-        sprint_val = data["sprint_id"] if "sprint_id" in data else task["sprint_id"]
-        sprint_id = int(sprint_val) if sprint_val and str(sprint_val).isdigit() else None
-        
         cursor = conn.cursor()
+        
+        # 1. Text & Enum fields
+        title = clean_text(data["title"]) if "title" in data and clean_text(data["title"]) else task["title"]
+        desc = str(data["description"]) if "description" in data and data["description"] is not None else task["description"]
+        status = str(data["status"]) if "status" in data and data["status"] else task["status"]
+        priority = str(data["priority"]) if "priority" in data and data["priority"] else task["priority"]
+        
+        # 2. Sprint ID
+        if "sprint_id" in data:
+            sprint_val = data["sprint_id"]
+            parsed_sprint = safe_int(sprint_val)
+            sprint_id = parsed_sprint if (parsed_sprint and parsed_sprint > 0) else None
+        else:
+            sprint_id = task["sprint_id"]
 
-        assignee_name_input = " ".join((data.get("assignee_name") or data.get("new_assignee_name") or "").strip().split())
+        # 3. Assignee resolution (handles custom name input, dropdown id, and unassignment)
+        assignee_id = task["assignee_id"]
+        assignee_name_input = clean_text(data.get("assignee_name") or data.get("new_assignee_name"))
+        
         if assignee_name_input:
             existing_m = conn.execute(
                 "SELECT id FROM members WHERE project_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id ASC LIMIT 1",
@@ -987,24 +1049,58 @@ def update_task(task_id):
                 record_activity(conn, project_id, "User", "Member Added", f'Added member "{assignee_name_input}"')
         elif "assignee_id" in data:
             assignee_val = data["assignee_id"]
-            assignee_id = int(assignee_val) if assignee_val and str(assignee_val).isdigit() else None
+            parsed_aid = safe_int(assignee_val)
+            if parsed_aid and parsed_aid > 0:
+                m_check = conn.execute("SELECT id FROM members WHERE id = ? AND project_id = ?", (parsed_aid, project_id)).fetchone()
+                if m_check:
+                    assignee_id = m_check["id"]
+                else:
+                    assignee_id = None
+            else:
+                assignee_id = None
+        
+        # 4. Dates
+        if "start_date" in data:
+            sd = data["start_date"]
+            start_date = str(sd).strip() if sd and str(sd).strip() not in ("", "null", "undefined", "None") else None
         else:
-            assignee_id = task["assignee_id"]
-        
-        order_index = int(data["order_index"]) if "order_index" in data else task["order_index"]
-        
-        start_date = data["start_date"] if "start_date" in data else task["start_date"]
-        if start_date == "":
-            start_date = None
+            start_date = task["start_date"]
+
+        if "due_date" in data:
+            dd = data["due_date"]
+            due_date = str(dd).strip() if dd and str(dd).strip() not in ("", "null", "undefined", "None") else None
+        else:
+            due_date = task["due_date"]
+
+        # 5. Hours & Order Index
+        if "order_index" in data:
+            order_index = safe_int(data["order_index"], task["order_index"])
+        else:
+            order_index = task["order_index"]
+
+        if "estimated_hours" in data:
+            est_hours = safe_float(data["estimated_hours"], safe_float(task["estimated_hours"], 0.0))
+        else:
+            est_hours = safe_float(task["estimated_hours"], 0.0)
+
+        if "actual_hours" in data:
+            act_hours = safe_float(data["actual_hours"], safe_float(task["actual_hours"], 0.0))
+        else:
+            act_hours = safe_float(task["actual_hours"], 0.0)
+
+        # 6. Tags
+        if "tags" in data:
+            raw_tags = data["tags"]
+            if isinstance(raw_tags, list):
+                tags_list = [str(t).strip().lstrip('#') for t in raw_tags if str(t).strip()]
+            elif isinstance(raw_tags, str):
+                tags_list = [t.strip().lstrip('#') for t in raw_tags.split(',') if t.strip()]
+            else:
+                tags_list = []
+            tags_json = json.dumps(tags_list)
+        else:
+            tags_json = task["tags"] or "[]"
             
-        due_date = data["due_date"] if "due_date" in data else task["due_date"]
-        if due_date == "":
-            due_date = None
-            
-        est_hours = float(data["estimated_hours"]) if "estimated_hours" in data and data["estimated_hours"] is not None else float(task["estimated_hours"] or 0)
-        act_hours = float(data["actual_hours"]) if "actual_hours" in data and data["actual_hours"] is not None else float(task["actual_hours"] or 0)
-        
-        tags_json = json.dumps(data["tags"] if isinstance(data.get("tags"), list) else []) if "tags" in data else task["tags"]
         now_str = get_now_iso()
 
         conn.execute("""
@@ -1019,6 +1115,16 @@ def update_task(task_id):
             est_hours, act_hours, tags_json, now_str, task_id
         ))
 
+        # 7. Subtasks if provided
+        if isinstance(data.get("subtasks"), list):
+            sub_count = conn.execute("SELECT COUNT(*) FROM subtasks WHERE task_id = ?", (task_id,)).fetchone()[0]
+            for idx, sub_title in enumerate(data["subtasks"]):
+                if isinstance(sub_title, str) and sub_title.strip():
+                    cursor.execute("""
+                        INSERT INTO subtasks (task_id, title, completed, order_index)
+                        VALUES (?, ?, 0, ?)
+                    """, (task_id, sub_title.strip(), sub_count + idx))
+
         changes = []
         if status != task["status"]:
             changes.append(f'status: {task["status"]} -> {status}')
@@ -1028,6 +1134,8 @@ def update_task(task_id):
             changes.append(f'start_date: {task["start_date"]} -> {start_date}')
         if due_date != task["due_date"]:
             changes.append(f'due_date: {task["due_date"]} -> {due_date}')
+        if assignee_id != task["assignee_id"]:
+            changes.append(f'assignee_id: {task["assignee_id"]} -> {assignee_id}')
         
         details = ", ".join(changes) if changes else "Updated task fields"
         record_activity(conn, project_id, "User", "Task Updated", f'Task "{title}": {details}', task_id=task_id)

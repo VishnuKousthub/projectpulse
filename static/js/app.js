@@ -1609,7 +1609,7 @@ const app = {
     this.initLucide();
   },
 
-  async inlineUpdateTask(taskId, field, value) {
+  async inlineUpdateTask(taskId, field, value, extraPayload = {}) {
     const t = this.state.tasks.find(x => x.id === taskId);
     if (!t) return;
 
@@ -1620,17 +1620,19 @@ const app = {
     // 1. Optimistic instant state update
     t[field] = value;
     if (field === 'assignee_id') {
-      const member = this.state.currentProject?.members?.find(m => m.id === Number(value));
-      t.assignee_name = member ? member.name : null;
-      t.assignee_avatar = member ? member.avatar_color : null;
+      const memberId = value ? Number(value) : null;
+      const member = memberId ? this.state.currentProject?.members?.find(m => m.id === memberId) : null;
+      t.assignee_name = member ? member.name : (extraPayload.assignee_name || null);
+      t.assignee_avatar = member ? member.avatar_color : (extraPayload.assignee_avatar || null);
     }
 
     // 2. Render whatever view the user is currently looking at (0ms latency!)
     this.renderCurrentView();
+    this.syncCurrentProjectCache();
 
     // 3. Send update to server in background
     try {
-      const payload = { [field]: value };
+      const payload = { [field]: value, ...extraPayload };
       const updated = await this.api(`/api/tasks/${taskId}`, {
         method: 'PUT',
         body: JSON.stringify(payload)
@@ -1638,6 +1640,26 @@ const app = {
       
       if (updated) {
         Object.assign(t, updated);
+        if (this.state.currentProject && updated.assignee_id && updated.assignee_name) {
+          if (!this.state.currentProject.members) this.state.currentProject.members = [];
+          const cleanName = updated.assignee_name.trim().toLowerCase();
+          const existingIdx = this.state.currentProject.members.findIndex(m => 
+            m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+          );
+          if (existingIdx !== -1) {
+            this.state.currentProject.members[existingIdx].id = updated.assignee_id;
+            this.state.currentProject.members[existingIdx].name = updated.assignee_name;
+            if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
+          } else {
+            this.state.currentProject.members.push({
+              id: updated.assignee_id,
+              name: updated.assignee_name,
+              role: 'Member',
+              avatar_color: updated.assignee_avatar || '#3B82F6'
+            });
+          }
+        }
+        this.syncCurrentProjectCache();
         this.renderCurrentView();
       }
       this.showToast(`Updated ${field.replace('_', ' ')}`, 'success');
@@ -1647,6 +1669,7 @@ const app = {
       t[field] = previousValue;
       t.assignee_name = prevAssigneeName;
       t.assignee_avatar = prevAssigneeAvatar;
+      this.syncCurrentProjectCache();
       this.renderCurrentView();
       this.showToast(`Failed to update ${field.replace('_', ' ')}`, 'error');
     }
@@ -1709,7 +1732,10 @@ const app = {
         this.fetchTasks();
       }
     } else {
-      this.inlineUpdateTask(taskId, 'assignee_id', value ? Number(value) : null);
+      const memberId = value ? Number(value) : null;
+      const member = memberId ? this.state.currentProject?.members?.find(m => m.id === memberId) : null;
+      const memberName = member ? member.name : null;
+      this.inlineUpdateTask(taskId, 'assignee_id', memberId, memberName ? { assignee_name: memberName } : {});
     }
   },
 
@@ -2665,14 +2691,19 @@ const app = {
         prioritySelect.value = localTask.priority || 'medium';
         
         // Handle Assignee matching
-        const matchedMember = localTask.assignee_id ? this.state.currentProject?.members?.find(m => m.id === localTask.assignee_id) : null;
+        const matchedMember = localTask.assignee_id 
+          ? this.state.currentProject?.members?.find(m => m.id === localTask.assignee_id) 
+          : (localTask.assignee_name ? this.state.currentProject?.members?.find(m => (m.name || '').trim().toLowerCase() === localTask.assignee_name.trim().toLowerCase()) : null);
+
         if (matchedMember) {
           if (assigneeSelect) assigneeSelect.value = String(matchedMember.id);
+          this.toggleTaskAssigneeManualMode(false);
         } else if (localTask.assignee_name) {
           if (manualAssigneeInput) manualAssigneeInput.value = localTask.assignee_name;
           this.toggleTaskAssigneeManualMode(true);
         } else {
           if (assigneeSelect) assigneeSelect.value = '';
+          this.toggleTaskAssigneeManualMode(false);
         }
 
         startInput.value = localTask.start_date || '';
@@ -2699,14 +2730,19 @@ const app = {
           statusSelect.value = task.status || 'todo';
           prioritySelect.value = task.priority || 'medium';
           
-          const matchedMember = task.assignee_id ? this.state.currentProject?.members?.find(m => m.id === task.assignee_id) : null;
+          const matchedMember = task.assignee_id 
+            ? this.state.currentProject?.members?.find(m => m.id === task.assignee_id) 
+            : (task.assignee_name ? this.state.currentProject?.members?.find(m => (m.name || '').trim().toLowerCase() === task.assignee_name.trim().toLowerCase()) : null);
+
           if (matchedMember) {
             if (assigneeSelect) assigneeSelect.value = String(matchedMember.id);
+            this.toggleTaskAssigneeManualMode(false);
           } else if (task.assignee_name) {
             if (manualAssigneeInput) manualAssigneeInput.value = task.assignee_name;
             this.toggleTaskAssigneeManualMode(true);
           } else {
             if (assigneeSelect) assigneeSelect.value = '';
+            this.toggleTaskAssigneeManualMode(false);
           }
 
           startInput.value = task.start_date || '';
@@ -3232,11 +3268,11 @@ const app = {
       priority,
       position,
       assignee_id: assigneeId,
-      assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : undefined,
+      assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : (assigneeName || undefined),
       start_date: startDate,
       due_date: dueDate,
-      estimated_hours: estHours,
-      actual_hours: actHours,
+      estimated_hours: isNaN(estHours) ? 0.0 : estHours,
+      actual_hours: isNaN(actHours) ? 0.0 : actHours,
       tags,
       subtasks: tempSubtasks
     };
@@ -3260,8 +3296,8 @@ const app = {
           assignee_avatar: assigneeAvatar,
           start_date: startDate,
           due_date: dueDate,
-          estimated_hours: estHours,
-          actual_hours: actHours,
+          estimated_hours: isNaN(estHours) ? 0.0 : estHours,
+          actual_hours: isNaN(actHours) ? 0.0 : actHours,
           tags
         });
         this.renderCurrentView();
@@ -3302,9 +3338,9 @@ const app = {
         console.error('Failed to update task:', e);
         if (localTask && prevCopy) {
           Object.assign(localTask, prevCopy);
+          this.syncCurrentProjectCache();
           this.renderCurrentView();
         }
-        this.showToast('Failed to save task update on server', 'error');
       }
     } else {
       // CREATE NEW TASK (Optimistic 0ms UI insertion)
