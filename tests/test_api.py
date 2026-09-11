@@ -712,8 +712,53 @@ class TestProjectPulseAPI(unittest.TestCase):
         # Cleanup task
         self.request(f"/api/tasks/{t_id}", method="DELETE")
 
+    def test_20_duplicate_assignee_purge_and_deduplication(self):
+        # 1. Directly insert duplicate rows with same name in database
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO members (project_id, name, role, avatar_color) VALUES (?, ?, ?, ?)", (1, "Duplicate Test User", "Dev", "#3B82F6"))
+            dup_id_1 = cur.lastrowid
+            cur.execute("INSERT INTO members (project_id, name, role, avatar_color) VALUES (?, ?, ?, ?)", (1, "  duplicate test user  ", "Dev", "#6366F1"))
+            dup_id_2 = cur.lastrowid
+
+        # 2. Get members endpoint -> should auto-deduplicate
+        status, members = self.request("/api/projects/1/members")
+        self.assertEqual(status, 200)
+        matching = [m for m in members if m["name"].strip().lower() == "duplicate test user"]
+        self.assertEqual(len(matching), 1)
+
+        # 3. Create task assigned to the remaining ID
+        remaining_id = matching[0]["id"]
+        status, task = self.request("/api/projects/1/tasks", method="POST", body={
+            "title": "Task Assigned to Dup User",
+            "assignee_id": remaining_id
+        })
+        self.assertEqual(status, 200)
+        t_id = task["id"]
+
+        # 4. Delete the member
+        status, del_res = self.request(f"/api/projects/1/members/{remaining_id}", method="DELETE")
+        self.assertEqual(status, 200)
+        self.assertTrue(del_res["success"])
+
+        # 5. Verify ALL duplicates are purged from database
+        with get_db() as conn:
+            remaining = conn.execute(
+                "SELECT * FROM members WHERE project_id = 1 AND LOWER(TRIM(name)) = 'duplicate test user'"
+            ).fetchall()
+            self.assertEqual(len(remaining), 0)
+
+        # 6. Verify task is unassigned
+        status, task_check = self.request(f"/api/tasks/{t_id}")
+        self.assertEqual(status, 200)
+        self.assertIsNone(task_check["assignee_id"])
+
+        # Cleanup task
+        self.request(f"/api/tasks/{t_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

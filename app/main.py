@@ -402,6 +402,31 @@ def create_project():
         proj_dict["total_estimated_hours"] = 0
         return json_response(proj_dict, status=201)
 
+def deduplicate_project_members(conn, project_id):
+    """
+    Ensures no duplicate members with matching normalized names exist per project.
+    Reassigns any tasks from duplicate IDs to the canonical ID, then removes duplicate records.
+    """
+    rows = conn.execute(
+        "SELECT id, name FROM members WHERE project_id = ? ORDER BY id ASC",
+        (project_id,)
+    ).fetchall()
+    seen = {}
+    for r in rows:
+        clean_name = " ".join(r["name"].strip().split()).lower()
+        if not clean_name:
+            continue
+        if clean_name in seen:
+            canonical_id = seen[clean_name]
+            dup_id = r["id"]
+            conn.execute(
+                "UPDATE tasks SET assignee_id = ? WHERE project_id = ? AND assignee_id = ?",
+                (canonical_id, project_id, dup_id)
+            )
+            conn.execute("DELETE FROM members WHERE id = ?", (dup_id,))
+        else:
+            seen[clean_name] = r["id"]
+
 @app.get("/api/projects/<project_id:int>")
 def get_project(project_id):
     with get_db() as conn:
@@ -409,6 +434,7 @@ def get_project(project_id):
         if not project:
             return json_response({"error": "Project not found"}, status=404)
         
+        deduplicate_project_members(conn, project_id)
         members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
         sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date DESC", (project_id,)).fetchall()
         milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
@@ -459,22 +485,30 @@ def delete_project(project_id):
 @app.get("/api/projects/<project_id:int>/members")
 def get_members(project_id):
     with get_db() as conn:
+        deduplicate_project_members(conn, project_id)
         members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
         return json_response(members)
 
 @app.post("/api/projects/<project_id:int>/members")
 def add_member(project_id):
     data = request.json or {}
-    name = data.get("name", "").strip()
+    name = " ".join(data.get("name", "").strip().split())
     if not name:
         return json_response({"error": "Name is required"}, status=400)
     
-    email = data.get("email", "")
+    email = data.get("email", "").strip()
     role = data.get("role", "Member")
     avatar_color = data.get("avatar_color", "#6366F1")
 
     with get_db() as conn:
         cursor = conn.cursor()
+        existing = conn.execute(
+            "SELECT * FROM members WHERE project_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))",
+            (project_id, name)
+        ).fetchone()
+        if existing:
+            return json_response(dict(existing), status=200)
+
         cursor.execute("""
             INSERT INTO members (project_id, name, email, role, avatar_color)
             VALUES (?, ?, ?, ?, ?)
@@ -482,17 +516,30 @@ def add_member(project_id):
         m_id = cursor.lastrowid
         record_activity(conn, project_id, "Admin", "Member Added", f'Added member "{name}" ({role})')
         member = conn.execute("SELECT * FROM members WHERE id = ?", (m_id,)).fetchone()
-        return json_response(member, status=201)
+        return json_response(dict(member), status=201)
 
 @app.delete("/api/projects/<project_id:int>/members/<member_id:int>")
 def delete_member(project_id, member_id):
     with get_db() as conn:
         member = conn.execute("SELECT name FROM members WHERE id = ? AND project_id = ?", (member_id, project_id)).fetchone()
-        name = member["name"] if member else "Member"
-        conn.execute("UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id = ?", (project_id, member_id))
-        conn.execute("DELETE FROM members WHERE id = ? AND project_id = ?", (member_id, project_id))
-        record_activity(conn, project_id, "Admin", "Member Removed", f'Removed member "{name}"')
-        return json_response({"success": True, "deleted_member_id": member_id})
+        if member:
+            target_name = member["name"].strip()
+            # Clean up all duplicate records with same name (case-insensitive & trimmed)
+            matched_members = conn.execute(
+                "SELECT id FROM members WHERE project_id = ? AND (id = ? OR LOWER(TRIM(name)) = LOWER(TRIM(?)))",
+                (project_id, member_id, target_name)
+            ).fetchall()
+            all_ids = [m["id"] for m in matched_members] or [member_id]
+            
+            placeholders = ",".join("?" * len(all_ids))
+            conn.execute(f"UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id IN ({placeholders})", [project_id] + all_ids)
+            conn.execute(f"DELETE FROM members WHERE project_id = ? AND id IN ({placeholders})", [project_id] + all_ids)
+            record_activity(conn, project_id, "Admin", "Member Removed", f'Removed member "{target_name}"')
+            return json_response({"success": True, "deleted_member_id": member_id, "deleted_ids": all_ids, "deleted_name": target_name})
+        else:
+            conn.execute("UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id = ?", (project_id, member_id))
+            conn.execute("DELETE FROM members WHERE id = ? AND project_id = ?", (member_id, project_id))
+            return json_response({"success": True, "deleted_member_id": member_id})
 
 @app.delete("/api/members/<member_id:int>")
 def delete_member_direct(member_id):
@@ -501,10 +548,18 @@ def delete_member_direct(member_id):
         if not member:
             return json_response({"error": "Member not found"}, status=404)
         project_id = member["project_id"]
-        conn.execute("UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id = ?", (project_id, member_id))
-        conn.execute("DELETE FROM members WHERE id = ?", (member_id,))
-        record_activity(conn, project_id, "Admin", "Member Removed", f'Removed member "{member["name"]}"')
-        return json_response({"success": True, "deleted_member_id": member_id})
+        target_name = member["name"].strip()
+        matched_members = conn.execute(
+            "SELECT id FROM members WHERE project_id = ? AND (id = ? OR LOWER(TRIM(name)) = LOWER(TRIM(?)))",
+            (project_id, member_id, target_name)
+        ).fetchall()
+        all_ids = [m["id"] for m in matched_members] or [member_id]
+        
+        placeholders = ",".join("?" * len(all_ids))
+        conn.execute(f"UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id IN ({placeholders})", [project_id] + all_ids)
+        conn.execute(f"DELETE FROM members WHERE project_id = ? AND id IN ({placeholders})", [project_id] + all_ids)
+        record_activity(conn, project_id, "Admin", "Member Removed", f'Removed member "{target_name}"')
+        return json_response({"success": True, "deleted_member_id": member_id, "deleted_ids": all_ids, "deleted_name": target_name})
 
 # ==================== SPRINTS ====================
 
@@ -746,10 +801,10 @@ def create_task(project_id):
         cursor = conn.cursor()
 
         # Handle manual assignee name input (e.g. typing custom assignee name directly in task)
-        assignee_name_input = (data.get("assignee_name") or data.get("new_assignee_name") or "").strip()
+        assignee_name_input = " ".join((data.get("assignee_name") or data.get("new_assignee_name") or "").strip().split())
         if assignee_name_input:
             existing_m = conn.execute(
-                "SELECT id FROM members WHERE project_id = ? AND LOWER(name) = LOWER(?)",
+                "SELECT id FROM members WHERE project_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id ASC LIMIT 1",
                 (project_id, assignee_name_input)
             ).fetchone()
             if existing_m:
@@ -912,10 +967,10 @@ def update_task(task_id):
         
         cursor = conn.cursor()
 
-        assignee_name_input = (data.get("assignee_name") or data.get("new_assignee_name") or "").strip()
+        assignee_name_input = " ".join((data.get("assignee_name") or data.get("new_assignee_name") or "").strip().split())
         if assignee_name_input:
             existing_m = conn.execute(
-                "SELECT id FROM members WHERE project_id = ? AND LOWER(name) = LOWER(?)",
+                "SELECT id FROM members WHERE project_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id ASC LIMIT 1",
                 (project_id, assignee_name_input)
             ).fetchone()
             if existing_m:

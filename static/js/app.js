@@ -329,9 +329,23 @@ const app = {
     }
   },
 
+  getUniqueProjectMembers() {
+    const members = this.state.currentProject?.members || [];
+    const unique = [];
+    const seen = new Set();
+    members.forEach(m => {
+      const clean = (m.name || '').trim().toLowerCase();
+      if (clean && !seen.has(clean)) {
+        seen.add(clean);
+        unique.push(m);
+      }
+    });
+    return unique;
+  },
+
   populateFilterDropdowns() {
     const memberSelect = document.getElementById('filter-assignee');
-    const members = this.state.currentProject?.members || [];
+    const members = this.getUniqueProjectMembers();
     if (memberSelect) {
       const currentVal = this.state.filterAssignee ? String(this.state.filterAssignee) : '';
       const hasMember = members.some(m => String(m.id) === currentVal);
@@ -1314,7 +1328,7 @@ const app = {
     if (!this.state.tableSortBy) this.state.tableSortBy = 'order';
 
     const allTasks = this.state.tasks || [];
-    const members = this.state.currentProject?.members || [];
+    const members = this.getUniqueProjectMembers();
     const todayStr = new Date().toISOString().split('T')[0];
 
     // 1. Calculate KPI Metrics
@@ -1667,10 +1681,19 @@ const app = {
           const idx = this.state.tasks.findIndex(x => x.id === taskId);
           if (idx !== -1) this.state.tasks[idx] = updated;
           if (this.state.currentProject && updated.assignee_id) {
-            if (!this.state.currentProject.members.some(m => m.id === updated.assignee_id)) {
+            if (!this.state.currentProject.members) this.state.currentProject.members = [];
+            const cleanName = (updated.assignee_name || cleanedName).trim().toLowerCase();
+            const existingIdx = this.state.currentProject.members.findIndex(m => 
+              m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+            );
+            if (existingIdx !== -1) {
+              this.state.currentProject.members[existingIdx].id = updated.assignee_id;
+              this.state.currentProject.members[existingIdx].name = updated.assignee_name || cleanedName;
+              if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
+            } else {
               this.state.currentProject.members.push({
                 id: updated.assignee_id,
-                name: updated.assignee_name,
+                name: updated.assignee_name || cleanedName,
                 role: 'Member',
                 avatar_color: updated.assignee_avatar || '#3B82F6'
               });
@@ -2786,11 +2809,12 @@ const app = {
     const p = this.state.currentProject;
     const assigneeSelect = document.getElementById('task-input-assignee');
     const membersDatalist = document.getElementById('project-members-datalist');
+    const uniqueMembers = this.getUniqueProjectMembers();
 
     if (assigneeSelect && p) {
       const curVal = assigneeSelect.value;
       assigneeSelect.innerHTML = `<option value="">Unassigned</option>` +
-        (p.members || []).map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('') +
+        uniqueMembers.map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('') +
         `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>` +
         `<option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>`;
       if (curVal && curVal !== '__manual__' && curVal !== '__manage__') {
@@ -2799,7 +2823,7 @@ const app = {
     }
 
     if (membersDatalist && p) {
-      membersDatalist.innerHTML = (p.members || []).map(m => `<option value="${this.escapeHtml(m.name)}">`).join('');
+      membersDatalist.innerHTML = uniqueMembers.map(m => `<option value="${this.escapeHtml(m.name)}">`).join('');
     }
   },
 
@@ -2881,17 +2905,23 @@ const app = {
     const pid = this.state.currentProjectId;
     if (!pid) return;
 
+    const cleanName = (memberName || '').trim().toLowerCase();
+
     // 1. Optimistic instant UI update (0ms latency!)
     if (this.state.currentProject?.members) {
-      this.state.currentProject.members = this.state.currentProject.members.filter(m => m.id !== memberId);
+      this.state.currentProject.members = this.state.currentProject.members.filter(m => 
+        m.id !== memberId && (m.name || '').trim().toLowerCase() !== cleanName
+      );
     }
     if (this.state.members) {
-      this.state.members = this.state.members.filter(m => m.id !== memberId);
+      this.state.members = this.state.members.filter(m => 
+        m.id !== memberId && (m.name || '').trim().toLowerCase() !== cleanName
+      );
     }
 
     // Update tasks assigned to this member locally
     (this.state.tasks || []).forEach(t => {
-      if (t.assignee_id === memberId) {
+      if (t.assignee_id === memberId || (t.assignee_name && t.assignee_name.trim().toLowerCase() === cleanName)) {
         t.assignee_id = null;
         t.assignee_name = null;
         t.assignee_avatar = null;
@@ -2908,7 +2938,7 @@ const app = {
       selectEl.value = '';
     }
     const manualInput = document.getElementById('task-input-assignee-manual');
-    if (manualInput && manualInput.value.trim().toLowerCase() === memberName.toLowerCase()) {
+    if (manualInput && manualInput.value.trim().toLowerCase() === cleanName) {
       manualInput.value = '';
     }
     this.updateTaskAssigneeDeleteBtnVisibility();
@@ -2954,7 +2984,7 @@ const app = {
     const container = document.getElementById('manage-assignees-list-container');
     if (!container) return;
 
-    const members = this.state.currentProject?.members || [];
+    const members = this.getUniqueProjectMembers();
     const tasks = this.state.tasks || [];
 
     if (members.length === 0) {
@@ -2970,7 +3000,8 @@ const app = {
     }
 
     container.innerHTML = members.map(m => {
-      const assignedTasksCount = tasks.filter(t => t.assignee_id === m.id).length;
+      const cleanMName = (m.name || '').trim().toLowerCase();
+      const assignedTasksCount = tasks.filter(t => t.assignee_id === m.id || (t.assignee_name && t.assignee_name.trim().toLowerCase() === cleanMName)).length;
       return `
         <div class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-600 transition">
           <div class="flex items-center space-x-2.5 min-w-0">
@@ -3246,7 +3277,16 @@ const app = {
         if (localTask && updated) {
           Object.assign(localTask, updated);
           if (this.state.currentProject && updated.assignee_id && updated.assignee_name) {
-            if (!this.state.currentProject.members.some(m => m.id === updated.assignee_id)) {
+            if (!this.state.currentProject.members) this.state.currentProject.members = [];
+            const cleanName = updated.assignee_name.trim().toLowerCase();
+            const existingIdx = this.state.currentProject.members.findIndex(m => 
+              m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+            );
+            if (existingIdx !== -1) {
+              this.state.currentProject.members[existingIdx].id = updated.assignee_id;
+              this.state.currentProject.members[existingIdx].name = updated.assignee_name;
+              if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
+            } else {
               this.state.currentProject.members.push({
                 id: updated.assignee_id,
                 name: updated.assignee_name,
@@ -3339,7 +3379,16 @@ const app = {
             this.state.tasks[idx] = created;
           }
           if (this.state.currentProject && created.assignee_id && created.assignee_name) {
-            if (!this.state.currentProject.members.some(m => m.id === created.assignee_id)) {
+            if (!this.state.currentProject.members) this.state.currentProject.members = [];
+            const cleanName = created.assignee_name.trim().toLowerCase();
+            const existingIdx = this.state.currentProject.members.findIndex(m => 
+              m.id === created.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+            );
+            if (existingIdx !== -1) {
+              this.state.currentProject.members[existingIdx].id = created.assignee_id;
+              this.state.currentProject.members[existingIdx].name = created.assignee_name;
+              if (created.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = created.assignee_avatar;
+            } else {
               this.state.currentProject.members.push({
                 id: created.assignee_id,
                 name: created.assignee_name,
