@@ -487,8 +487,24 @@ def add_member(project_id):
 @app.delete("/api/projects/<project_id:int>/members/<member_id:int>")
 def delete_member(project_id, member_id):
     with get_db() as conn:
+        member = conn.execute("SELECT name FROM members WHERE id = ? AND project_id = ?", (member_id, project_id)).fetchone()
+        name = member["name"] if member else "Member"
+        conn.execute("UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id = ?", (project_id, member_id))
         conn.execute("DELETE FROM members WHERE id = ? AND project_id = ?", (member_id, project_id))
-        return json_response({"success": True})
+        record_activity(conn, project_id, "Admin", "Member Removed", f'Removed member "{name}"')
+        return json_response({"success": True, "deleted_member_id": member_id})
+
+@app.delete("/api/members/<member_id:int>")
+def delete_member_direct(member_id):
+    with get_db() as conn:
+        member = conn.execute("SELECT project_id, name FROM members WHERE id = ?", (member_id,)).fetchone()
+        if not member:
+            return json_response({"error": "Member not found"}, status=404)
+        project_id = member["project_id"]
+        conn.execute("UPDATE tasks SET assignee_id = NULL WHERE project_id = ? AND assignee_id = ?", (project_id, member_id))
+        conn.execute("DELETE FROM members WHERE id = ?", (member_id,))
+        record_activity(conn, project_id, "Admin", "Member Removed", f'Removed member "{member["name"]}"')
+        return json_response({"success": True, "deleted_member_id": member_id})
 
 # ==================== SPRINTS ====================
 

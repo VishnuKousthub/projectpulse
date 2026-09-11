@@ -1500,6 +1500,7 @@ const app = {
                 ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
                 ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(t.assignee_name)} (Custom)</option>` : ''}
                 <option value="__add_new__" class="font-bold text-blue-600 dark:text-blue-400">+ Type Custom Assignee...</option>
+                <option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>
               </select>
             </div>
           </td>
@@ -1639,6 +1640,11 @@ const app = {
 
   async handleTableAssigneeChange(taskId, value) {
     if (value === '__current__') return;
+    if (value === '__manage__') {
+      this.renderTable();
+      this.openManageAssigneesModal();
+      return;
+    }
     if (value === '__add_new__') {
       const name = prompt('Enter new / custom assignee name for this activity:');
       if (!name || !name.trim()) {
@@ -2654,6 +2660,7 @@ const app = {
         this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
       }
 
+      this.updateTaskAssigneeDeleteBtnVisibility();
       this.updateTaskModalDateBadges();
       modal.classList.remove('hidden');
       titleInput.focus();
@@ -2685,6 +2692,7 @@ const app = {
           if (actInput) actInput.value = task.actual_hours || 0;
           tagsInput.value = (task.tags || []).join(', ');
           this.renderSubtaskList(task.subtasks || []);
+          this.updateTaskAssigneeDeleteBtnVisibility();
           this.updateTaskModalDateBadges();
         }
       } catch (e) {
@@ -2729,6 +2737,7 @@ const app = {
       }
     }
 
+    this.updateTaskAssigneeDeleteBtnVisibility();
     this.updateTaskModalDateBadges();
     modal.classList.remove('hidden');
     titleInput.focus();
@@ -2779,13 +2788,31 @@ const app = {
     const membersDatalist = document.getElementById('project-members-datalist');
 
     if (assigneeSelect && p) {
+      const curVal = assigneeSelect.value;
       assigneeSelect.innerHTML = `<option value="">Unassigned</option>` +
-        (p.members || []).map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${m.role})</option>`).join('') +
-        `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>`;
+        (p.members || []).map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('') +
+        `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>` +
+        `<option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>`;
+      if (curVal && curVal !== '__manual__' && curVal !== '__manage__') {
+        assigneeSelect.value = curVal;
+      }
     }
 
     if (membersDatalist && p) {
       membersDatalist.innerHTML = (p.members || []).map(m => `<option value="${this.escapeHtml(m.name)}">`).join('');
+    }
+  },
+
+  updateTaskAssigneeDeleteBtnVisibility() {
+    const selectEl = document.getElementById('task-input-assignee');
+    const deleteBtn = document.getElementById('task-assignee-delete-btn');
+    if (selectEl && deleteBtn) {
+      const val = selectEl.value;
+      if (val && val !== '__manual__' && val !== '__manage__') {
+        deleteBtn.classList.remove('hidden');
+      } else {
+        deleteBtn.classList.add('hidden');
+      }
     }
   },
 
@@ -2804,7 +2831,7 @@ const app = {
       manualCont?.classList.remove('hidden');
       if (toggleLabel) toggleLabel.textContent = 'Choose List';
       if (manualInput) {
-        if (selectEl && selectEl.value && selectEl.value !== '__manual__') {
+        if (selectEl && selectEl.value && selectEl.value !== '__manual__' && selectEl.value !== '__manage__') {
           const m = this.state.currentProject?.members?.find(x => String(x.id) === String(selectEl.value));
           if (m && !manualInput.value) manualInput.value = m.name;
         }
@@ -2814,15 +2841,222 @@ const app = {
       manualCont?.classList.add('hidden');
       selectCont?.classList.remove('hidden');
       if (toggleLabel) toggleLabel.textContent = '+ Custom Name';
-      if (selectEl && selectEl.value === '__manual__') {
+      if (selectEl && (selectEl.value === '__manual__' || selectEl.value === '__manage__')) {
         selectEl.value = '';
       }
     }
+    this.updateTaskAssigneeDeleteBtnVisibility();
   },
 
   handleTaskAssigneeSelectChange(value) {
     if (value === '__manual__') {
       this.toggleTaskAssigneeManualMode(true);
+      return;
+    }
+    if (value === '__manage__') {
+      const selectEl = document.getElementById('task-input-assignee');
+      if (selectEl) selectEl.value = '';
+      this.openManageAssigneesModal();
+      return;
+    }
+    this.updateTaskAssigneeDeleteBtnVisibility();
+  },
+
+  async deleteSelectedTaskAssignee() {
+    const selectEl = document.getElementById('task-input-assignee');
+    const memberId = selectEl?.value ? Number(selectEl.value) : null;
+    if (!memberId) return;
+
+    const member = this.state.currentProject?.members?.find(m => m.id === memberId);
+    const memberName = member ? member.name : 'this assignee';
+
+    await this.deleteProjectMember(memberId, memberName);
+  },
+
+  async deleteProjectMember(memberId, memberName) {
+    if (!confirm(`Are you sure you want to delete "${memberName}" from this project?\n\nThey will be removed from the assignee dropdown, and any tasks assigned to them will become Unassigned.`)) {
+      return;
+    }
+
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    // 1. Optimistic instant UI update (0ms latency!)
+    if (this.state.currentProject?.members) {
+      this.state.currentProject.members = this.state.currentProject.members.filter(m => m.id !== memberId);
+    }
+    if (this.state.members) {
+      this.state.members = this.state.members.filter(m => m.id !== memberId);
+    }
+
+    // Update tasks assigned to this member locally
+    (this.state.tasks || []).forEach(t => {
+      if (t.assignee_id === memberId) {
+        t.assignee_id = null;
+        t.assignee_name = null;
+        t.assignee_avatar = null;
+      }
+    });
+
+    // Re-populate dropdowns
+    this.populateTaskModalDropdowns();
+    this.populateFilterDropdowns();
+
+    // Reset Task Modal assignee if it was set to this member
+    const selectEl = document.getElementById('task-input-assignee');
+    if (selectEl && Number(selectEl.value) === memberId) {
+      selectEl.value = '';
+    }
+    const manualInput = document.getElementById('task-input-assignee-manual');
+    if (manualInput && manualInput.value.trim().toLowerCase() === memberName.toLowerCase()) {
+      manualInput.value = '';
+    }
+    this.updateTaskAssigneeDeleteBtnVisibility();
+
+    // Re-render views and manage modal list
+    this.renderCurrentView();
+    this.renderManageAssigneesList();
+    this.renderNotificationMembers();
+    this.syncCurrentProjectCache();
+
+    this.showToast(`Assignee "${memberName}" deleted from dropdown`, 'success');
+
+    // 2. Background server call
+    try {
+      await this.api(`/api/projects/${pid}/members/${memberId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Failed to delete member on server:', e);
+      this.showToast('Failed to delete assignee on server', 'error');
+    }
+  },
+
+  openManageAssigneesModal() {
+    const modal = document.getElementById('manage-assignees-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      this.renderManageAssigneesList();
+      const input = document.getElementById('new-assignee-modal-input');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    }
+    this.initLucide();
+  },
+
+  closeManageAssigneesModal() {
+    document.getElementById('manage-assignees-modal')?.classList.add('hidden');
+    this.populateTaskModalDropdowns();
+    this.updateTaskAssigneeDeleteBtnVisibility();
+  },
+
+  renderManageAssigneesList() {
+    const container = document.getElementById('manage-assignees-list-container');
+    if (!container) return;
+
+    const members = this.state.currentProject?.members || [];
+    const tasks = this.state.tasks || [];
+
+    if (members.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-8 text-slate-400">
+          <i data-lucide="user-x" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+          <div class="text-xs font-semibold text-slate-600 dark:text-slate-400">No assignees in this project yet</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Use the input above to add a member</div>
+        </div>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    container.innerHTML = members.map(m => {
+      const assignedTasksCount = tasks.filter(t => t.assignee_id === m.id).length;
+      return `
+        <div class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-600 transition">
+          <div class="flex items-center space-x-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style="background-color: ${m.avatar_color || '#3B82F6'};">
+              ${m.name.charAt(0).toUpperCase()}
+            </div>
+            <div class="min-w-0">
+              <div class="font-bold text-xs text-slate-800 dark:text-white truncate">${this.escapeHtml(m.name)}</div>
+              <div class="text-[11px] text-slate-400 flex items-center space-x-1.5">
+                <span>${this.escapeHtml(m.role || 'Member')}</span>
+                <span>•</span>
+                <span class="${assignedTasksCount > 0 ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-slate-400'}">${assignedTasksCount} task${assignedTasksCount === 1 ? '' : 's'}</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" onclick="app.deleteProjectMember(${m.id}, '${this.escapeHtml(m.name)}')"
+            class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition flex items-center space-x-1"
+            title="Delete this assignee from project dropdowns">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span class="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hidden sm:inline">Delete</span>
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    this.initLucide();
+  },
+
+  async handleAddAssigneeFromModal() {
+    const input = document.getElementById('new-assignee-modal-input');
+    const name = input?.value.trim();
+    if (!name) return;
+
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    // Check if exists
+    if (this.state.currentProject?.members?.some(m => m.name.toLowerCase() === name.toLowerCase())) {
+      this.showToast(`Assignee "${name}" already exists in this project`, 'info');
+      input.value = '';
+      return;
+    }
+
+    const avatarColors = ["#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#10B981", "#F59E0B", "#14B8A6", "#F97316"];
+    const color = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+    const tempId = -Date.now();
+
+    const newMember = {
+      id: tempId,
+      project_id: pid,
+      name,
+      email: '',
+      role: 'Member',
+      avatar_color: color
+    };
+
+    if (!this.state.currentProject.members) this.state.currentProject.members = [];
+    this.state.currentProject.members.push(newMember);
+
+    input.value = '';
+    this.renderManageAssigneesList();
+    this.populateTaskModalDropdowns();
+    this.populateFilterDropdowns();
+    this.syncCurrentProjectCache();
+    this.showToast(`Added "${name}" to project assignees`, 'success');
+
+    try {
+      const created = await this.api(`/api/projects/${pid}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ name, role: 'Member', avatar_color: color })
+      });
+      if (created && this.state.currentProject?.members) {
+        const idx = this.state.currentProject.members.findIndex(m => m.id === tempId);
+        if (idx !== -1) {
+          this.state.currentProject.members[idx] = created;
+        }
+        this.renderManageAssigneesList();
+        this.populateTaskModalDropdowns();
+        this.populateFilterDropdowns();
+        this.syncCurrentProjectCache();
+      }
+    } catch (e) {
+      console.error('Failed to create member:', e);
+      this.state.currentProject.members = this.state.currentProject.members.filter(m => m.id !== tempId);
+      this.renderManageAssigneesList();
+      this.showToast('Failed to add member on server', 'error');
     }
   },
 

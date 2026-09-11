@@ -675,6 +675,43 @@ class TestProjectPulseAPI(unittest.TestCase):
         # Cleanup task
         self.request(f"/api/tasks/{t_id}", method="DELETE")
 
+    def test_19_delete_assignee_member_from_project(self):
+        # 1. Create a new member in project 1
+        status, member = self.request("/api/projects/1/members", method="POST", body={
+            "name": "Temporary Contractor",
+            "role": "QA Engineer"
+        })
+        self.assertEqual(status, 201)
+        m_id = member["id"]
+
+        # 2. Assign a task to this member
+        status, task = self.request("/api/projects/1/tasks", method="POST", body={
+            "title": "Temporary Task for Member Deletion",
+            "assignee_id": m_id
+        })
+        self.assertEqual(status, 200)
+        t_id = task["id"]
+        self.assertEqual(task["assignee_id"], m_id)
+
+        # 3. Delete the member from the project
+        status, del_res = self.request(f"/api/projects/1/members/{m_id}", method="DELETE")
+        self.assertEqual(status, 200)
+        self.assertTrue(del_res["success"])
+
+        # 4. Verify member is no longer in project members list
+        status, members = self.request("/api/projects/1/members")
+        self.assertEqual(status, 200)
+        self.assertNotIn(m_id, [m["id"] for m in members])
+        self.assertNotIn("Temporary Contractor", [m["name"] for m in members])
+
+        # 5. Verify the task's assignee_id was automatically unassigned (set to None)
+        status, updated_task = self.request(f"/api/tasks/{t_id}")
+        self.assertEqual(status, 200)
+        self.assertIsNone(updated_task["assignee_id"])
+
+        # Cleanup task
+        self.request(f"/api/tasks/{t_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 
