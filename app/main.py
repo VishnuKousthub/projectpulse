@@ -23,10 +23,20 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 def get_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
+def json_serial_default(obj):
+    if isinstance(obj, sqlite3.Row):
+        return dict(obj)
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    try:
+        return dict(obj)
+    except Exception:
+        return str(obj)
+
 def json_response(data, status=200):
     response.status = status
     response.content_type = "application/json"
-    return json.dumps(data)
+    return json.dumps(data, default=json_serial_default)
 
 import math
 
@@ -957,7 +967,7 @@ def get_task_dict(conn, task_id: int):
         FROM tasks t
         LEFT JOIN members m ON t.assignee_id = m.id
         LEFT JOIN sprints s ON t.sprint_id = s.id
-        JOIN projects p ON t.project_id = p.id
+        LEFT JOIN projects p ON t.project_id = p.id
         WHERE t.id = ?
     """, (task_id,)).fetchone()
 
@@ -970,22 +980,22 @@ def get_task_dict(conn, task_id: int):
     except Exception:
         t_dict["tags"] = []
 
-    subtasks_list = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (task_id,)).fetchall()
-    timelogs_list = conn.execute("""
+    subtasks_list = [dict(s) for s in conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC", (task_id,)).fetchall()]
+    timelogs_list = [dict(tl) for tl in conn.execute("""
         SELECT tl.*, m.name as member_name, m.avatar_color as member_avatar
         FROM timelogs tl
         LEFT JOIN members m ON tl.member_id = m.id
         WHERE tl.task_id = ?
         ORDER BY tl.logged_date DESC, tl.id DESC
-    """, (task_id,)).fetchall()
+    """, (task_id,)).fetchall()]
 
     t_dict["subtasks"] = subtasks_list
     t_dict["subtasks_list"] = subtasks_list
     t_dict["subtask_count"] = len(subtasks_list)
     t_dict["subtask_completed_count"] = sum(1 for s in subtasks_list if s.get("completed") == 1)
     t_dict["timelogs"] = timelogs_list
-    t_dict["logged_hours_sum"] = sum(float(tl.get("hours") or 0.0) for tl in timelogs_list)
-    t_dict["activities"] = conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()
+    t_dict["logged_hours_sum"] = sum(safe_float(tl.get("hours"), 0.0) for tl in timelogs_list)
+    t_dict["activities"] = [dict(a) for a in conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()]
 
     return t_dict
 
@@ -1117,7 +1127,8 @@ def update_task(task_id):
 
         # 7. Subtasks if provided
         if isinstance(data.get("subtasks"), list):
-            sub_count = conn.execute("SELECT COUNT(*) FROM subtasks WHERE task_id = ?", (task_id,)).fetchone()[0]
+            sub_row = conn.execute("SELECT COUNT(*) as cnt FROM subtasks WHERE task_id = ?", (task_id,)).fetchone()
+            sub_count = sub_row["cnt"] if sub_row else 0
             for idx, sub_title in enumerate(data["subtasks"]):
                 if isinstance(sub_title, str) and sub_title.strip():
                     cursor.execute("""
@@ -1564,22 +1575,22 @@ def export_project(project_id):
         if not project:
             return json_response({"error": "Project not found"}, status=404)
         
-        members = conn.execute("SELECT * FROM members WHERE project_id = ?", (project_id,)).fetchall()
-        sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ?", (project_id,)).fetchall()
-        milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ?", (project_id,)).fetchall()
+        members = [dict(m) for m in conn.execute("SELECT * FROM members WHERE project_id = ?", (project_id,)).fetchall()]
+        sprints = [dict(s) for s in conn.execute("SELECT * FROM sprints WHERE project_id = ?", (project_id,)).fetchall()]
+        milestones = [dict(m) for m in conn.execute("SELECT * FROM milestones WHERE project_id = ?", (project_id,)).fetchall()]
         tasks = conn.execute("SELECT * FROM tasks WHERE project_id = ?", (project_id,)).fetchall()
 
         all_tasks = []
         for t in tasks:
             t_dict = dict(t)
-            t_dict["subtasks"] = conn.execute("SELECT * FROM subtasks WHERE task_id = ?", (t["id"],)).fetchall()
-            t_dict["timelogs"] = conn.execute("SELECT * FROM timelogs WHERE task_id = ?", (t["id"],)).fetchall()
+            t_dict["subtasks"] = [dict(s) for s in conn.execute("SELECT * FROM subtasks WHERE task_id = ?", (t["id"],)).fetchall()]
+            t_dict["timelogs"] = [dict(tl) for tl in conn.execute("SELECT * FROM timelogs WHERE task_id = ?", (t["id"],)).fetchall()]
             all_tasks.append(t_dict)
 
         export_data = {
             "version": "1.0",
             "exported_at": get_now_iso(),
-            "project": project,
+            "project": dict(project),
             "members": members,
             "sprints": sprints,
             "milestones": milestones,
@@ -1972,7 +1983,10 @@ def error_405(error):
 @app.error(500)
 def error_500(error):
     response.content_type = "application/json"
-    msg = str(error.body) if (error.body and not str(error.body).startswith("<!DOCTYPE")) else "Internal Server Error"
+    if getattr(error, 'exception', None):
+        import traceback
+        traceback.print_exception(error.exception)
+    msg = str(error.exception) if getattr(error, 'exception', None) else (str(error.body) if (error.body and not str(error.body).startswith("<!DOCTYPE")) else "Internal Server Error")
     return json.dumps({"error": msg, "status": 500})
 
 def init_app():

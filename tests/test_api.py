@@ -814,6 +814,47 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.request(f"/api/tasks/{t_id}", method="DELETE")
         self.request(f"/api/projects/1/members/{tester_m['id']}", method="DELETE")
 
+    def test_22_update_task_with_subtasks_timelogs_and_complex_payloads(self):
+        # 1. Create task with initial subtasks
+        status, task = self.request("/api/projects/1/tasks", method="POST", body={
+            "title": "Complex Task with Subtasks",
+            "description": "Full lifecycle verification",
+            "subtasks": ["Subtask 1", "Subtask 2"]
+        })
+        self.assertEqual(status, 200)
+        t_id = task["id"]
+        self.assertEqual(len(task.get("subtasks", [])), 2)
+
+        # 2. Add a timelog to the task
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO timelogs (task_id, member_id, hours, description, logged_date, created_at)
+                VALUES (?, 1, 3.5, 'Initial research', '2026-09-10', '2026-09-10T10:00:00')
+            """, (t_id,))
+
+        # 3. Perform modal-style PUT update with additional subtasks and full payload
+        status, updated = self.request(f"/api/tasks/{t_id}", method="PUT", body={
+            "title": "Complex Task with Subtasks (Updated)",
+            "description": "Updated description",
+            "status": "in_progress",
+            "priority": "high",
+            "start_date": "2026-09-11",
+            "due_date": "2026-09-20",
+            "estimated_hours": 10.0,
+            "actual_hours": 3.5,
+            "tags": ["chemistry", "stage1"],
+            "subtasks": ["Subtask 3"]
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(updated["title"], "Complex Task with Subtasks (Updated)")
+        self.assertEqual(updated["status"], "in_progress")
+        self.assertEqual(updated["subtask_count"], 3)
+        self.assertEqual(updated["logged_hours_sum"], 3.5)
+        self.assertIn("chemistry", updated["tags"])
+
+        # 4. Clean up
+        self.request(f"/api/tasks/{t_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 
