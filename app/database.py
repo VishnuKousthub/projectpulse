@@ -61,25 +61,13 @@ def get_db():
     target_path = get_db_path()
     try:
         conn = sqlite3.connect(target_path, timeout=30.0)
-    except Exception as e:
+    except Exception:
         tmp_dir = "/tmp" if os.path.exists("/tmp") else os.getcwd()
         fallback_path = os.path.join(tmp_dir, "project_pulse.db")
         conn = sqlite3.connect(fallback_path, timeout=30.0)
     conn.row_factory = dict_factory
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        conn.execute("PRAGMA temp_store = MEMORY")
-        conn.execute("PRAGMA mmap_size = 268435456")
-        conn.execute("PRAGMA cache_size = -64000")
-    except Exception:
-        try:
-            conn.execute("PRAGMA journal_mode = DELETE")
-            conn.execute("PRAGMA synchronous = NORMAL")
-        except Exception:
-            pass
     try:
         yield conn
         conn.commit()
@@ -122,6 +110,11 @@ def seed_default_users(cursor):
 
 def init_db():
     with get_db() as conn:
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            pass
         cursor = conn.cursor()
         
         # User accounts table
