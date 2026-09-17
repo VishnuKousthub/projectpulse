@@ -67,8 +67,8 @@ def get_db():
         conn = sqlite3.connect(fallback_path, timeout=5.0)
     conn.row_factory = dict_factory
     try:
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA journal_mode = MEMORY")
+        conn.execute("PRAGMA synchronous = OFF")
         conn.execute("PRAGMA temp_store = MEMORY")
         conn.execute("PRAGMA cache_size = -64000")
         conn.execute("PRAGMA mmap_size = 268435456")
