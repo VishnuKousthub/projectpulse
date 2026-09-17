@@ -7,7 +7,7 @@ const app = {
   _searchTimer: null,
   state: {
     user: null,
-    authToken: localStorage.getItem('projectpulse_token') || null,
+    authToken: null,
     projects: [],
     currentProjectId: null,
     currentProject: null,
@@ -41,46 +41,28 @@ const app = {
     this.initClickOutside();
     this.initLucide();
 
-    // Fast-path: Instant Hydration from Local Storage (0ms perceived load)
-    const token = localStorage.getItem('projectpulse_token');
-    const cachedUser = localStorage.getItem('projectpulse_user');
-    const cachedProjects = localStorage.getItem('projectpulse_cached_projects');
-    const activeProjectId = localStorage.getItem('projectpulse_active_project');
-    const cachedCurrentProject = activeProjectId ? localStorage.getItem(`projectpulse_cached_project_${activeProjectId}`) : null;
-    const cachedTasks = activeProjectId ? localStorage.getItem(`projectpulse_cached_tasks_${activeProjectId}`) : null;
+    // Clean up any legacy persisted tokens so page reload always requires explicit login
+    localStorage.removeItem('projectpulse_token');
+    localStorage.removeItem('projectpulse_user');
 
-    if (token && cachedUser) {
-      try {
-        this.state.authToken = token;
-        this.state.user = JSON.parse(cachedUser);
-        this.updateHeaderUserProfile();
-        this.hideAuthContainer();
+    // Always require user login upon loading / refreshing the page
+    this.state.authToken = null;
+    this.state.user = null;
+    this.showAuthContainer();
 
-        if (cachedProjects) {
-          this.state.projects = JSON.parse(cachedProjects);
-          this.renderProjectsDropdown();
-          this.renderProjectsSidebar();
-        }
-
-        if (cachedCurrentProject) {
-          this.state.currentProject = JSON.parse(cachedCurrentProject);
-          this.state.currentProjectId = this.state.currentProject.id;
-          this.populateFilterDropdowns();
-        }
-
-        if (cachedTasks) {
-          this.state.tasks = JSON.parse(cachedTasks);
-          this.renderCurrentView();
-        }
-      } catch (e) {
-        console.error('Error hydrating cache:', e);
-      }
+    // Pre-fill remembered username if previously saved
+    const rememberedUsername = localStorage.getItem('projectpulse_remembered_username');
+    const idInput = document.getElementById('login-input-identifier');
+    const pwdInput = document.getElementById('login-input-password');
+    const rememberBox = document.getElementById('login-input-remember');
+    if (rememberedUsername && idInput) {
+      idInput.value = rememberedUsername;
+      if (rememberBox) rememberBox.checked = true;
+      pwdInput?.focus();
     } else {
-      this.showAuthContainer();
+      if (rememberBox) rememberBox.checked = false;
+      idInput?.focus();
     }
-
-    // Background auth check & quiet bootstrap sync
-    await this.checkAuth();
   },
 
   initTheme() {
@@ -4303,16 +4285,14 @@ const app = {
 
   // ==================== AUTHENTICATION & LOGIN SCREEN ====================
   async checkAuth() {
-    const token = this.state.authToken || localStorage.getItem('projectpulse_token');
+    const token = this.state.authToken;
     if (!token) {
       this.state.user = null;
       this.state.authToken = null;
-      localStorage.removeItem('projectpulse_user');
       this.showAuthContainer();
       return false;
     }
 
-    this.state.authToken = token;
     const activeProjectId = this.state.currentProjectId || localStorage.getItem('projectpulse_active_project') || '';
 
     try {
@@ -4327,7 +4307,6 @@ const app = {
         const data = await res.json();
         if (data && data.authenticated && data.user) {
           this.state.user = data.user;
-          localStorage.setItem('projectpulse_user', JSON.stringify(data.user));
           this.updateHeaderUserProfile();
           this.hideAuthContainer();
 
@@ -4364,8 +4343,6 @@ const app = {
 
     this.state.user = null;
     this.state.authToken = null;
-    localStorage.removeItem('projectpulse_token');
-    localStorage.removeItem('projectpulse_user');
     this.showAuthContainer();
     return false;
   },
@@ -4494,19 +4471,24 @@ const app = {
     try {
       const res = await this.api('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({
+        body: {
           username: identifier,
           password,
           remember,
           active_project_id: savedProjectId
-        })
+        }
       });
 
       if (res.token && res.user) {
         this.state.authToken = res.token;
         this.state.user = res.user;
-        localStorage.setItem('projectpulse_token', res.token);
-        localStorage.setItem('projectpulse_user', JSON.stringify(res.user));
+
+        // Remember or clear username based on checkbox
+        if (remember) {
+          localStorage.setItem('projectpulse_remembered_username', identifier);
+        } else {
+          localStorage.removeItem('projectpulse_remembered_username');
+        }
 
         if (res.projects && Array.isArray(res.projects) && res.projects.length > 0) {
           this.state.projects = res.projects;
@@ -4570,14 +4552,12 @@ const app = {
     try {
       const res = await this.api('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ full_name, username, email, password })
+        body: { full_name, username, email, password }
       });
 
       if (res.token && res.user) {
         this.state.authToken = res.token;
         this.state.user = res.user;
-        localStorage.setItem('projectpulse_token', res.token);
-        localStorage.setItem('projectpulse_user', JSON.stringify(res.user));
 
         if (res.projects && Array.isArray(res.projects) && res.projects.length > 0) {
           this.state.projects = res.projects;
@@ -4631,6 +4611,20 @@ const app = {
     }
     this.closeUserMenu();
     this.showAuthContainer();
+
+    // Clear password input and focus identifier or password
+    const pwdInput = document.getElementById('login-input-password');
+    if (pwdInput) pwdInput.value = '';
+    const idInput = document.getElementById('login-input-identifier');
+    const rememberedUsername = localStorage.getItem('projectpulse_remembered_username');
+    if (rememberedUsername && idInput) {
+      idInput.value = rememberedUsername;
+      pwdInput?.focus();
+    } else {
+      if (idInput) idInput.value = '';
+      idInput?.focus();
+    }
+
     this.showToast('You have signed out', 'info');
 
     // 2. Non-blocking server cleanup in background
