@@ -123,17 +123,23 @@ def get_current_user():
         """, (token,)).fetchone()
         return session
 
-def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
-    projects = conn.execute("""
-        SELECT p.*,
-            (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) as total_tasks,
-            (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status = 'done') as completed_tasks,
-            (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status != 'done' AND due_date < date('now') AND due_date IS NOT NULL) as overdue_tasks,
-            (SELECT COALESCE(SUM(actual_hours), 0) FROM tasks WHERE project_id = p.id) as total_actual_hours,
-            (SELECT COALESCE(SUM(estimated_hours), 0) FROM tasks WHERE project_id = p.id) as total_estimated_hours
+def get_all_projects_aggregated(conn):
+    return conn.execute("""
+        SELECT
+            p.*,
+            COUNT(t.id) as total_tasks,
+            SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
+            SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
+            COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
+            COALESCE(SUM(t.estimated_hours), 0) as total_estimated_hours
         FROM projects p
+        LEFT JOIN tasks t ON t.project_id = p.id
+        GROUP BY p.id
         ORDER BY p.updated_at DESC
     """).fetchall()
+
+def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
+    projects = get_all_projects_aggregated(conn)
 
     if not projects:
         return {
@@ -160,10 +166,7 @@ def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
     tasks_raw = conn.execute("""
         SELECT t.*,
             m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
-            s.name as sprint_name,
-            (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) as subtask_count,
-            (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND completed = 1) as subtask_completed_count,
-            (SELECT COALESCE(SUM(hours), 0) FROM timelogs WHERE task_id = t.id) as logged_hours_sum
+            s.name as sprint_name
         FROM tasks t
         LEFT JOIN members m ON t.assignee_id = m.id
         LEFT JOIN sprints s ON t.sprint_id = s.id
@@ -182,6 +185,15 @@ def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
     for s in subtasks_raw:
         subtasks_by_task.setdefault(s["task_id"], []).append(dict(s))
 
+    timelogs_raw = conn.execute("""
+        SELECT tl.task_id, COALESCE(SUM(tl.hours), 0) as total_logged_hours
+        FROM timelogs tl
+        JOIN tasks t ON tl.task_id = t.id
+        WHERE t.project_id = ?
+        GROUP BY tl.task_id
+    """, (target_id,)).fetchall()
+    logged_hours_by_task = {row["task_id"]: row["total_logged_hours"] for row in timelogs_raw}
+
     tasks = []
     for t in tasks_raw:
         t_dict = dict(t)
@@ -189,7 +201,12 @@ def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
             t_dict["tags"] = json.loads(t_dict["tags"]) if t_dict.get("tags") else []
         except Exception:
             t_dict["tags"] = []
-        t_dict["subtasks_list"] = subtasks_by_task.get(t["id"], [])
+        
+        t_subtasks = subtasks_by_task.get(t["id"], [])
+        t_dict["subtasks_list"] = t_subtasks
+        t_dict["subtask_count"] = len(t_subtasks)
+        t_dict["subtask_completed_count"] = sum(1 for s in t_subtasks if s.get("completed"))
+        t_dict["logged_hours_sum"] = safe_float(logged_hours_by_task.get(t["id"], 0.0))
         tasks.append(t_dict)
 
     return {
@@ -385,16 +402,7 @@ def auth_logout():
 @app.get("/api/projects")
 def get_projects():
     with get_db() as conn:
-        projects = conn.execute("""
-            SELECT p.*,
-                (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) as total_tasks,
-                (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status = 'done') as completed_tasks,
-                (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status != 'done' AND due_date < date('now') AND due_date IS NOT NULL) as overdue_tasks,
-                (SELECT COALESCE(SUM(actual_hours), 0) FROM tasks WHERE project_id = p.id) as total_actual_hours,
-                (SELECT COALESCE(SUM(estimated_hours), 0) FROM tasks WHERE project_id = p.id) as total_estimated_hours
-            FROM projects p
-            ORDER BY p.updated_at DESC
-        """).fetchall()
+        projects = get_all_projects_aggregated(conn)
         return json_response(projects)
 
 @app.post("/api/projects")
@@ -731,10 +739,7 @@ def get_tasks(project_id):
         query = """
             SELECT t.*,
                 m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
-                s.name as sprint_name,
-                (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) as subtask_count,
-                (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND completed = 1) as subtask_completed_count,
-                (SELECT COALESCE(SUM(hours), 0) FROM timelogs WHERE task_id = t.id) as logged_hours_sum
+                s.name as sprint_name
             FROM tasks t
             LEFT JOIN members m ON t.assignee_id = m.id
             LEFT JOIN sprints s ON t.sprint_id = s.id
@@ -781,6 +786,16 @@ def get_tasks(project_id):
         for s in subtasks_raw:
             subtasks_by_task.setdefault(s["task_id"], []).append(dict(s))
 
+        # Batch fetch all timelogs in 1 single query
+        timelogs_raw = conn.execute("""
+            SELECT tl.task_id, COALESCE(SUM(tl.hours), 0) as total_logged_hours
+            FROM timelogs tl
+            JOIN tasks t ON tl.task_id = t.id
+            WHERE t.project_id = ?
+            GROUP BY tl.task_id
+        """, (project_id,)).fetchall()
+        logged_hours_by_task = {row["task_id"]: row["total_logged_hours"] for row in timelogs_raw}
+
         result = []
         for t in tasks:
             t_dict = dict(t)
@@ -789,7 +804,11 @@ def get_tasks(project_id):
             except Exception:
                 t_dict["tags"] = []
             
-            t_dict["subtasks_list"] = subtasks_by_task.get(t["id"], [])
+            t_subtasks = subtasks_by_task.get(t["id"], [])
+            t_dict["subtasks_list"] = t_subtasks
+            t_dict["subtask_count"] = len(t_subtasks)
+            t_dict["subtask_completed_count"] = sum(1 for s in t_subtasks if s.get("completed"))
+            t_dict["logged_hours_sum"] = safe_float(logged_hours_by_task.get(t["id"], 0.0))
             result.append(t_dict)
 
         return json_response(result)

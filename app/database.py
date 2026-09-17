@@ -60,14 +60,22 @@ def dict_factory(cursor, row):
 def get_db():
     target_path = get_db_path()
     try:
-        conn = sqlite3.connect(target_path, timeout=30.0)
+        conn = sqlite3.connect(target_path, timeout=5.0)
     except Exception:
         tmp_dir = "/tmp" if os.path.exists("/tmp") else os.getcwd()
         fallback_path = os.path.join(tmp_dir, "project_pulse.db")
-        conn = sqlite3.connect(fallback_path, timeout=30.0)
+        conn = sqlite3.connect(fallback_path, timeout=5.0)
     conn.row_factory = dict_factory
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 30000")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA temp_store = MEMORY")
+        conn.execute("PRAGMA cache_size = -64000")
+        conn.execute("PRAGMA mmap_size = 268435456")
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
+    except Exception:
+        pass
     try:
         yield conn
         conn.commit()
@@ -331,10 +339,14 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_due ON tasks(project_id, due_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_subtasks_task_completed ON subtasks(task_id, completed)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timelogs_task ON timelogs(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timelogs_task_hours ON timelogs(task_id, hours)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_project ON activity_logs(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_project ON email_logs(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_task ON email_logs(task_id)")

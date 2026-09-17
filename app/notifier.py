@@ -570,7 +570,7 @@ _scheduler_started = False
 _scheduler_lock = threading.Lock()
 
 def _scheduler_loop():
-    time.sleep(15)  # Allow container to fully initialize and bind port first
+    time.sleep(60)  # Allow container to fully initialize and handle initial user traffic first
     while True:
         try:
             with get_db() as conn:
