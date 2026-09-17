@@ -5,12 +5,18 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 
-_RESOLVED_DB_PATH = None
+import shutil
+import threading
+
+_ACTIVE_DB_PATH = None
+_PERSISTENT_STORAGE_PATH = None
+_sync_timer = None
+_sync_lock = threading.Lock()
 
 def get_db_path():
-    global _RESOLVED_DB_PATH
-    if _RESOLVED_DB_PATH:
-        return _RESOLVED_DB_PATH
+    global _ACTIVE_DB_PATH, _PERSISTENT_STORAGE_PATH
+    if _ACTIVE_DB_PATH:
+        return _ACTIVE_DB_PATH
 
     raw_path = os.environ.get("PROJECT_PULSE_DB")
     if raw_path:
@@ -18,37 +24,75 @@ def get_db_path():
             d = os.path.dirname(os.path.abspath(raw_path))
             if d:
                 os.makedirs(d, exist_ok=True)
-                test_file = os.path.join(d, ".db_write_check")
-                with open(test_file, "w") as f:
-                    f.write("ok")
-                if os.path.exists(test_file):
-                    os.remove(test_file)
-            _RESOLVED_DB_PATH = raw_path
-            return _RESOLVED_DB_PATH
+            _PERSISTENT_STORAGE_PATH = os.path.abspath(raw_path)
         except Exception as e:
-            print(f"[ProjectPulse DB Warning] Configured path '{raw_path}' not writable: {e}")
+            print(f"[ProjectPulse DB Warning] Configured path '{raw_path}' not accessible: {e}")
+
+    # For Linux/Docker/Cloud Run containers with network mounts (e.g. GCS FUSE /app/data),
+    # run the active DB on high-speed local NVMe/RAM (/tmp) for sub-millisecond query execution,
+    # and sync to persistent cloud storage in a non-blocking background thread.
+    if _PERSISTENT_STORAGE_PATH:
+        if os.path.exists("/tmp") and "/tmp" not in _PERSISTENT_STORAGE_PATH:
+            _ACTIVE_DB_PATH = "/tmp/project_pulse.db"
+            if os.path.exists(_PERSISTENT_STORAGE_PATH) and os.path.getsize(_PERSISTENT_STORAGE_PATH) > 0:
+                if not os.path.exists(_ACTIVE_DB_PATH) or os.path.getsize(_ACTIVE_DB_PATH) == 0:
+                    try:
+                        shutil.copy2(_PERSISTENT_STORAGE_PATH, _ACTIVE_DB_PATH)
+                        print(f"[ProjectPulse DB] Restored active local database from persistent storage ({_PERSISTENT_STORAGE_PATH})")
+                    except Exception as ex:
+                        print(f"[ProjectPulse DB Warning] Could not copy from storage: {ex}")
+            return _ACTIVE_DB_PATH
+        else:
+            _ACTIVE_DB_PATH = _PERSISTENT_STORAGE_PATH
+            return _ACTIVE_DB_PATH
 
     # Fallback 1: Project root directory
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     local_path = os.path.join(base_dir, "project_pulse.db")
     try:
         d = os.path.dirname(os.path.abspath(local_path))
-        test_file = os.path.join(d, ".db_write_check")
-        with open(test_file, "w") as f:
-            f.write("ok")
-        if os.path.exists(test_file):
-            os.remove(test_file)
-        _RESOLVED_DB_PATH = local_path
-        return _RESOLVED_DB_PATH
+        if d:
+            os.makedirs(d, exist_ok=True)
+        _ACTIVE_DB_PATH = local_path
+        _PERSISTENT_STORAGE_PATH = local_path
+        return _ACTIVE_DB_PATH
     except Exception:
         pass
 
-    # Fallback 2: System /tmp directory (guaranteed writable on all Linux/Docker/Cloud Run containers)
+    # Fallback 2: System /tmp directory
     tmp_dir = "/tmp" if os.path.exists("/tmp") else os.environ.get("TEMP", os.getcwd())
-    _RESOLVED_DB_PATH = os.path.join(tmp_dir, "project_pulse.db")
-    return _RESOLVED_DB_PATH
+    _ACTIVE_DB_PATH = os.path.join(tmp_dir, "project_pulse.db")
+    _PERSISTENT_STORAGE_PATH = _ACTIVE_DB_PATH
+    return _ACTIVE_DB_PATH
 
 DB_PATH = get_db_path()
+
+def _perform_storage_sync():
+    global _PERSISTENT_STORAGE_PATH, _ACTIVE_DB_PATH
+    if not _PERSISTENT_STORAGE_PATH or not _ACTIVE_DB_PATH or _ACTIVE_DB_PATH == _PERSISTENT_STORAGE_PATH:
+        return
+    if not os.path.exists(_ACTIVE_DB_PATH):
+        return
+    try:
+        src_conn = sqlite3.connect(_ACTIVE_DB_PATH, timeout=5.0)
+        dst_conn = sqlite3.connect(_PERSISTENT_STORAGE_PATH, timeout=10.0)
+        with dst_conn:
+            src_conn.backup(dst_conn)
+        dst_conn.close()
+        src_conn.close()
+    except Exception as e:
+        print(f"[ProjectPulse DB Sync Error] Could not backup to persistent storage: {e}")
+
+def schedule_storage_sync():
+    global _sync_timer, _PERSISTENT_STORAGE_PATH, _ACTIVE_DB_PATH
+    if not _PERSISTENT_STORAGE_PATH or not _ACTIVE_DB_PATH or _ACTIVE_DB_PATH == _PERSISTENT_STORAGE_PATH:
+        return
+    with _sync_lock:
+        if _sync_timer and _sync_timer.is_alive():
+            return
+        _sync_timer = threading.Timer(0.5, _perform_storage_sync)
+        _sync_timer.daemon = True
+        _sync_timer.start()
 
 def dict_factory(cursor, row):
     d = {}
@@ -67,8 +111,8 @@ def get_db():
         conn = sqlite3.connect(fallback_path, timeout=5.0)
     conn.row_factory = dict_factory
     try:
-        conn.execute("PRAGMA journal_mode = MEMORY")
-        conn.execute("PRAGMA synchronous = OFF")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
         conn.execute("PRAGMA temp_store = MEMORY")
         conn.execute("PRAGMA cache_size = -64000")
         conn.execute("PRAGMA mmap_size = 268435456")
@@ -79,6 +123,7 @@ def get_db():
     try:
         yield conn
         conn.commit()
+        schedule_storage_sync()
     except Exception:
         conn.rollback()
         raise
@@ -352,3 +397,6 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_task ON email_logs(task_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_sent ON email_logs(sent_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dispatches_lookup ON notification_dispatches(task_id, trigger_type, dispatch_date)")
+    
+    # Immediately flush initial database structure to persistent storage if needed
+    _perform_storage_sync()
