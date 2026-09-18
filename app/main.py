@@ -1378,6 +1378,121 @@ def get_project_timelogs(project_id):
 
 # ==================== ANALYTICS ====================
 
+@app.get("/api/portfolio/analytics")
+@app.get("/api/analytics/portfolio")
+def get_portfolio_analytics():
+    with get_db() as conn:
+        projects = conn.execute("""
+            SELECT
+                p.id, p.name, p.description, p.color, p.created_at, p.updated_at,
+                COUNT(t.id) as total_tasks,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_tasks,
+                SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
+                SUM(CASE WHEN t.status = 'todo' THEN 1 ELSE 0 END) as todo_tasks,
+                SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
+                COALESCE(SUM(t.estimated_hours), 0) as total_est_hours,
+                COALESCE(SUM(t.actual_hours), 0) as total_act_hours
+            FROM projects p
+            LEFT JOIN tasks t ON t.project_id = p.id
+            GROUP BY p.id
+            ORDER BY p.updated_at DESC
+        """).fetchall()
+
+        projects_list = []
+        tot_tasks = 0
+        tot_done = 0
+        tot_inprogress = 0
+        tot_overdue = 0
+        tot_est_hours = 0.0
+        tot_act_hours = 0.0
+
+        for p in projects:
+            p_dict = dict(p)
+            p_tot = p_dict["total_tasks"] or 0
+            p_done = p_dict["done_tasks"] or 0
+            p_overdue = p_dict["overdue_tasks"] or 0
+            p_rate = round((p_done / p_tot * 100), 1) if p_tot > 0 else 0.0
+            p_dict["completion_rate"] = p_rate
+            
+            # Delivery health classification
+            if p_overdue > 0:
+                p_dict["health_status"] = "overdue"
+            elif p_rate < 30 and p_tot > 5:
+                p_dict["health_status"] = "at_risk"
+            else:
+                p_dict["health_status"] = "on_track"
+
+            projects_list.append(p_dict)
+
+            tot_tasks += p_tot
+            tot_done += p_done
+            tot_inprogress += (p_dict["in_progress_tasks"] or 0)
+            tot_overdue += p_overdue
+            tot_est_hours += float(p_dict["total_est_hours"] or 0.0)
+            tot_act_hours += float(p_dict["total_act_hours"] or 0.0)
+
+        overall_completion_rate = round((tot_done / tot_tasks * 100), 1) if tot_tasks > 0 else 0.0
+
+        # Global status distribution
+        status_counts = conn.execute("""
+            SELECT status, COUNT(*) as count, COALESCE(SUM(estimated_hours), 0) as est_hours, COALESCE(SUM(actual_hours), 0) as act_hours
+            FROM tasks
+            GROUP BY status
+        """).fetchall()
+
+        # Global priority distribution
+        priority_counts = conn.execute("""
+            SELECT priority, COUNT(*) as count
+            FROM tasks
+            GROUP BY priority
+        """).fetchall()
+
+        # Cross-project team workload
+        workload_rows = conn.execute("""
+            SELECT 
+                COALESCE(NULLIF(TRIM(m.name), ''), 'Unassigned') as name,
+                COALESCE(NULLIF(TRIM(m.role), ''), 'Team Member') as role,
+                COALESCE(m.avatar_color, '#3B82F6') as avatar_color,
+                COUNT(t.id) as assigned_tasks,
+                COUNT(CASE WHEN t.status = 'done' THEN 1 END) as completed_tasks,
+                COALESCE(SUM(t.estimated_hours), 0) as total_est_hours,
+                COALESCE(SUM(t.actual_hours), 0) as total_act_hours
+            FROM tasks t
+            LEFT JOIN members m ON t.assignee_id = m.id
+            GROUP BY LOWER(TRIM(COALESCE(m.name, 'Unassigned')))
+            ORDER BY assigned_tasks DESC
+        """).fetchall()
+        workload = [dict(r) for r in workload_rows]
+
+        # Recent activities across all projects
+        acts = conn.execute("""
+            SELECT a.*, p.name as project_name, t.title as task_title
+            FROM activity_logs a
+            LEFT JOIN projects p ON a.project_id = p.id
+            LEFT JOIN tasks t ON a.task_id = t.id
+            ORDER BY a.timestamp DESC
+            LIMIT 25
+        """).fetchall()
+
+        result = {
+            "kpis": {
+                "total_projects": len(projects_list),
+                "total_tasks": tot_tasks,
+                "done_tasks": tot_done,
+                "in_progress_tasks": tot_inprogress,
+                "overdue_tasks": tot_overdue,
+                "completion_rate": overall_completion_rate,
+                "total_est_hours": tot_est_hours,
+                "total_act_hours": tot_act_hours
+            },
+            "projects": projects_list,
+            "status_distribution": [dict(r) for r in status_counts],
+            "priority_distribution": [dict(r) for r in priority_counts],
+            "workload": workload,
+            "activities": [dict(r) for r in acts]
+        }
+        return json_response(result)
+
 @app.get("/api/projects/<project_id:int>/analytics")
 def get_analytics(project_id):
     sprint_id = request.query.get("sprint_id")

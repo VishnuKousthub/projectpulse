@@ -19,6 +19,7 @@ const app = {
     filterAssignee: '',
     filterPriority: '',
     calendarDate: new Date(),
+    analyticsScope: 'project', // 'project' | 'portfolio'
     charts: {},
     sortableInstances: []
   },
@@ -2379,6 +2380,35 @@ const app = {
   },
 
   // ==================== ANALYTICS DASHBOARD ====================
+  setAnalyticsScope(scope = 'project') {
+    this.state.analyticsScope = scope;
+    const projBtn = document.getElementById('analytics-scope-project-btn');
+    const portBtn = document.getElementById('analytics-scope-portfolio-btn');
+    const projWrapper = document.getElementById('analytics-project-select-wrapper');
+    const portPanel = document.getElementById('analytics-portfolio-panel');
+    const projPanel = document.getElementById('analytics-single-project-panel');
+
+    if (scope === 'portfolio') {
+      portBtn?.classList.add('bg-blue-600', 'text-white', 'font-bold', 'shadow-xs');
+      portBtn?.classList.remove('text-slate-600', 'dark:text-slate-400');
+      projBtn?.classList.remove('bg-blue-600', 'text-white', 'font-bold', 'shadow-xs');
+      projBtn?.classList.add('text-slate-600', 'dark:text-slate-400');
+      if (projWrapper) projWrapper.classList.add('hidden');
+      if (portPanel) portPanel.classList.remove('hidden');
+      if (projPanel) projPanel.classList.add('hidden');
+    } else {
+      projBtn?.classList.add('bg-blue-600', 'text-white', 'font-bold', 'shadow-xs');
+      projBtn?.classList.remove('text-slate-600', 'dark:text-slate-400');
+      portBtn?.classList.remove('bg-blue-600', 'text-white', 'font-bold', 'shadow-xs');
+      portBtn?.classList.add('text-slate-600', 'dark:text-slate-400');
+      if (projWrapper) projWrapper.classList.remove('hidden');
+      if (portPanel) portPanel.classList.add('hidden');
+      if (projPanel) projPanel.classList.remove('hidden');
+    }
+    this.renderAnalytics();
+    this.initLucide();
+  },
+
   async handleAnalyticsProjectChange(projectId) {
     if (!projectId) return;
     await this.selectProject(Number(projectId));
@@ -2388,6 +2418,89 @@ const app = {
   },
 
   async renderAnalytics() {
+    // If portfolio scope is active, render enterprise portfolio overview
+    if (this.state.analyticsScope === 'portfolio') {
+      try {
+        const data = await this.api('/api/portfolio/analytics');
+        if (!data || data.error) {
+          console.warn('Portfolio analytics data not available:', data?.error);
+          return;
+        }
+
+        const kpis = data.kpis || {};
+        const elTotProj = document.getElementById('portfolio-kpi-total-projects');
+        const elTotTasks = document.getElementById('portfolio-kpi-total-tasks');
+        const elDoneTasks = document.getElementById('portfolio-kpi-done-tasks');
+        const elCompRate = document.getElementById('portfolio-kpi-completion-rate');
+        const elInProg = document.getElementById('portfolio-kpi-inprogress-tasks');
+        const elOverdue = document.getElementById('portfolio-kpi-overdue-tasks');
+        const elHrs = document.getElementById('portfolio-kpi-total-hours');
+        const elCount = document.getElementById('portfolio-leaderboard-count');
+
+        if (elTotProj) elTotProj.textContent = kpis.total_projects || 0;
+        if (elTotTasks) elTotTasks.textContent = kpis.total_tasks || 0;
+        if (elDoneTasks) elDoneTasks.textContent = kpis.done_tasks || 0;
+        if (elCompRate) elCompRate.textContent = `${kpis.completion_rate || 0}% Delivered`;
+        if (elInProg) elInProg.textContent = kpis.in_progress_tasks || 0;
+        if (elOverdue) elOverdue.textContent = kpis.overdue_tasks || 0;
+        if (elHrs) elHrs.textContent = `${(kpis.total_act_hours || 0).toFixed(1)}h / ${(kpis.total_est_hours || 0).toFixed(1)}h`;
+        if (elCount) elCount.textContent = `${(data.projects || []).length} Projects`;
+
+        // Render projects scorecard / leaderboard
+        this.renderProjectsLeaderboard(data.projects || []);
+
+        // Render charts
+        try {
+          this.renderPortfolioProjectsChart(data.projects || []);
+        } catch (err) {
+          console.error('Error rendering portfolio projects chart:', err);
+        }
+
+        try {
+          this.renderPortfolioPriorityChart(data.priority_distribution || []);
+        } catch (err) {
+          console.error('Error rendering portfolio priority chart:', err);
+        }
+
+        try {
+          this.renderPortfolioWorkloadChart(data.workload || []);
+        } catch (err) {
+          console.error('Error rendering portfolio workload chart:', err);
+        }
+
+        // Render Global Activity Stream
+        const actContainer = document.getElementById('portfolio-activity-stream-render');
+        if (actContainer) {
+          const acts = data.activities || [];
+          if (acts.length === 0) {
+            actContainer.innerHTML = `<div class="text-slate-400 p-2 text-center">No portfolio activity recorded yet.</div>`;
+          } else {
+            actContainer.innerHTML = acts.slice(0, 20).map(a => `
+              <div class="flex items-start space-x-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-700/60">
+                <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                  ${((a && a.user_name) || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="font-semibold text-slate-800 dark:text-white truncate">${this.escapeHtml(a.user_name || 'User')}</span>
+                    ${a.project_name ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300 truncate max-w-[100px]">${this.escapeHtml(a.project_name)}</span>` : ''}
+                  </div>
+                  <p class="text-slate-500 dark:text-slate-400 truncate mt-0.5">${this.escapeHtml(a.details || a.action || '')}</p>
+                  <div class="text-[10px] text-slate-400 mt-0.5">${new Date(a.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              </div>
+            `).join('');
+          }
+        }
+
+        this.initLucide();
+      } catch (err) {
+        console.error('Error loading portfolio analytics:', err);
+      }
+      return;
+    }
+
+    // Default: Single Project Analytics
     if (!this.state.currentProjectId && this.state.projects?.length > 0) {
       this.state.currentProjectId = this.state.projects[0].id;
     }
@@ -2481,6 +2594,223 @@ const app = {
     } catch (e) {
       console.error('Error loading analytics:', e);
     }
+  },
+
+  renderProjectsLeaderboard(projects = []) {
+    const tbody = document.getElementById('portfolio-projects-table-body');
+    if (!tbody) return;
+
+    if (!projects || projects.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="px-4 py-8 text-center text-slate-400">
+            <i data-lucide="folder-x" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+            <div>No projects found in the enterprise database.</div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = projects.map(p => {
+      const rate = p.completion_rate || 0;
+      const total = p.total_tasks || 0;
+      const done = p.done_tasks || 0;
+      const inProg = p.in_progress_tasks || 0;
+      const overdue = p.overdue_tasks || 0;
+      const actHrs = (parseFloat(p.total_act_hours) || 0).toFixed(1);
+      const estHrs = (parseFloat(p.total_est_hours) || 0).toFixed(1);
+
+      let healthBadge = '';
+      if (p.health_status === 'overdue' || overdue > 0) {
+        healthBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 border border-rose-200 dark:border-rose-800"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5 animate-pulse"></span>Overdue</span>`;
+      } else if (p.health_status === 'at_risk' || (rate < 30 && total > 5)) {
+        healthBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>At Risk</span>`;
+      } else {
+        healthBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>On Track</span>`;
+      }
+
+      let barColor = 'bg-blue-600';
+      if (rate >= 100) barColor = 'bg-emerald-600';
+      else if (rate < 30 && total > 5) barColor = 'bg-amber-500';
+
+      return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-750/50 transition">
+          <td class="px-4 py-3 font-semibold text-slate-800 dark:text-white">
+            <div class="flex items-center space-x-2.5">
+              <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${p.color || '#3B82F6'}"></span>
+              <span class="truncate max-w-[200px]" title="${this.escapeHtml(p.name)}">${this.escapeHtml(p.name)}</span>
+            </div>
+          </td>
+          <td class="px-4 py-3">
+            <div class="w-full max-w-[140px]">
+              <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                <span>Progress</span>
+                <span class="font-bold text-slate-700 dark:text-slate-200">${rate}%</span>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div class="${barColor} h-1.5 rounded-full transition-all duration-500" style="width: ${rate}%"></div>
+              </div>
+            </div>
+          </td>
+          <td class="px-4 py-3 font-medium text-slate-600 dark:text-slate-300">
+            <span class="text-emerald-600 dark:text-emerald-400 font-bold">${done}</span> / ${total}
+          </td>
+          <td class="px-4 py-3">
+            <div class="flex items-center space-x-1.5">
+              <span class="text-amber-600 dark:text-amber-400 font-semibold" title="In Progress">${inProg} in prog</span>
+              ${overdue > 0 ? `<span class="text-rose-600 dark:text-rose-400 font-bold" title="Overdue">(${overdue} late)</span>` : ''}
+            </div>
+          </td>
+          <td class="px-4 py-3 text-slate-600 dark:text-slate-300">
+            ${actHrs}h / <span class="text-slate-400">${estHrs}h</span>
+          </td>
+          <td class="px-4 py-3">
+            ${healthBadge}
+          </td>
+          <td class="px-4 py-3 text-right">
+            <button onclick="app.inspectProjectFromPortfolio(${p.id})" class="bg-slate-100 hover:bg-blue-50 dark:bg-slate-700 dark:hover:bg-blue-900/40 text-slate-700 hover:text-blue-600 dark:text-slate-200 dark:hover:text-blue-400 px-2.5 py-1 rounded-lg text-xs font-semibold inline-flex items-center space-x-1 transition shadow-2xs">
+              <span>Inspect</span>
+              <i data-lucide="arrow-right" class="w-3 h-3"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  async inspectProjectFromPortfolio(projectId) {
+    if (!projectId) return;
+    await this.selectProject(Number(projectId));
+    this.switchView('kanban');
+  },
+
+  renderPortfolioProjectsChart(projects = []) {
+    const ctx = document.getElementById('portfolioProjectsChart');
+    if (!ctx) return;
+    if (typeof Chart === 'undefined') return;
+    if (this.state.charts.portfolioProjects) this.state.charts.portfolioProjects.destroy();
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+
+    const safeProjects = Array.isArray(projects) ? projects : [];
+    const labels = safeProjects.map(p => {
+      const name = p.name || 'Project';
+      return name.length > 15 ? name.substring(0, 15) + '...' : name;
+    });
+    const rates = safeProjects.map(p => p.completion_rate || 0);
+    const bgColors = safeProjects.map(p => {
+      if (p.health_status === 'overdue' || (p.overdue_tasks || 0) > 0) return '#ef4444';
+      if (p.health_status === 'at_risk' || (p.completion_rate < 30 && p.total_tasks > 5)) return '#f59e0b';
+      return '#3b82f6';
+    });
+
+    this.state.charts.portfolioProjects = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels.length > 0 ? labels : ['No Projects'],
+        datasets: [{
+          label: 'Completion %',
+          data: rates.length > 0 ? rates : [0],
+          backgroundColor: bgColors.length > 0 ? bgColors : ['#3b82f6'],
+          borderRadius: 6,
+          maxBarThickness: 32
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (item) => `Completion: ${item.raw}%`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: textColor } },
+          y: { grid: { color: gridColor }, ticks: { color: textColor }, beginAtZero: true, max: 100 }
+        }
+      }
+    });
+  },
+
+  renderPortfolioPriorityChart(priorityCounts = []) {
+    const ctx = document.getElementById('portfolioPriorityChart');
+    if (!ctx) return;
+    if (typeof Chart === 'undefined') return;
+    if (this.state.charts.portfolioPriority) this.state.charts.portfolioPriority.destroy();
+
+    const counts = { urgent: 0, high: 0, medium: 0, low: 0 };
+    if (Array.isArray(priorityCounts)) {
+      priorityCounts.forEach(p => { 
+        if (p && counts[p.priority] !== undefined) counts[p.priority] = p.count || 0; 
+      });
+    }
+
+    const totalPriority = counts.urgent + counts.high + counts.medium + counts.low;
+    const dataVals = totalPriority > 0 ? [counts.urgent, counts.high, counts.medium, counts.low] : [0, 0, 1, 0];
+
+    this.state.charts.portfolioPriority = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Urgent', 'High', 'Medium', 'Low'],
+        datasets: [{
+          data: dataVals,
+          backgroundColor: ['#ef4444', '#f97316', '#eab308', '#10b981'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+        },
+        cutout: '70%'
+      }
+    });
+  },
+
+  renderPortfolioWorkloadChart(workload = []) {
+    const ctx = document.getElementById('portfolioWorkloadChart');
+    if (!ctx) return;
+    if (typeof Chart === 'undefined') return;
+    if (this.state.charts.portfolioWorkload) this.state.charts.portfolioWorkload.destroy();
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? '#334155' : '#e2e8f0';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+
+    const safeList = Array.isArray(workload) ? workload : [];
+    const names = safeList.map(w => (w && w.name ? String(w.name).split(' ')[0] : 'Member'));
+    const est = safeList.map(w => (w ? parseFloat(w.total_est_hours) || 0 : 0));
+    const act = safeList.map(w => (w ? parseFloat(w.total_act_hours) || 0 : 0));
+
+    this.state.charts.portfolioWorkload = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: names.length > 0 ? names : ['Unassigned'],
+        datasets: [
+          { label: 'Assigned Est. Hours', data: est.length > 0 ? est : [0], backgroundColor: '#6366f1', borderRadius: 4 },
+          { label: 'Actual Logged Hours', data: act.length > 0 ? act : [0], backgroundColor: '#10b981', borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: textColor, font: { size: 11 } } }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: textColor } },
+          y: { grid: { color: gridColor }, ticks: { color: textColor }, beginAtZero: true }
+        }
+      }
+    });
   },
 
   renderBurndownChart(burndown) {

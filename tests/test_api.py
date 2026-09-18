@@ -855,6 +855,36 @@ class TestProjectPulseAPI(unittest.TestCase):
         # 4. Clean up
         self.request(f"/api/tasks/{t_id}", method="DELETE")
 
+    def test_24_portfolio_analytics(self):
+        # 1. Test /api/portfolio/analytics endpoint
+        status, data = self.request("/api/portfolio/analytics")
+        self.assertEqual(status, 200)
+        self.assertIn("kpis", data)
+        self.assertIn("projects", data)
+        self.assertIn("status_distribution", data)
+        self.assertIn("priority_distribution", data)
+        self.assertIn("workload", data)
+        self.assertIn("activities", data)
+
+        kpis = data["kpis"]
+        self.assertGreaterEqual(kpis["total_projects"], 1)
+        self.assertGreaterEqual(kpis["total_tasks"], 0)
+        self.assertIn("completion_rate", kpis)
+        self.assertIn("total_est_hours", kpis)
+        self.assertIn("total_act_hours", kpis)
+
+        # 2. Check projects list has delivery health and rate
+        for p in data["projects"]:
+            self.assertIn("name", p)
+            self.assertIn("completion_rate", p)
+            self.assertIn("health_status", p)
+            self.assertIn(p["health_status"], ["on_track", "at_risk", "overdue"])
+
+        # 3. Test alias /api/analytics/portfolio
+        status_alias, data_alias = self.request("/api/analytics/portfolio")
+        self.assertEqual(status_alias, 200)
+        self.assertEqual(data_alias["kpis"]["total_projects"], kpis["total_projects"])
+
 if __name__ == "__main__":
     unittest.main()
 

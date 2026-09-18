@@ -766,17 +766,37 @@
       <section id="view-analytics-container" class="view-panel hidden space-y-6">
         
         <!-- Analytics Toolbar & Scope Controls -->
-        <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          
+          <!-- Left: Scope Toggle & Selector -->
           <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center space-x-2">
+            
+            <!-- Scope Switcher Tabs -->
+            <div class="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold select-none">
+              <button id="analytics-scope-project-btn" onclick="app.setAnalyticsScope('project')" 
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg transition bg-blue-600 text-white font-bold shadow-xs">
+                <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                <span>Single Project</span>
+              </button>
+              <button id="analytics-scope-portfolio-btn" onclick="app.setAnalyticsScope('portfolio')" 
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                <i data-lucide="globe" class="w-3.5 h-3.5"></i>
+                <span>Cumulative Portfolio (All Projects)</span>
+              </button>
+            </div>
+
+            <!-- Single Project Dropdown (Visible in 'project' scope) -->
+            <div id="analytics-project-select-wrapper" class="flex items-center space-x-2">
               <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Project:</span>
               <select id="analytics-project-select" onchange="app.handleAnalyticsProjectChange(this.value)"
                 class="bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
                 <!-- Populated dynamically -->
               </select>
             </div>
+
           </div>
 
+          <!-- Right: Refresh & Actions -->
           <div class="flex items-center space-x-2">
             <button onclick="app.renderAnalytics()" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -785,65 +805,200 @@
           </div>
         </div>
 
-        <!-- KPI Metrics Grid -->
-        <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <span class="text-[11px] font-semibold text-slate-500 uppercase">Total Tasks</span>
-            <div class="text-2xl font-bold text-slate-800 dark:text-white mt-1" id="kpi-total-tasks">0</div>
-          </div>
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <span class="text-[11px] font-semibold text-amber-500 uppercase">In Progress</span>
-            <div class="text-2xl font-bold text-amber-600 mt-1" id="kpi-inprogress-tasks">0</div>
-          </div>
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <span class="text-[11px] font-semibold text-emerald-500 uppercase">Done Tasks</span>
-            <div class="text-2xl font-bold text-emerald-600 mt-1" id="kpi-done-tasks">0</div>
-          </div>
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <span class="text-[11px] font-semibold text-blue-500 uppercase">Completion Rate</span>
-            <div class="text-2xl font-bold text-blue-600 mt-1" id="kpi-completion-rate">0%</div>
-          </div>
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <span class="text-[11px] font-semibold text-rose-500 uppercase">Overdue Tasks</span>
-            <div class="text-2xl font-bold text-rose-600 mt-1" id="kpi-overdue-tasks">0</div>
-          </div>
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <span class="text-[11px] font-semibold text-purple-500 uppercase">Total Logged</span>
-            <div class="text-2xl font-bold text-purple-600 mt-1" id="kpi-total-hours">0h</div>
-          </div>
-        </div>
-
-        <!-- Burndown & Priority -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Progress & Completion Trajectory</h3>
-                <span class="text-xs text-slate-400" id="burndown-project-title">Project Lifecycle</span>
+        <!-- ==================== VIEW A: CUMULATIVE PORTFOLIO (ALL PROJECTS) ==================== -->
+        <div id="analytics-portfolio-panel" class="hidden space-y-6">
+          
+          <!-- Portfolio KPI Grid (6 Metric Cards) -->
+          <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase">Total Projects</span>
+                <i data-lucide="folder-kanban" class="w-4 h-4 text-blue-500"></i>
               </div>
-              <span class="text-xs text-slate-400">Ideal vs. Actual Remaining Hours</span>
+              <div class="text-2xl font-bold text-slate-800 dark:text-white mt-1" id="portfolio-kpi-total-projects">0</div>
+              <span class="text-[10px] text-slate-400">Active Workspaces</span>
             </div>
-            <div class="h-64 w-full relative"><canvas id="burndownChart"></canvas></div>
+
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-indigo-500 uppercase">Enterprise Tasks</span>
+                <i data-lucide="layers" class="w-4 h-4 text-indigo-500"></i>
+              </div>
+              <div class="text-2xl font-bold text-slate-800 dark:text-white mt-1" id="portfolio-kpi-total-tasks">0</div>
+              <span class="text-[10px] text-slate-400">Total Across All Projects</span>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-emerald-500 uppercase">Overall Completed</span>
+                <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500"></i>
+              </div>
+              <div class="text-2xl font-bold text-emerald-600 mt-1" id="portfolio-kpi-done-tasks">0</div>
+              <span class="text-[10px] text-emerald-600 font-semibold" id="portfolio-kpi-completion-rate">0% Delivered</span>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-amber-500 uppercase">In Progress</span>
+                <i data-lucide="clock" class="w-4 h-4 text-amber-500"></i>
+              </div>
+              <div class="text-2xl font-bold text-amber-600 mt-1" id="portfolio-kpi-inprogress-tasks">0</div>
+              <span class="text-[10px] text-slate-400">Active Deliverables</span>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-rose-500 uppercase">Overdue Tasks</span>
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
+              </div>
+              <div class="text-2xl font-bold text-rose-600 mt-1" id="portfolio-kpi-overdue-tasks">0</div>
+              <span class="text-[10px] text-rose-500 font-semibold">Past Deadlines</span>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-semibold text-purple-500 uppercase">Logged / Est.</span>
+                <i data-lucide="hourglass" class="w-4 h-4 text-purple-500"></i>
+              </div>
+              <div class="text-xl font-bold text-purple-600 mt-1 truncate" id="portfolio-kpi-total-hours">0h / 0h</div>
+              <span class="text-[10px] text-slate-400">Cumulative Effort</span>
+            </div>
           </div>
 
-          <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Priority Breakdown</h3>
-            <div class="h-64 w-full flex items-center justify-center relative"><canvas id="priorityChart"></canvas></div>
+          <!-- Projects Health & Delivery Leaderboard Scorecard -->
+          <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden space-y-0">
+            <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-850/50">
+              <div>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <i data-lucide="award" class="w-4 h-4 text-blue-500"></i>
+                  <span>Project Portfolio Delivery Scorecard</span>
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Real-time health, progress, and task metrics across all workspaces</p>
+              </div>
+              <span class="text-xs font-semibold text-slate-500" id="portfolio-leaderboard-count">0 Projects</span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead class="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[11px] font-bold border-b border-slate-200 dark:border-slate-700 select-none">
+                  <tr>
+                    <th class="px-4 py-3 min-w-[240px]">Project Name</th>
+                    <th class="px-4 py-3 min-w-[180px]">Delivery Progress</th>
+                    <th class="px-4 py-3 min-w-[100px]">Tasks (Done/Total)</th>
+                    <th class="px-4 py-3 min-w-[110px]">Active / Overdue</th>
+                    <th class="px-4 py-3 min-w-[130px]">Hours (Act / Est)</th>
+                    <th class="px-4 py-3 min-w-[120px]">Health Status</th>
+                    <th class="px-4 py-3 text-right min-w-[110px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="portfolio-projects-table-body" class="text-slate-700 dark:text-slate-200 divide-y divide-slate-100 dark:divide-slate-800">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Dual Row Charts for Portfolio -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Completion % Comparison</h3>
+                  <span class="text-xs text-slate-400">Comparing completion rates across all workspaces</span>
+                </div>
+                <span class="text-xs font-semibold text-blue-500">Cross-Project Index</span>
+              </div>
+              <div class="h-64 w-full relative"><canvas id="portfolioProjectsChart"></canvas></div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-800 dark:text-white">Enterprise Priority Distribution</h3>
+              <span class="text-xs text-slate-400">Priority breakdown across all projects</span>
+              <div class="h-64 w-full flex items-center justify-center relative"><canvas id="portfolioPriorityChart"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Cross-Project Workload & Global Activity Stream -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-800 dark:text-white">Enterprise Team Capacity & Resource Allocation</h3>
+              <span class="text-xs text-slate-400">Cumulative assigned hours vs. actual logged hours across all projects</span>
+              <div class="h-64 w-full relative"><canvas id="portfolioWorkloadChart"></canvas></div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-800 dark:text-white">Consolidated Enterprise Activity</h3>
+              <span class="text-xs text-slate-400">Latest updates across all projects</span>
+              <div id="portfolio-activity-stream-render" class="space-y-3 max-h-64 overflow-y-auto pr-1 text-xs"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ==================== VIEW B: SINGLE PROJECT ANALYTICS ==================== -->
+        <div id="analytics-single-project-panel" class="space-y-6">
+          
+          <!-- KPI Metrics Grid -->
+          <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span class="text-[11px] font-semibold text-slate-500 uppercase">Total Tasks</span>
+              <div class="text-2xl font-bold text-slate-800 dark:text-white mt-1" id="kpi-total-tasks">0</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span class="text-[11px] font-semibold text-amber-500 uppercase">In Progress</span>
+              <div class="text-2xl font-bold text-amber-600 mt-1" id="kpi-inprogress-tasks">0</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span class="text-[11px] font-semibold text-emerald-500 uppercase">Done Tasks</span>
+              <div class="text-2xl font-bold text-emerald-600 mt-1" id="kpi-done-tasks">0</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span class="text-[11px] font-semibold text-blue-500 uppercase">Completion Rate</span>
+              <div class="text-2xl font-bold text-blue-600 mt-1" id="kpi-completion-rate">0%</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span class="text-[11px] font-semibold text-rose-500 uppercase">Overdue Tasks</span>
+              <div class="text-2xl font-bold text-rose-600 mt-1" id="kpi-overdue-tasks">0</div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span class="text-[11px] font-semibold text-purple-500 uppercase">Total Logged</span>
+              <div class="text-2xl font-bold text-purple-600 mt-1" id="kpi-total-hours">0h</div>
+            </div>
+          </div>
+
+          <!-- Burndown & Priority -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Progress & Completion Trajectory</h3>
+                  <span class="text-xs text-slate-400" id="burndown-project-title">Project Lifecycle</span>
+                </div>
+                <span class="text-xs text-slate-400">Ideal vs. Actual Remaining Hours</span>
+              </div>
+              <div class="h-64 w-full relative"><canvas id="burndownChart"></canvas></div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-800 dark:text-white">Priority Breakdown</h3>
+              <div class="h-64 w-full flex items-center justify-center relative"><canvas id="priorityChart"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Workload & Activity / Department -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-800 dark:text-white">Team Member Workload (Assigned Hours)</h3>
+              <div class="h-60 w-full relative"><canvas id="workloadChart"></canvas></div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+              <h3 class="text-sm font-bold text-slate-800 dark:text-white">Recent Project Activity</h3>
+              <div id="activity-stream-render" class="space-y-3 max-h-60 overflow-y-auto pr-1 text-xs"></div>
+            </div>
           </div>
         </div>
 
-        <!-- Workload & Activity / Department -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Team Member Workload (Assigned Hours)</h3>
-            <div class="h-60 w-full relative"><canvas id="workloadChart"></canvas></div>
-          </div>
-
-          <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Recent Project Activity</h3>
-            <div id="activity-stream-render" class="space-y-3 max-h-60 overflow-y-auto pr-1 text-xs"></div>
-          </div>
-        </div>
       </section>
 
     </main>
@@ -1757,6 +1912,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.2.4"></script>
+  <script src="/static/js/app.js?v=2.2.5"></script>
 </body>
 </html>
