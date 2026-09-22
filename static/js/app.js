@@ -913,11 +913,21 @@ const app = {
     if (this.state.tasks.length === 0) {
       container.innerHTML = `
         <div class="p-12 text-center text-slate-400 text-xs space-y-3">
-          <i data-lucide="calendar-x" class="w-8 h-8 mx-auto text-slate-300"></i>
-          <div>No tasks scheduled yet for this project.</div>
-          <button onclick="app.openGanttUploadModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg text-xs">
-            + Upload Gantt Excel File
-          </button>
+          <div class="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
+            <i data-lucide="calendar-x" class="w-6 h-6"></i>
+          </div>
+          <div class="font-semibold text-slate-700 dark:text-slate-200 text-sm">No activities scheduled yet for this project.</div>
+          <p class="text-xs text-slate-400 max-w-sm mx-auto">Upload an Excel Gantt schedule or add activities to view the interactive process timeline.</p>
+          <div class="flex items-center justify-center gap-2 pt-2">
+            <button onclick="app.openGanttUploadModal()" class="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 rounded-lg text-xs flex items-center gap-1.5 shadow-xs transition">
+              <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+              <span>Upload Excel Schedule</span>
+            </button>
+            <button onclick="app.openTaskModal()" class="h-9 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 rounded-lg text-xs flex items-center gap-1.5 shadow-xs transition">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add First Activity</span>
+            </button>
+          </div>
         </div>
       `;
       this.initLucide();
@@ -983,15 +993,15 @@ const app = {
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[36px] text-center border-r border-slate-100 dark:border-slate-700/60 py-1.5 ${isToday ? 'bg-blue-100/70 dark:bg-blue-900/50 font-bold text-blue-600 dark:text-blue-400' : (isWeekend ? 'bg-slate-50/60 dark:bg-slate-900/40 text-slate-400' : 'text-slate-600 dark:text-slate-300')}">
+          <div class="flex-1 min-w-[36px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isToday ? 'bg-blue-100/70 dark:bg-blue-900/50 font-bold text-blue-600 dark:text-blue-400' : (isWeekend ? 'bg-slate-100/50 dark:bg-slate-900/40 text-slate-400' : 'text-slate-600 dark:text-slate-300')}">
             <div class="text-[9px] uppercase font-semibold">${d.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
-            <div class="text-[11px]">${d.getDate()}</div>
+            <div class="text-[11px] font-bold">${d.getDate()}</div>
           </div>
         `);
 
         if (d.getMonth() !== curMonth) {
           if (curMonth !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
           }
           curMonth = d.getMonth();
           curMonthName = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -1001,7 +1011,7 @@ const app = {
         }
       }
       if (curMonthSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
       }
 
     } else if (scale === 'week') {
@@ -1037,15 +1047,15 @@ const app = {
         const projectWeekNum = w + 1 + offset;
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[90px] text-center border-r border-slate-100 dark:border-slate-700/60 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}">
-            <div class="text-[10px] font-extrabold ${isCurrentWeek ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}">Week ${projectWeekNum}</div>
+          <div class="flex-1 min-w-[100px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}">
+            <div class="text-[10px] font-bold ${isCurrentWeek ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}">Week ${projectWeekNum}</div>
             <div class="text-[9px] text-slate-400 dark:text-slate-400 font-medium">${wStart.getDate()} ${wStart.toLocaleDateString('en-US', { month: 'short' })} - ${wEnd.getDate()} ${wEnd.toLocaleDateString('en-US', { month: 'short' })}</div>
           </div>
         `);
 
         if (wStart.getMonth() !== curMonth) {
           if (curMonth !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
           }
           curMonth = wStart.getMonth();
           curMonthName = wStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -1055,7 +1065,7 @@ const app = {
         }
       }
       if (curMonthSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
       }
 
     } else if (scale === 'month') {
@@ -1082,15 +1092,15 @@ const app = {
         const isCurrentMonth = now.getFullYear() === mDate.getFullYear() && now.getMonth() === mDate.getMonth();
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[110px] text-center border-r border-slate-100 dark:border-slate-700/60 py-2 ${isCurrentMonth ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}">
-            <div class="text-xs">${mDate.toLocaleDateString('en-US', { month: 'short' })}</div>
+          <div class="flex-1 min-w-[110px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentMonth ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}">
+            <div class="text-xs font-bold">${mDate.toLocaleDateString('en-US', { month: 'short' })}</div>
             <div class="text-[9px] text-slate-400 font-normal">Month ${mDate.getMonth() + 1}</div>
           </div>
         `);
 
         if (mDate.getFullYear() !== curYear) {
           if (curYear !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: ${curYearSpan}">${curYear}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan}">${curYear}</div>`);
           }
           curYear = mDate.getFullYear();
           curYearSpan = 1;
@@ -1099,7 +1109,7 @@ const app = {
         }
       }
       if (curYearSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: ${curYearSpan}">${curYear}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan}">${curYear}</div>`);
       }
 
     } else if (scale === 'year') {
@@ -1115,15 +1125,15 @@ const app = {
       }
 
       for (let y = startYear; y <= endYear; y++) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1 bg-slate-50 dark:bg-slate-800/90" style="flex: 4">${y}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: 4">${y}</div>`);
         
         for (let q = 1; q <= 4; q++) {
           const qStart = new Date(y, (q - 1) * 3, 1);
           const isCurQuarter = now >= qStart && now < new Date(y, q * 3, 1);
 
           bottomHeaders.push(`
-            <div class="flex-1 min-w-[90px] text-center border-r border-slate-100 dark:border-slate-700/60 py-2 ${isCurQuarter ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}">
-              <div class="text-xs">Q${q}</div>
+            <div class="flex-1 min-w-[90px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurQuarter ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}">
+              <div class="text-xs font-bold">Q${q}</div>
               <div class="text-[9px] text-slate-400 font-normal">${qStart.toLocaleDateString('en-US', { month: 'short' })}</div>
             </div>
           `);
@@ -1162,67 +1172,75 @@ const app = {
       const progressWidth = isCompleted ? 100 : (t.status === 'in_progress' ? 60 : 0);
 
       return `
-        <div class="flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition py-1.5 group">
+        <div class="flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-2 group min-h-[50px]">
           
-          <!-- Left Task Info & Direct Editable Date Column -->
-          <div class="w-[430px] flex-shrink-0 pr-3 pl-3 flex items-center justify-between space-x-2">
+          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px) -->
+          <div class="w-[540px] flex-shrink-0 px-3 flex items-center border-r border-slate-200 dark:border-slate-700/80">
             
-            <!-- Title & Assignee info -->
-            <div class="flex-1 min-w-0 cursor-pointer" onclick="app.openTaskModal({id: ${t.id}})" title="Click to view/edit full task details">
-              <div class="text-xs font-bold text-slate-800 dark:text-white truncate flex items-center space-x-1.5">
-                <span class="text-[10px] text-slate-400 font-mono flex-shrink-0">#${idx + 1}</span>
-                ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0" style="background-color: ${t.assignee_avatar || '#6366F1'}">${t.assignee_name.charAt(0)}</span>` : ''}
-                <span class="truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition font-semibold">${this.escapeHtml(t.title)}</span>
+            <!-- Column 1: Title & Assignee info (270px) -->
+            <div class="w-[270px] flex-shrink-0 pr-2.5 min-w-0 cursor-pointer flex flex-col justify-center" onclick="app.openTaskModal({id: ${t.id}})" title="Click to view/edit full task details">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${idx + 1 < 10 ? '0' + (idx + 1) : (idx + 1)}</span>
+                ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
+                <span class="text-xs font-bold text-slate-800 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${this.escapeHtml(t.title)}</span>
                 <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-emerald-500 rounded transition ml-auto flex-shrink-0">
                   <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
                 </button>
               </div>
-              <div class="text-[10px] text-slate-400 flex items-center space-x-1.5 mt-0.5">
-                <span class="capitalize px-1.5 py-0.2 rounded text-[9px] font-semibold ${isCompleted ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}">${t.status.replace('_', ' ')}</span>
-                <span>•</span>
-                <span class="truncate max-w-[85px]">${t.assignee_name ? this.escapeHtml(t.assignee_name.split(' ')[0]) : 'Unassigned'}</span>
+              <div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
+                <span class="capitalize px-1.5 py-0.2 rounded text-[9px] font-semibold flex-shrink-0 ${
+                  isCompleted ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                  (t.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                  (t.status === 'in_review' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'))
+                }">${t.status.replace('_', ' ')}</span>
+                <span class="text-slate-300 dark:text-slate-600">•</span>
+                <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
               </div>
             </div>
 
-            <!-- Direct Start & End Date Pickers in Gantt Row -->
-            <div class="flex items-center space-x-1.5 flex-shrink-0">
+            <!-- Column 2: Start Date Picker (120px) -->
+            <div class="w-[120px] flex-shrink-0 flex items-center justify-center">
               ${t.start_date ? `
-                <div class="inline-flex items-center space-x-0.5">
+                <div class="w-[110px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.start_date}"
                     onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)"
                     title="Edit Start Date"
-                    class="w-[100px] text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded px-1.5 py-0.5 border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:outline-none">
-                  <button onclick="app.inlineUpdateGanttTask(${t.id}, 'start_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500" title="Set as Not Declared">
-                    <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                  <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'start_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear Start Date">
+                    <i data-lucide="x" class="w-3 h-3"></i>
                   </button>
                 </div>
               ` : `
-                <div class="relative group/gstart inline-flex items-center">
-                  <div class="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-dashed border-amber-300 dark:border-amber-700 flex items-center space-x-1 cursor-pointer hover:bg-amber-100 transition">
-                    <i data-lucide="calendar-off" class="w-2.5 h-2.5"></i>
-                    <span>Not Declared</span>
+                <div class="relative w-[110px] h-7 group/gstart">
+                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-2 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                    <span class="truncate">Not Declared</span>
                   </div>
                   <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)" title="Click to set start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                 </div>
               `}
+            </div>
 
-              <span class="text-[10px] text-slate-400 font-bold">→</span>
+            <!-- Date Arrow Separator (30px) -->
+            <div class="w-[30px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none">→</div>
 
+            <!-- Column 3: End Date Picker (120px) -->
+            <div class="w-[120px] flex-shrink-0 flex items-center justify-center">
               ${t.due_date ? `
-                <div class="inline-flex items-center space-x-0.5">
+                <div class="w-[110px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.due_date}"
                     onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
                     title="Edit End / Due Date"
-                    class="w-[100px] text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded px-1.5 py-0.5 border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:outline-none">
-                  <button onclick="app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500" title="Set as Not Declared">
-                    <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                  <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
+                    <i data-lucide="x" class="w-3 h-3"></i>
                   </button>
                 </div>
               ` : `
-                <div class="relative group/gdue inline-flex items-center">
-                  <div class="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-dashed border-amber-300 dark:border-amber-700 flex items-center space-x-1 cursor-pointer hover:bg-amber-100 transition">
-                    <i data-lucide="calendar-off" class="w-2.5 h-2.5"></i>
-                    <span>Not Declared</span>
+                <div class="relative w-[110px] h-7 group/gdue">
+                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-2 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                    <span class="truncate">Not Declared</span>
                   </div>
                   <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                 </div>
@@ -1231,26 +1249,26 @@ const app = {
 
           </div>
 
-          <!-- Right Timeline Bar Area -->
-          <div class="flex-1 relative h-8 bg-slate-50/50 dark:bg-slate-900/30 rounded-lg flex items-center px-1">
+          <!-- Column 4: Right Timeline Bar Area (flex-1) -->
+          <div class="flex-1 relative h-8 px-2 flex items-center bg-slate-50/30 dark:bg-slate-900/20">
             ${(!t.start_date && !t.due_date) ? `
-              <div class="h-6 px-3 rounded-lg border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center space-x-1.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shadow-2xs"
+              <div class="h-6 px-2.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shadow-2xs"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="Schedule is Not Declared. Click to declare start & end dates.">
-                <i data-lucide="help-circle" class="w-3 h-3 text-amber-500"></i>
-                <span>Schedule Not Declared (TBD)</span>
+                <i data-lucide="help-circle" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                <span class="truncate">Schedule Not Declared (TBD)</span>
               </div>
             ` : `
-              <div class="gantt-bar absolute h-5.5 rounded-lg text-[10px] font-bold text-white flex items-center px-2.5 shadow-sm cursor-pointer truncate transition-all duration-150 ${barColor}"
+              <div class="gantt-bar absolute h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
                 style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%;"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${t.status}&#10;Est: ${t.estimated_hours}h&#10;Click to open task details">
                 
                 <!-- Progress Fill -->
-                <div class="absolute inset-0 bg-white/20 rounded-lg pointer-events-none" style="width: ${progressWidth}%"></div>
+                <div class="absolute inset-0 bg-white/20 rounded-md pointer-events-none" style="width: ${progressWidth}%"></div>
                 
                 <span class="relative z-10 truncate font-semibold">${this.escapeHtml(t.title)}</span>
-                ${t.subtask_count > 0 ? `<span class="relative z-10 ml-1.5 text-[9px] bg-black/20 px-1 rounded">${t.subtask_completed_count}/${t.subtask_count}</span>` : ''}
+                ${t.subtask_count > 0 ? `<span class="relative z-10 ml-1.5 text-[9px] bg-black/20 px-1 py-0.2 rounded font-mono">${t.subtask_completed_count}/${t.subtask_count}</span>` : ''}
               </div>
             `}
           </div>
@@ -1263,12 +1281,12 @@ const app = {
     let milestoneRowHtml = '';
     if (milestones.length > 0) {
       milestoneRowHtml = `
-        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2">
-          <div class="w-[430px] flex-shrink-0 pr-4 pl-3 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center space-x-1.5">
-            <i data-lucide="flag" class="w-4 h-4 text-amber-500"></i>
+        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2.5">
+          <div class="w-[540px] flex-shrink-0 px-3 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700">
+            <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
-          <div class="flex-1 relative h-6">
+          <div class="flex-1 relative h-7 px-2">
             ${milestones.map(m => {
               if (!m.due_date) return '';
               const mDate = new Date(m.due_date + 'T12:00:00');
@@ -1289,24 +1307,26 @@ const app = {
     }
 
     container.innerHTML = `
-      <div class="min-w-[1050px]">
+      <div class="min-w-[1150px]">
         <!-- Sticky Two-Tier Header -->
-        <div class="sticky top-0 z-20 shadow-xs">
+        <div class="sticky top-0 z-20 shadow-xs select-none">
           <!-- Top Tier Header (Months/Years) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-            <div class="w-[430px] flex-shrink-0 py-1.5 px-3 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex justify-between items-center bg-slate-100 dark:bg-slate-800">
-              <span>Process Activities</span>
-              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">start & end dates</span>
+            <div class="w-[540px] flex-shrink-0 py-2 px-3.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+              <span>Process Activities & Schedule</span>
+              <span class="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
             </div>
-            <div class="flex-1 flex">${topHeaders.join('')}</div>
+            <div class="flex-1 flex bg-slate-100 dark:bg-slate-800">${topHeaders.join('')}</div>
           </div>
-          <!-- Bottom Tier Header (Days/Weeks/Months/Quarters) -->
-          <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/95">
-            <div class="w-[430px] flex-shrink-0 py-1 px-3 text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase flex justify-between items-center bg-slate-50 dark:bg-slate-800/95">
-              <span>Activity / Owner</span>
-              <span class="font-mono">Start Date → End Date</span>
+          <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
+          <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
+            <div class="w-[540px] flex-shrink-0 px-3 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
+              <div class="w-[270px] flex-shrink-0">Activity / Owner</div>
+              <div class="w-[120px] flex-shrink-0 text-center">Start Date</div>
+              <div class="w-[30px] flex-shrink-0 text-center"></div>
+              <div class="w-[120px] flex-shrink-0 text-center">End Date</div>
             </div>
-            <div class="flex-1 flex">${bottomHeaders.join('')}</div>
+            <div class="flex-1 flex bg-slate-50 dark:bg-slate-850">${bottomHeaders.join('')}</div>
           </div>
         </div>
 

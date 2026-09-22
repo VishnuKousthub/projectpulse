@@ -216,78 +216,79 @@
   <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
     
     <!-- TOP APP BAR (FIXED / STICKY HEADER WITH ORGANIZED ZONES) -->
-    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 z-40 shadow-xs gap-3">
+    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 z-40 shadow-xs">
       
-      <!-- ZONE 1: View Context & Search -->
-      <div class="flex items-center space-x-3 min-w-0 flex-1 max-w-lg">
-        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0">
+      <!-- LEFT-TO-RIGHT HORIZONTAL GRID CONTAINER -->
+      <div class="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 mr-3">
+        
+        <!-- Mobile Sidebar Toggle -->
+        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0" title="Toggle Menu">
           <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
 
-        <div class="flex items-center space-x-2.5 flex-shrink-0">
-          <div class="lg:hidden flex items-center space-x-1.5 font-extrabold text-sm flex-shrink-0">
-            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-900 to-indigo-950 border border-white/20 p-0.5 flex items-center justify-center shadow-xs">
-              <svg class="w-full h-full" viewBox="0 0 36 36" fill="none">
-                <path d="M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5" stroke="#38BDF8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
+        <!-- Mobile Brand Icon -->
+        <div class="lg:hidden flex items-center space-x-1.5 flex-shrink-0">
+          <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-900 to-indigo-950 border border-white/20 p-0.5 flex items-center justify-center shadow-xs">
+            <svg class="w-full h-full" viewBox="0 0 36 36" fill="none">
+              <path d="M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5" stroke="#38BDF8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
           </div>
-          <h1 id="view-title" class="text-base font-bold text-slate-800 dark:text-white whitespace-nowrap">
-            Kanban Board
-          </h1>
         </div>
 
-        <!-- Global Search Input -->
-        <div class="relative flex-1 min-w-[120px] max-w-xs hidden md:block">
-          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+        <!-- 1. Page Title -->
+        <h1 id="view-title" class="text-sm sm:text-base font-bold text-slate-800 dark:text-white whitespace-nowrap flex-shrink-0">
+          Gantt & Timeline
+        </h1>
+
+        <!-- 2. Search Bar -->
+        <div class="relative flex-1 min-w-[130px] max-w-[220px] xl:max-w-xs hidden sm:block">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
           <input type="text" id="global-search" oninput="app.handleSearch(this.value)" placeholder="Search tasks, tags... (/)"
-            class="w-full pl-9 pr-7 py-1.5 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition">
-          <span class="absolute right-2 top-2 px-1.5 py-0.2 bg-slate-200 dark:bg-slate-700 text-[10px] text-slate-500 rounded font-mono pointer-events-none">/</span>
+            class="w-full h-9 pl-9 pr-7 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/60 dark:border-slate-700/60 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition">
+          <span class="absolute right-2.5 top-2.5 px-1.5 py-0.5 bg-slate-200/80 dark:bg-slate-700 text-[10px] text-slate-500 dark:text-slate-400 rounded font-mono pointer-events-none leading-none">/</span>
         </div>
+
+        <!-- 3. Assignee Filter -->
+        <div class="relative hidden md:block flex-shrink-0">
+          <select id="filter-assignee" onchange="app.handleFilterChange()" 
+            class="h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/60 dark:border-slate-700/60 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer max-w-[140px] truncate transition">
+            <option value="">All Assignees</option>
+          </select>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
+        </div>
+
+        <!-- 4. Priority Filter -->
+        <div class="relative hidden lg:block flex-shrink-0">
+          <select id="filter-priority" onchange="app.handleFilterChange()" 
+            class="h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/60 dark:border-slate-700/60 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer max-w-[125px] truncate transition">
+            <option value="">All Priorities</option>
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
+        </div>
+
       </div>
 
-      <!-- ZONE 2 & 3: Filter Controls & Action Hub (Permanent, Never Clipped) -->
-      <div class="flex items-center space-x-2 flex-shrink-0">
-        
-        <!-- Filters Control Group -->
-        <div class="hidden lg:flex items-center space-x-1.5 bg-slate-100/70 dark:bg-slate-800/70 p-1 rounded-lg border border-slate-200 dark:border-slate-700/80 flex-shrink-0">
-          <!-- Member / Assignee Filter -->
-          <div class="relative">
-            <select id="filter-assignee" onchange="app.handleFilterChange()" class="bg-transparent text-slate-700 dark:text-slate-200 text-xs rounded-md pl-2 pr-5 py-1 focus:outline-none appearance-none cursor-pointer font-medium max-w-[130px] truncate">
-              <option value="">All Assignees</option>
-            </select>
-            <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 absolute right-1 top-2 pointer-events-none"></i>
-          </div>
+      <!-- RIGHT CONTROLS: ACTION ICONS, BUTTONS & PROFILE -->
+      <div class="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 ml-auto">
 
-          <div class="h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
-
-          <!-- Priority Filter -->
-          <div class="relative">
-            <select id="filter-priority" onchange="app.handleFilterChange()" class="bg-transparent text-slate-700 dark:text-slate-200 text-xs rounded-md pl-2 pr-5 py-1 focus:outline-none appearance-none cursor-pointer font-medium max-w-[100px] truncate">
-              <option value="">All Priorities</option>
-              <option value="urgent">Urgent</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-            <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 absolute right-1 top-2 pointer-events-none"></i>
-          </div>
-        </div>
-
-        <!-- Outlook Notifications Button -->
-        <button onclick="app.openNotificationsModal()" class="bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs transition flex-shrink-0" title="Outlook Alerts & Notifications">
+        <!-- 5. Notification / Outlook Mail Icon Button -->
+        <button onclick="app.openNotificationsModal()" class="h-9 px-2.5 sm:px-3 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition flex-shrink-0" title="Outlook Alerts & Notifications">
           <i data-lucide="mail" class="w-4 h-4 text-sky-500"></i>
-          <span class="hidden 2xl:inline">Outlook Alerts</span>
+          <span class="hidden xl:inline">Outlook Alerts</span>
         </button>
 
-        <!-- Upload Gantt Button -->
-        <button onclick="app.openGanttUploadModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs shadow-emerald-500/20 transition flex-shrink-0" title="Upload Excel / CSV Gantt Chart">
+        <!-- 6. Upload Gantt Button -->
+        <button onclick="app.openGanttUploadModal()" class="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 transition flex-shrink-0" title="Upload Excel / CSV Gantt Chart">
           <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
           <span class="hidden sm:inline">Upload Gantt</span>
         </button>
 
-        <!-- New Task Primary Button -->
-        <button onclick="app.openTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs shadow-blue-500/30 transition flex-shrink-0">
+        <!-- 7. Add (+) Button / New Task -->
+        <button onclick="app.openTaskModal()" class="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-blue-600/25 transition flex-shrink-0">
           <i data-lucide="plus" class="w-4 h-4"></i>
           <span class="hidden xs:inline">New Task</span>
         </button>
@@ -295,15 +296,15 @@
         <!-- Vertical Divider -->
         <div class="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 flex-shrink-0"></div>
 
-        <!-- User Profile & Sign Out Dropdown -->
+        <!-- 8. User Profile / Avatar & Dropdown -->
         <div class="relative flex-shrink-0">
-          <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="flex items-center space-x-2 p-1 pl-1.5 pr-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition flex-shrink-0">
+          <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="h-9 flex items-center gap-2 px-1.5 sm:px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition flex-shrink-0">
             <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
               A
             </div>
-            <div class="hidden sm:block text-left leading-tight">
-              <div id="header-user-name" class="text-xs font-bold text-slate-800 dark:text-white truncate max-w-[90px] md:max-w-[110px]">Admin</div>
-              <div id="header-user-role" class="text-[10px] text-slate-400 capitalize">Administrator</div>
+            <div class="hidden md:block text-left leading-tight">
+              <div id="header-user-name" class="text-xs font-bold text-slate-800 dark:text-white truncate max-w-[90px] lg:max-w-[110px]">Admin</div>
+              <div id="header-user-role" class="text-[10px] text-slate-400 capitalize truncate">Administrator</div>
             </div>
             <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
           </button>
@@ -315,7 +316,7 @@
               <div id="dropdown-user-email" class="text-[11px] text-slate-400 truncate">admin@company.internal</div>
             </div>
             <div class="p-1">
-              <button onclick="app.handleLogout()" class="w-full text-left px-3 py-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center space-x-2 transition">
+              <button onclick="app.handleLogout()" class="w-full text-left px-3 py-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition">
                 <i data-lucide="log-out" class="w-4 h-4"></i>
                 <span>Sign Out</span>
               </button>
@@ -407,64 +408,69 @@
 
       <!-- 2. GANTT / TIMELINE VIEW -->
       <section id="view-gantt-container" class="view-panel hidden space-y-4">
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 sm:p-5 shadow-xs space-y-4">
           
           <!-- Gantt Header & Controls Toolbar -->
-          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-700">
-            <div>
-              <div class="flex items-center space-x-2.5">
-                <h2 class="text-base font-bold text-slate-800 dark:text-white">Project Schedule & Timeline</h2>
-                <span id="gantt-tasks-count" class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold px-2 py-0.5 rounded-full">0 tasks</span>
+          <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-700/80">
+            
+            <!-- Left: Primary Title, Task Count Badge & Range Subtitle -->
+            <div class="space-y-1">
+              <div class="flex items-center gap-2.5">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">Project Schedule & Timeline</h2>
+                <span id="gantt-tasks-count" class="text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200/70 dark:border-blue-800/70">0 tasks</span>
               </div>
-              <p class="text-xs text-slate-500 mt-0.5" id="gantt-timeline-range-label">Visual duration bars, assigned resources, milestones, and task deliverables</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400" id="gantt-timeline-range-label">Visual duration bars, assigned resources, milestones, and task deliverables</p>
             </div>
 
-            <!-- Granularity / Scale Mode Switcher & Navigation -->
-            <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Right: Segmented Scale Switcher, Timeline Nav, Import & Template Buttons -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
               
-              <!-- Timeline Scale Tabs (Weekly, Monthly, Yearly, Daily) -->
-              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
-                <button type="button" id="gantt-scale-day" onclick="app.setGanttScale('day')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+              <!-- Timeline Scale Segmented Control (Daily, Weekly, Monthly, Yearly) -->
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
+                <button type="button" id="gantt-scale-day" onclick="app.setGanttScale('day')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
                   Daily
                 </button>
-                <button type="button" id="gantt-scale-week" onclick="app.setGanttScale('week')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition bg-blue-600 text-white shadow-xs font-bold">
+                <button type="button" id="gantt-scale-week" onclick="app.setGanttScale('week')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition bg-blue-600 text-white shadow-xs font-bold flex items-center justify-center">
                   Weekly
                 </button>
-                <button type="button" id="gantt-scale-month" onclick="app.setGanttScale('month')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                <button type="button" id="gantt-scale-month" onclick="app.setGanttScale('month')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
                   Monthly
                 </button>
-                <button type="button" id="gantt-scale-year" onclick="app.setGanttScale('year')" class="gantt-scale-btn px-2.5 py-1 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                <button type="button" id="gantt-scale-year" onclick="app.setGanttScale('year')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
                   Yearly
                 </button>
               </div>
 
-              <!-- Navigation Shift Buttons -->
-              <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-700/60 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                <button onclick="app.shiftGanttTimeline(-1)" title="Previous Window" class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
+              <!-- Navigation Shift Buttons (Fit All & Arrows) -->
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                <button onclick="app.shiftGanttTimeline(-1)" title="Previous Window" class="h-7 w-7 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition">
                   <i data-lucide="chevron-left" class="w-4 h-4"></i>
                 </button>
-                <button onclick="app.resetGanttToToday()" class="px-2 py-0.5 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 rounded">
+                <button onclick="app.resetGanttToToday()" class="h-7 px-2.5 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg flex items-center justify-center transition">
                   Fit All
                 </button>
-                <button onclick="app.shiftGanttTimeline(1)" title="Next Window" class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
+                <button onclick="app.shiftGanttTimeline(1)" title="Next Window" class="h-7 w-7 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition">
                   <i data-lucide="chevron-right" class="w-4 h-4"></i>
                 </button>
               </div>
 
-              <!-- Import & Template Buttons -->
-              <button onclick="app.openGanttUploadModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-sm transition">
-                <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>
+              <!-- Import Excel Button -->
+              <button onclick="app.openGanttUploadModal()" class="h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 rounded-lg flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 transition">
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
                 <span>Import Excel</span>
               </button>
-              <button onclick="app.downloadSampleGantt('xlsx')" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center space-x-1 transition" title="Download Excel Template">
-                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+
+              <!-- Template Download Button -->
+              <button onclick="app.downloadSampleGantt('xlsx')" class="h-9 bg-slate-100 dark:bg-slate-750 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold px-2.5 rounded-lg flex items-center gap-1.5 transition" title="Download Excel Template">
+                <i data-lucide="download" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
                 <span>Template</span>
               </button>
+
             </div>
           </div>
 
           <!-- Gantt Timeline Canvas / Table Render Container -->
-          <div id="gantt-timeline-render" class="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-800">
+          <div id="gantt-timeline-render" class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xs">
             <!-- Rendered dynamically according to selected scale -->
           </div>
         </div>
@@ -1912,6 +1918,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.2.5"></script>
+  <script src="/static/js/app.js?v=2.2.6"></script>
 </body>
 </html>
