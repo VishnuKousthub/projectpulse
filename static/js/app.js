@@ -1172,13 +1172,13 @@ const app = {
       const progressWidth = isCompleted ? 100 : (t.status === 'in_progress' ? 60 : 0);
 
       return `
-        <div class="flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-2 group min-h-[50px]">
+        <div class="flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
           
           <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px) -->
-          <div class="w-[540px] flex-shrink-0 px-3 flex items-center border-r border-slate-200 dark:border-slate-700/80">
+          <div class="w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80">
             
             <!-- Column 1: Title & Assignee info (270px) -->
-            <div class="w-[270px] flex-shrink-0 pr-2.5 min-w-0 cursor-pointer flex flex-col justify-center" onclick="app.openTaskModal({id: ${t.id}})" title="Click to view/edit full task details">
+            <div class="w-[270px] flex-shrink-0 pl-3 pr-2.5 min-w-0 cursor-pointer flex flex-col justify-center" onclick="app.openTaskModal({id: ${t.id}})" title="Click to view/edit full task details">
               <div class="flex items-center gap-1.5 min-w-0">
                 <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${idx + 1 < 10 ? '0' + (idx + 1) : (idx + 1)}</span>
                 ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
@@ -1222,7 +1222,7 @@ const app = {
             </div>
 
             <!-- Date Arrow Separator (30px) -->
-            <div class="w-[30px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none">→</div>
+            <div class="w-[30px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
 
             <!-- Column 3: End Date Picker (120px) -->
             <div class="w-[120px] flex-shrink-0 flex items-center justify-center">
@@ -1249,17 +1249,24 @@ const app = {
 
           </div>
 
-          <!-- Column 4: Right Timeline Bar Area (flex-1) -->
-          <div class="flex-1 relative h-8 px-2 flex items-center bg-slate-50/30 dark:bg-slate-900/20">
+          <!-- Column 4: Right Timeline Bar Area (flex-1) with Background Grid Lines Overlay -->
+          <div class="flex-1 relative h-9 px-2 flex items-center bg-slate-50/30 dark:bg-slate-900/20 overflow-hidden">
+            <!-- Subtle Column Grid Lines Overlay for alignment with header columns -->
+            <div class="absolute inset-0 flex pointer-events-none">
+              ${Array.from({ length: totalCols }).map((_, cIdx) => `
+                <div class="flex-1 border-r border-slate-100 dark:border-slate-800/60 ${cIdx === totalCols - 1 ? 'border-r-0' : ''}"></div>
+              `).join('')}
+            </div>
+
             ${(!t.start_date && !t.due_date) ? `
-              <div class="h-6 px-2.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shadow-2xs"
+              <div class="relative z-10 h-6 px-2.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/90 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shadow-2xs"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="Schedule is Not Declared. Click to declare start & end dates.">
-                <i data-lucide="help-circle" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                <i data-lucide="help-circle" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0"></i>
                 <span class="truncate">Schedule Not Declared (TBD)</span>
               </div>
             ` : `
-              <div class="gantt-bar absolute h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
+              <div class="gantt-bar absolute z-10 h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
                 style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%;"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${t.status}&#10;Est: ${t.estimated_hours}h&#10;Click to open task details">
@@ -1268,7 +1275,7 @@ const app = {
                 <div class="absolute inset-0 bg-white/20 rounded-md pointer-events-none" style="width: ${progressWidth}%"></div>
                 
                 <span class="relative z-10 truncate font-semibold">${this.escapeHtml(t.title)}</span>
-                ${t.subtask_count > 0 ? `<span class="relative z-10 ml-1.5 text-[9px] bg-black/20 px-1 py-0.2 rounded font-mono">${t.subtask_completed_count}/${t.subtask_count}</span>` : ''}
+                ${t.subtask_count > 0 ? `<span class="relative z-10 ml-1.5 text-[9px] bg-black/20 px-1 py-0.2 rounded font-mono flex-shrink-0">${t.subtask_completed_count}/${t.subtask_count}</span>` : ''}
               </div>
             `}
           </div>
@@ -1281,12 +1288,12 @@ const app = {
     let milestoneRowHtml = '';
     if (milestones.length > 0) {
       milestoneRowHtml = `
-        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2.5">
-          <div class="w-[540px] flex-shrink-0 px-3 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700">
+        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2">
+          <div class="w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700">
             <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
-          <div class="flex-1 relative h-7 px-2">
+          <div class="flex-1 relative h-7 px-2 flex items-center">
             ${milestones.map(m => {
               if (!m.due_date) return '';
               const mDate = new Date(m.due_date + 'T12:00:00');
@@ -1312,16 +1319,16 @@ const app = {
         <div class="sticky top-0 z-20 shadow-xs select-none">
           <!-- Top Tier Header (Months/Years) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-            <div class="w-[540px] flex-shrink-0 py-2 px-3.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+            <div class="w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
               <span>Process Activities & Schedule</span>
-              <span class="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
             </div>
             <div class="flex-1 flex bg-slate-100 dark:bg-slate-800">${topHeaders.join('')}</div>
           </div>
           <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
-            <div class="w-[540px] flex-shrink-0 px-3 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
-              <div class="w-[270px] flex-shrink-0">Activity / Owner</div>
+            <div class="w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
+              <div class="w-[270px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
               <div class="w-[120px] flex-shrink-0 text-center">Start Date</div>
               <div class="w-[30px] flex-shrink-0 text-center"></div>
               <div class="w-[120px] flex-shrink-0 text-center">End Date</div>
