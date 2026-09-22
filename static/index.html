@@ -215,12 +215,12 @@
   <!-- ==================== MAIN CONTENT WRAPPER ==================== -->
   <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
     
-    <!-- TOP APP BAR (FIXED / STICKY HEADER WITH ORGANIZED ZONES) -->
-    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 z-40 shadow-xs gap-3 select-none">
+    <!-- GLOBAL TOP APP BAR (SINGLE FLEX ROW WITH UNIFIED RESPONSIVE SIZING) -->
+    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center px-4 sm:px-6 flex-shrink-0 z-40 shadow-xs gap-2 sm:gap-2.5 select-none">
       
-      <!-- LEFT: Page Title & Mobile Toggles -->
-      <div class="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
-        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0" title="Toggle Menu">
+      <!-- 1. Page Title & Mobile Toggle (flex-shrink-0) -->
+      <div class="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0" title="Toggle Menu">
           <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
         <div class="lg:hidden flex items-center space-x-1.5 flex-shrink-0">
@@ -230,75 +230,83 @@
             </svg>
           </div>
         </div>
-        <h1 id="view-title" class="text-sm sm:text-base font-bold text-slate-800 dark:text-white whitespace-nowrap flex-shrink-0">
+        <h1 id="view-title" class="text-sm sm:text-base font-bold text-slate-800 dark:text-white whitespace-nowrap flex-shrink-0 pr-1">
           Gantt & Timeline
         </h1>
       </div>
 
-      <!-- CENTER: Search, All Assignees, All Priorities, Mail Icon -->
-      <div class="flex items-center justify-center gap-2 sm:gap-2.5 flex-1 min-w-0 max-w-2xl mx-2">
-        <div class="relative flex-1 min-w-[110px] max-w-xs">
-          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
-          <input type="text" id="global-search" oninput="app.handleSearch(this.value)" placeholder="Search tasks, tags... (/)"
-            class="w-full h-9 pl-9 pr-7 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-slate-700/80 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition">
-          <span class="absolute right-2.5 top-2.5 px-1.5 py-0.5 bg-slate-200/80 dark:bg-slate-700 text-[10px] text-slate-500 dark:text-slate-400 rounded font-mono pointer-events-none leading-none">/</span>
-        </div>
-        <div class="relative hidden sm:block flex-shrink-0">
-          <select id="filter-assignee" onchange="app.handleFilterChange()" 
-            class="h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/80 dark:border-slate-700/80 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer max-w-[130px] truncate transition">
-            <option value="">All Assignees</option>
-          </select>
-          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
-        </div>
-        <div class="relative hidden md:block flex-shrink-0">
-          <select id="filter-priority" onchange="app.handleFilterChange()" 
-            class="h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/80 dark:border-slate-700/80 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer max-w-[120px] truncate transition">
-            <option value="">All Priorities</option>
-            <option value="urgent">Urgent</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
-        </div>
-        <button onclick="app.openNotificationsModal()" class="h-9 w-9 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 rounded-lg flex items-center justify-center shadow-2xs transition flex-shrink-0" title="Outlook Alerts & Notifications">
-          <i data-lucide="mail" class="w-4 h-4 text-sky-500"></i>
-        </button>
+      <!-- 2. Search Task (The ONLY flexible element: flex-1 min-w-0 max-w-xs) -->
+      <div class="relative flex-1 min-w-[90px] max-w-xs">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
+        <input type="text" id="global-search" oninput="app.handleSearch(this.value)" placeholder="Search tasks, tags... (/)"
+          class="w-full h-9 pl-9 pr-7 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-slate-700/80 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition">
+        <span class="absolute right-2.5 top-2.5 px-1.5 py-0.5 bg-slate-200/80 dark:bg-slate-700 text-[10px] text-slate-500 dark:text-slate-400 rounded font-mono pointer-events-none leading-none">/</span>
       </div>
 
-      <!-- RIGHT: Upload Gantt, + Button, User Profile / Admin Dropdown -->
-      <div class="flex items-center justify-end gap-2 sm:gap-2.5 flex-shrink-0">
-        <button onclick="app.openGanttUploadModal()" class="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 transition flex-shrink-0" title="Upload Excel / CSV Gantt Chart">
-          <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
-          <span class="hidden sm:inline">Upload Gantt</span>
+      <!-- 3. All Assignees Dropdown (flex-shrink-0, fixed readable width) -->
+      <div class="relative hidden sm:block flex-shrink-0 w-[125px]">
+        <select id="filter-assignee" onchange="app.handleFilterChange()" 
+          class="w-full h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/80 dark:border-slate-700/80 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer truncate transition">
+          <option value="">All Assignees</option>
+        </select>
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
+      </div>
+
+      <!-- 4. All Priorities Dropdown (flex-shrink-0, fixed readable width) -->
+      <div class="relative hidden md:block flex-shrink-0 w-[115px]">
+        <select id="filter-priority" onchange="app.handleFilterChange()" 
+          class="w-full h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/80 dark:border-slate-700/80 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer truncate transition">
+          <option value="">All Priorities</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
+      </div>
+
+      <!-- 5. Mail / Notification Button (flex-shrink-0, fixed 36x36px, envelope icon centered, NO compression) -->
+      <button onclick="app.openNotificationsModal()" class="h-9 w-9 min-w-[36px] bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 rounded-lg flex items-center justify-center shadow-2xs transition flex-shrink-0" title="Outlook Alerts & Notifications">
+        <i data-lucide="mail" class="w-4 h-4 text-sky-500 flex-shrink-0"></i>
+      </button>
+
+      <!-- 6. Upload Gantt Button (flex-shrink-0, fixed readable dimensions) -->
+      <button onclick="app.openGanttUploadModal()" class="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 transition flex-shrink-0 whitespace-nowrap" title="Upload Excel / CSV Gantt Chart">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4 flex-shrink-0"></i>
+        <span class="hidden sm:inline">Upload Gantt</span>
+      </button>
+
+      <!-- 7. New Task Button (flex-shrink-0, fixed readable dimensions) -->
+      <button onclick="app.openTaskModal()" class="h-9 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-blue-600/25 transition flex-shrink-0 whitespace-nowrap" title="Create New Activity">
+        <i data-lucide="plus" class="w-4 h-4 flex-shrink-0"></i>
+        <span class="hidden md:inline">New Task</span>
+      </button>
+
+      <!-- Vertical Divider -->
+      <div class="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 flex-shrink-0 hidden sm:block"></div>
+
+      <!-- 8. User Profile Dropdown (ml-auto, pinned to far right, flex-shrink-0) -->
+      <div class="relative flex-shrink-0 ml-auto">
+        <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="h-9 flex items-center gap-2 px-1.5 sm:px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition flex-shrink-0">
+          <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
+            A
+          </div>
+          <div class="hidden xl:block text-left leading-tight">
+            <div id="header-user-name" class="text-xs font-bold text-slate-800 dark:text-white truncate max-w-[90px] 2xl:max-w-[120px]">Admin</div>
+            <div id="header-user-role" class="text-[10px] text-slate-400 capitalize truncate">Administrator</div>
+          </div>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
         </button>
-        <button onclick="app.openTaskModal()" class="h-9 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-blue-600/25 transition flex-shrink-0" title="Create New Activity">
-          <i data-lucide="plus" class="w-4 h-4"></i>
-          <span class="hidden md:inline">New Task</span>
-        </button>
-        <div class="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 flex-shrink-0"></div>
-        <div class="relative flex-shrink-0">
-          <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="h-9 flex items-center gap-2 px-1.5 sm:px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition flex-shrink-0">
-            <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
-              A
-            </div>
-            <div class="hidden md:block text-left leading-tight">
-              <div id="header-user-name" class="text-xs font-bold text-slate-800 dark:text-white truncate max-w-[90px] lg:max-w-[110px]">Admin</div>
-              <div id="header-user-role" class="text-[10px] text-slate-400 capitalize truncate">Administrator</div>
-            </div>
-            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
-          </button>
-          <div id="user-dropdown-menu" class="hidden absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
-            <div class="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700/80">
-              <div id="dropdown-user-fullname" class="font-bold text-slate-800 dark:text-white truncate">System Administrator</div>
-              <div id="dropdown-user-email" class="text-[11px] text-slate-400 truncate">admin@company.internal</div>
-            </div>
-            <div class="p-1">
-              <button onclick="app.handleLogout()" class="w-full text-left px-3 py-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition">
-                <i data-lucide="log-out" class="w-4 h-4"></i>
-                <span>Sign Out</span>
-              </button>
-            </div>
+        <div id="user-dropdown-menu" class="hidden absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
+          <div class="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700/80">
+            <div id="dropdown-user-fullname" class="font-bold text-slate-800 dark:text-white truncate">System Administrator</div>
+            <div id="dropdown-user-email" class="text-[11px] text-slate-400 truncate">admin@company.internal</div>
+          </div>
+          <div class="p-1">
+            <button onclick="app.handleLogout()" class="w-full text-left px-3 py-2 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1895,6 +1903,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.2.8"></script>
+  <script src="/static/js/app.js?v=2.2.9"></script>
 </body>
 </html>
