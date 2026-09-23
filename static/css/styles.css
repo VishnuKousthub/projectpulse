@@ -276,10 +276,9 @@ main.app-main {
 
   /* Prevent awkward page breaks inside cards, tables, sections */
   .report-activity-card,
-  #report-sec-kpis,
-  #report-sec-workload,
-  #report-sec-attention,
-  #report-sec-roadmap,
+  #report-sec-header,
+  #report-sec-terms,
+  #report-sec-totals,
   tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;

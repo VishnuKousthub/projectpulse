@@ -5231,23 +5231,23 @@ const app = {
 
   getReportStatusBadge(status) {
     const map = {
-      'done': '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>DONE</span>',
-      'in_progress': '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>IN PROGRESS</span>',
-      'in_review': '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>IN REVIEW</span>',
-      'todo': '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>TO DO</span>',
-      'backlog': '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>BACKLOG</span>'
+      'done': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-block text-center whitespace-nowrap">DONE</span>',
+      'in_progress': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 inline-block text-center whitespace-nowrap">IN PROGRESS</span>',
+      'in_review': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-block text-center whitespace-nowrap">IN REVIEW</span>',
+      'todo': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-block text-center whitespace-nowrap">TO DO</span>',
+      'backlog': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 inline-block text-center whitespace-nowrap">BACKLOG</span>'
     };
-    return map[status] || `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">${this.escapeHtml(status?.toUpperCase() || 'UNKNOWN')}</span>`;
+    return map[status] || `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">${this.escapeHtml(status?.toUpperCase() || 'UNKNOWN')}</span>`;
   },
 
   getReportPriorityBadge(priority) {
     const map = {
-      'urgent': '<span class="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-300 dark:border-rose-800">URGENT</span>',
-      'high': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border border-orange-300 dark:border-orange-800">HIGH</span>',
-      'medium': '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800">MEDIUM</span>',
-      'low': '<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">LOW</span>'
+      'urgent': '<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-300 dark:border-rose-800 inline-block whitespace-nowrap">URGENT</span>',
+      'high': '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border border-orange-300 dark:border-orange-800 inline-block whitespace-nowrap">HIGH</span>',
+      'medium': '<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800 inline-block whitespace-nowrap">MEDIUM</span>',
+      'low': '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 inline-block whitespace-nowrap">LOW</span>'
     };
-    return map[priority] || `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">${this.escapeHtml(priority?.toUpperCase() || 'NORMAL')}</span>`;
+    return map[priority] || `<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">${this.escapeHtml(priority?.toUpperCase() || 'NORMAL')}</span>`;
   },
 
   renderProjectReport() {
@@ -5257,360 +5257,168 @@ const app = {
 
     const p = data.project || {};
     const k = data.kpis || {};
-    const att = data.attention_required || {};
-    const ms = data.milestones || [];
     const team = data.assignee_summary || [];
 
-    const genDateFormatted = data.generated_at ? new Date(data.generated_at).toUTCString() : new Date().toUTCString();
+    const now = new Date();
+    const dateFormatted = now.toISOString().slice(0, 10);
+    const firstStart = data.activities?.find(t => t.start_date)?.start_date || 'Project Inception';
+    const lastDue = [...(data.activities || [])].reverse().find(t => t.due_date)?.due_date || 'Target Completion';
+    const reportingPeriod = `${firstStart} — ${lastDue}`;
+
+    const lead = team.find(m => m.role && (m.role.toLowerCase().includes('lead') || m.role.toLowerCase().includes('architect') || m.role.toLowerCase().includes('manager'))) || team[0] || { name: 'Alex Morgan', role: 'Lead Architect & Project Manager', email: 'alex.morgan@company.internal' };
 
     sheet.innerHTML = `
-      <!-- ==================== EXECUTIVE REPORT HEADER ==================== -->
-      <div class="border-b-2 border-slate-900 dark:border-slate-700 pb-6 space-y-4">
+      <!-- ==================== HEADER: SIMPLE & SOPHISTICATED ==================== -->
+      <div id="report-sec-header" class="space-y-3 pb-3 border-b-2 border-slate-900 dark:border-slate-300">
         
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div class="flex items-center space-x-3">
-            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 p-2 flex items-center justify-center border border-white/20 shadow-md">
-              <svg class="w-full h-full" viewBox="0 0 36 36" fill="none">
-                <path d="M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <!-- Left: Document Type & Reference Codes -->
+          <div class="space-y-1">
+            <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+              Project Activity Report
+            </h1>
+            <div class="text-xs text-slate-600 dark:text-slate-400 font-medium">
+              <span>Report Ref: <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'} (Rev 1)</strong></span>
+              <span class="mx-1.5 text-slate-300 dark:text-slate-600">|</span>
+              <span>Linked Project: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.name || 'Project')}</strong></span>
             </div>
-            <div>
-              <div class="text-[11px] font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400">CHEMTATVA • PROJECTPULSE ENTERPRISE</div>
-              <h1 class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                Cumulative Project Activity Report
-              </h1>
+            <div class="text-xs text-slate-600 dark:text-slate-400 font-medium">
+              <span>Date: <strong class="text-slate-900 dark:text-white">${dateFormatted}</strong></span>
+              <span class="mx-1.5 text-slate-300 dark:text-slate-600">|</span>
+              <span>Reporting Scope: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(reportingPeriod)}</strong></span>
             </div>
           </div>
 
-          <div class="text-left sm:text-right text-xs space-y-1">
-            <div class="font-bold text-slate-800 dark:text-slate-200">Official Project Dossier</div>
-            <div class="text-slate-500 dark:text-slate-400 font-mono text-[11px]">Ref: PRJ-${p.id || 1}-${new Date().toISOString().slice(0,10)}</div>
+          <!-- Right: Organization & Manufacturing Context -->
+          <div class="text-left sm:text-right space-y-0.5">
+            <div class="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight">
+              Nidhims Pharmaceutical & CDMO Solutions
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Contract Development & Project Execution Systems
+            </div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+              GSTIN: 36AABCN1234F1Z8 | Hyderabad, India
+            </div>
           </div>
         </div>
-
-        <!-- Project Identification Meta Box -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/70 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-          <div>
-            <span class="text-slate-400 text-[10px] uppercase font-bold block">Project Name</span>
-            <span class="font-bold text-slate-900 dark:text-white text-sm truncate block">${this.escapeHtml(p.name || 'Project')}</span>
-          </div>
-          <div>
-            <span class="text-slate-400 text-[10px] uppercase font-bold block">Reporting Period</span>
-            <span class="font-semibold text-slate-700 dark:text-slate-200 text-xs block">${this.escapeHtml(data.reporting_period || 'All Dates')}</span>
-          </div>
-          <div>
-            <span class="text-slate-400 text-[10px] uppercase font-bold block">Generated By</span>
-            <span class="font-semibold text-slate-700 dark:text-slate-200 text-xs block">${this.escapeHtml(data.generated_by || 'System Administrator')}</span>
-          </div>
-          <div>
-            <span class="text-slate-400 text-[10px] uppercase font-bold block">Generated Date & Time</span>
-            <span class="font-semibold text-slate-700 dark:text-slate-200 text-xs block">${this.escapeHtml(genDateFormatted)}</span>
-          </div>
-        </div>
-
-        ${p.description ? `
-          <div class="text-xs text-slate-600 dark:text-slate-300 bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-100 dark:border-blue-900/40">
-            <strong>Project Objective:</strong> ${this.escapeHtml(p.description)}
-          </div>
-        ` : ''}
 
       </div>
 
-      <!-- ==================== SECTION 1: EXECUTIVE KPIS ==================== -->
-      <section id="report-sec-kpis" class="space-y-4">
+      <!-- ==================== TWO SIDE-BY-SIDE METADATA PANELS ==================== -->
+      <div id="report-sec-terms" class="grid grid-cols-1 md:grid-cols-2 gap-4">
         
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-          <h2 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs">1</span>
-            <span>Executive Summary & Key Performance Indicators</span>
-          </h2>
-          <span class="text-xs text-slate-500 font-semibold">${k.total_activities || 0} Total Activities Analyzed</span>
+        <!-- Left Panel: Project & Client Context -->
+        <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 space-y-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-2">
+            Project Context & Leadership
+          </div>
+          <div class="text-sm font-black text-slate-900 dark:text-white truncate pb-0.5">
+            ${this.escapeHtml(p.name || 'Project')}
+          </div>
+          <div><span class="text-slate-500">Attention / Lead:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(lead.name || 'Alex Morgan')}</strong> (${this.escapeHtml(lead.role || 'Project Lead')})</div>
+          <div><span class="text-slate-500">Email:</span> <span class="font-mono">${this.escapeHtml(lead.email || 'lead@chemtatva.com')}</span></div>
+          <div><span class="text-slate-500">Workspace / Site:</span> Chemtatva R&D & Reactor Facility A</div>
+          <div><span class="text-slate-500">Project Scope:</span> ${this.escapeHtml(p.description || 'Full-cycle enterprise delivery, synthesis, validation and architecture execution.')}</div>
         </div>
 
-        <!-- 6 KPI Metric Cards Grid -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          
-          <div class="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Activities</div>
-            <div class="text-2xl font-black text-slate-900 dark:text-white mt-1">${k.total_activities || 0}</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">Project Scope</div>
+        <!-- Right Panel: Project & Schedule Terms -->
+        <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 space-y-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-2">
+            Project & Commercial Terms
           </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed</div>
-            <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">${k.completed || 0}</div>
-            <div class="text-[10px] text-emerald-600 font-semibold mt-0.5">${k.completion_pct || 0}% Done</div>
-          </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">In Progress</div>
-            <div class="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">${k.in_progress || 0}</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">Active Execution</div>
-          </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Pending / To Do</div>
-            <div class="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">${(k.to_do || 0) + (k.in_review || 0) + (k.backlog || 0)}</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">In Pipeline</div>
-          </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Overdue Items</div>
-            <div class="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">${k.overdue || 0}</div>
-            <div class="text-[10px] text-rose-500 font-semibold mt-0.5">${k.urgent_high || 0} Urgent/High</div>
-          </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Hours Logged</div>
-            <div class="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">${k.total_actual_hours || 0}h</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">of ${k.total_estimated_hours || 0}h Est.</div>
-          </div>
-
+          <div><span class="text-slate-500">Project Code:</span> <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'}</strong></div>
+          <div><span class="text-slate-500">Execution Site:</span> Reactor Facility A, Hyderabad</div>
+          <div><span class="text-slate-500">Delivery Target:</span> Chemtatva Global Client Supply, Basel / Global</div>
+          <div><span class="text-slate-500">Total Activities in Scope:</span> <strong>${k.total_activities || 0} Activities</strong></div>
+          <div><span class="text-slate-500">Logged / Estimated Hours:</span> <strong>${k.total_actual_hours || 0} hrs</strong> Logged / ${k.total_estimated_hours || 0} hrs Est.</div>
+          <div><span class="text-slate-500">Schedule Status:</span> ${k.overdue > 0 ? `<strong class="text-rose-600">${k.overdue} Overdue Activities</strong>` : '<strong class="text-emerald-600">On Track (All Deliverables Current)</strong>'}</div>
         </div>
 
-        <!-- Overall Progress Bar Container -->
-        <div class="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-          <div class="flex justify-between items-center text-xs font-bold">
-            <span class="text-slate-700 dark:text-slate-300">Project Delivery Progress: ${k.completion_pct || 0}% Complete</span>
-            <span class="text-slate-500 font-mono">${k.completed || 0} of ${k.total_activities || 0} Activities Delivered</span>
-          </div>
-          <div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
-            <div class="bg-emerald-500 h-full transition-all duration-300" style="width: ${k.completion_pct || 0}%" title="Completed"></div>
-          </div>
-          <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 font-medium">
-            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Completed: ${k.completed || 0}</span>
-            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> In Progress: ${k.in_progress || 0}</span>
-            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> In Review: ${k.in_review || 0}</span>
-            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> To Do: ${k.to_do || 0}</span>
-            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Backlog: ${k.backlog || 0}</span>
-          </div>
-        </div>
+      </div>
 
-      </section>
-
-      <!-- ==================== SECTION 2: WORKLOAD DISTRIBUTION ==================== -->
-      <section id="report-sec-workload" class="space-y-4">
+      <!-- ==================== ACTIVITY & SPECIFICATION REGISTER ==================== -->
+      <div id="report-sec-register" class="space-y-3">
         
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-          <h2 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs">2</span>
-            <span>Team Resource Workload & Ownership Distribution</span>
-          </h2>
-          <span class="text-xs text-slate-500 font-semibold">${team.length} Team Members</span>
-        </div>
-
-        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700">
-              <tr>
-                <th class="px-4 py-3">Team Member</th>
-                <th class="px-4 py-3">Project Role</th>
-                <th class="px-4 py-3">Outlook Email</th>
-                <th class="px-3 py-3 text-center">Assigned</th>
-                <th class="px-3 py-3 text-center">Done</th>
-                <th class="px-3 py-3 text-center">In Progress</th>
-                <th class="px-3 py-3 text-center">Overdue</th>
-                <th class="px-4 py-3 text-right">Completion Rate</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 dark:divide-slate-700 text-slate-700 dark:text-slate-200">
-              ${team.length > 0 ? team.map(m => `
-                <tr class="hover:bg-slate-50 dark:hover:bg-slate-750 transition">
-                  <td class="px-4 py-3 font-semibold">
-                    <div class="flex items-center space-x-2">
-                      <div class="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center shadow-xs" style="background-color: ${m.avatar || '#3B82F6'}">
-                        ${this.escapeHtml(m.name.charAt(0).toUpperCase())}
-                      </div>
-                      <span class="text-slate-900 dark:text-white font-bold">${this.escapeHtml(m.name)}</span>
-                    </div>
-                  </td>
-                  <td class="px-4 py-3 text-slate-500 dark:text-slate-400">${this.escapeHtml(m.role || 'Contributor')}</td>
-                  <td class="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-[11px]">${this.escapeHtml(m.email || 'Not Configured')}</td>
-                  <td class="px-3 py-3 text-center font-bold">${m.total}</td>
-                  <td class="px-3 py-3 text-center text-emerald-600 dark:text-emerald-400 font-bold">${m.completed}</td>
-                  <td class="px-3 py-3 text-center text-blue-600 dark:text-blue-400 font-bold">${m.in_progress}</td>
-                  <td class="px-3 py-3 text-center ${m.overdue > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}">${m.overdue}</td>
-                  <td class="px-4 py-3 text-right">
-                    <div class="inline-flex items-center space-x-2">
-                      <div class="w-16 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                        <div class="bg-emerald-500 h-full" style="width: ${m.completion_pct}%"></div>
-                      </div>
-                      <span class="font-bold text-slate-900 dark:text-white text-xs w-10 text-right">${m.completion_pct}%</span>
-                    </div>
-                  </td>
-                </tr>
-              `).join('') : `
-                <tr><td colspan="8" class="px-4 py-4 text-center text-slate-400">No member workload data available</td></tr>
-              `}
-            </tbody>
-          </table>
-        </div>
-
-      </section>
-
-      <!-- ==================== SECTION 3: ATTENTION REQUIRED ==================== -->
-      <section id="report-sec-attention" class="space-y-4">
-        
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-          <h2 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs">3</span>
-            <span>Critical Attention Required & Delivery Bottlenecks</span>
-          </h2>
-          <span class="text-xs font-semibold ${(att.overdue?.length || 0) + (att.urgent_high_pending?.length || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
-            ${(att.overdue?.length || 0) + (att.urgent_high_pending?.length || 0)} Items Requiring Intervention
-          </span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          <!-- Overdue Items Box -->
-          <div class="p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 space-y-3">
-            <div class="flex items-center justify-between">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
-                <i data-lucide="alert-circle" class="w-4 h-4 text-rose-500"></i>
-                <span>Overdue Activities (${att.overdue?.length || 0})</span>
-              </h3>
-            </div>
-            
-            ${att.overdue?.length > 0 ? `
-              <div class="space-y-2 max-h-56 overflow-y-auto custom-scroll pr-1">
-                ${att.overdue.map(o => `
-                  <div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-rose-100 dark:border-rose-900/40 text-xs flex items-center justify-between gap-2 shadow-2xs">
-                    <div class="min-w-0">
-                      <div class="font-bold text-slate-900 dark:text-white truncate">
-                        <span class="text-slate-400">#${o.seq_num ? (o.seq_num < 10 ? '0' + o.seq_num : o.seq_num) : o.id}</span>
-                        ${this.escapeHtml(o.title)}
-                      </div>
-                      <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                        <span>Owner: ${this.escapeHtml(o.assignee_name || 'Unassigned')}</span>
-                        <span>•</span>
-                        <span>Due: ${this.escapeHtml(o.due_date || 'Not Set')}</span>
-                      </div>
-                    </div>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 whitespace-nowrap">
-                      ${o.delay_days || 1}d Late
-                    </span>
-                  </div>
-                `).join('')}
-              </div>
-            ` : `
-              <div class="py-6 text-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
-                <i data-lucide="check-circle" class="w-4 h-4"></i>
-                <span>All project deadlines are strictly on track!</span>
-              </div>
-            `}
+        <div class="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-700">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white">
+            Activity Specification & Scope Register
           </div>
-
-          <!-- Urgent / High Pending Items Box -->
-          <div class="p-4 rounded-xl border border-orange-200 dark:border-orange-900/60 bg-orange-50/40 dark:bg-orange-950/20 space-y-3">
-            <div class="flex items-center justify-between">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-orange-700 dark:text-orange-300 flex items-center gap-1.5">
-                <i data-lucide="flame" class="w-4 h-4 text-orange-500"></i>
-                <span>High / Urgent Priority In Pipeline (${att.urgent_high_pending?.length || 0})</span>
-              </h3>
-            </div>
-
-            ${att.urgent_high_pending?.length > 0 ? `
-              <div class="space-y-2 max-h-56 overflow-y-auto custom-scroll pr-1">
-                ${att.urgent_high_pending.map(u => `
-                  <div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-orange-100 dark:border-orange-900/40 text-xs flex items-center justify-between gap-2 shadow-2xs">
-                    <div class="min-w-0">
-                      <div class="font-bold text-slate-900 dark:text-white truncate">
-                        <span class="text-slate-400">#${u.seq_num ? (u.seq_num < 10 ? '0' + u.seq_num : u.seq_num) : u.id}</span>
-                        ${this.escapeHtml(u.title)}
-                      </div>
-                      <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                        <span>Owner: ${this.escapeHtml(u.assignee_name || 'Unassigned')}</span>
-                        <span>•</span>
-                        <span>Due: ${this.escapeHtml(u.due_date || 'Not Set')}</span>
-                      </div>
-                    </div>
-                    <div>${this.getReportPriorityBadge(u.priority)}</div>
-                  </div>
-                `).join('')}
-              </div>
-            ` : `
-              <div class="py-6 text-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
-                <i data-lucide="check-circle" class="w-4 h-4"></i>
-                <span>No high-priority blockers pending.</span>
-              </div>
-            `}
-          </div>
-
-        </div>
-
-      </section>
-
-      <!-- ==================== SECTION 4: MILESTONES ROADMAP ==================== -->
-      <section id="report-sec-roadmap" class="space-y-4">
-        
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-          <h2 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center text-xs">4</span>
-            <span>Project Milestones & Deliverables Roadmap</span>
-          </h2>
-          <span class="text-xs text-slate-500 font-semibold">${ms.length} Strategic Checkpoints</span>
-        </div>
-
-        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700">
-              <tr>
-                <th class="px-4 py-3">Milestone Ref</th>
-                <th class="px-4 py-3">Milestone Title & Scope</th>
-                <th class="px-4 py-3">Target Due Date</th>
-                <th class="px-4 py-3 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 dark:divide-slate-700 text-slate-700 dark:text-slate-200">
-              ${ms.length > 0 ? ms.map(m => `
-                <tr class="hover:bg-slate-50 dark:hover:bg-slate-750 transition">
-                  <td class="px-4 py-3 font-mono font-bold text-slate-400">#M-${m.id}</td>
-                  <td class="px-4 py-3 font-bold text-slate-900 dark:text-white">${this.escapeHtml(m.title)}</td>
-                  <td class="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">${this.escapeHtml(m.due_date || 'Not Set')}</td>
-                  <td class="px-4 py-3 text-right">
-                    ${m.status === 'completed' || m.status === 'done' ? 
-                      '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">COMPLETED</span>' : 
-                      '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300">SCHEDULED</span>'}
-                  </td>
-                </tr>
-              `).join('') : `
-                <tr><td colspan="4" class="px-4 py-4 text-center text-slate-400">No milestones defined for this project</td></tr>
-              `}
-            </tbody>
-          </table>
-        </div>
-
-      </section>
-
-      <!-- ==================== SECTION 5: CUMULATIVE ACTIVITY REGISTER ==================== -->
-      <section id="report-sec-register" class="space-y-4">
-        
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
-          <h2 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">5</span>
-            <span>Cumulative Activity Register (All Inclusions)</span>
-          </h2>
-          <div id="report-register-counter-badge" class="text-xs font-bold text-blue-600 dark:text-blue-400">
+          <div id="report-register-counter-badge" class="text-xs text-slate-500 font-semibold">
             Showing ${this.state.reportFilteredActivities.length} of ${data.activities?.length || 0} Activities
           </div>
         </div>
 
-        <p class="text-xs text-slate-500">
-          Complete, unfiltered single-source-of-truth register. Every activity incorporates subtasks hierarchy, dependencies, duration timelines, owners, tags, timelogs, and change history.
-        </p>
-
-        <!-- Activities List Container -->
-        <div id="report-activities-container" class="space-y-4">
-          <!-- Rendered dynamically by renderReportActivityRegister() -->
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700 select-none">
+              <tr>
+                <th class="py-3 px-3 w-10 text-center">#</th>
+                <th class="py-3 px-4 min-w-[280px]">Item & Specification / Deliverable Scope</th>
+                <th class="py-3 px-3 min-w-[130px]">Owner / Role</th>
+                <th class="py-3 px-3 min-w-[120px]">Timeline</th>
+                <th class="py-3 px-2.5 text-center min-w-[85px]">Status</th>
+                <th class="py-3 px-2.5 text-center min-w-[75px]">Priority</th>
+                <th class="py-3 px-3 text-center min-w-[85px]">Est / Act</th>
+                <th class="py-3 px-3 text-right min-w-[75px]">Progress</th>
+              </tr>
+            </thead>
+            <tbody id="report-activities-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
+              <!-- Rendered dynamically by renderReportActivityRegister() -->
+            </tbody>
+          </table>
         </div>
 
-      </section>
+      </div>
 
-      <!-- ==================== REPORT FOOTER & AUTHENTICITY NOTICE ==================== -->
-      <div class="pt-8 border-t-2 border-slate-200 dark:border-slate-700 text-center space-y-2 text-xs text-slate-400">
-        <div class="font-bold text-slate-600 dark:text-slate-300">End of Cumulative Project Activity Dossier</div>
-        <div>Generated by ProjectPulse Enterprise Operating System • Chemtatva Internal Systems • Strict Confidentiality</div>
+      <!-- ==================== EXECUTIVE TOTALS BLOCK (BOTTOM RIGHT) ==================== -->
+      <div id="report-sec-totals" class="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+        
+        <div class="text-xs text-slate-500 dark:text-slate-400 space-y-1 max-w-sm">
+          <div class="font-bold text-slate-700 dark:text-slate-300">Notes & Compliance Declarations:</div>
+          <div>• All project specifications, deliverables and quality parameters are governed under ICH and enterprise standard operating procedures.</div>
+          <div>• Timelog records and audit trails are synced with internal project execution database.</div>
+        </div>
+
+        <!-- Right-Aligned Summary Stack -->
+        <div class="w-full sm:w-80 space-y-1.5 text-xs flex-shrink-0">
+          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-slate-600 dark:text-slate-400">Total Activities in Scope:</span>
+            <span class="font-bold text-slate-900 dark:text-white">${k.total_activities || 0}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-slate-600 dark:text-slate-400">Completed Deliverables:</span>
+            <span class="font-bold text-emerald-600 dark:text-emerald-400">${k.completed || 0}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-slate-600 dark:text-slate-400">Active Workflows in Progress:</span>
+            <span class="font-bold text-blue-600 dark:text-blue-400">${k.in_progress || 0}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-slate-600 dark:text-slate-400">Pending in Pipeline (To Do / Review):</span>
+            <span class="font-bold text-amber-600 dark:text-amber-400">${(k.to_do || 0) + (k.in_review || 0) + (k.backlog || 0)}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-slate-600 dark:text-slate-400">Critical Overdue Deliverables:</span>
+            <span class="font-bold ${k.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">${k.overdue || 0}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-slate-600 dark:text-slate-400">Total Work Hours Logged:</span>
+            <span class="font-bold text-slate-900 dark:text-white">${k.total_actual_hours || 0} hrs <span class="font-normal text-slate-400">(${k.total_estimated_hours || 0} hrs Est.)</span></span>
+          </div>
+          
+          <!-- Double-bordered Final Totals Row -->
+          <div class="flex justify-between items-center pt-2.5 pb-1 border-t-2 border-b-2 border-slate-900 dark:border-slate-300 text-sm">
+            <span class="font-black text-slate-900 dark:text-white uppercase tracking-tight">Total Project Delivery:</span>
+            <span class="font-black text-slate-900 dark:text-white font-mono text-base">${k.completion_pct || 0}% Complete</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer Sign-off -->
+      <div class="pt-6 text-center text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800 font-mono">
+        Authorized by Chemtatva Project Intelligence • Single Source of Truth
       </div>
     `;
 
@@ -5619,7 +5427,7 @@ const app = {
   },
 
   renderReportActivityRegister() {
-    const container = document.getElementById('report-activities-container');
+    const tbody = document.getElementById('report-activities-table-body');
     const countBadge = document.getElementById('report-register-counter-badge');
     const activities = this.state.reportFilteredActivities || [];
     const totalCount = this.state.reportData?.activities?.length || 0;
@@ -5628,217 +5436,129 @@ const app = {
       countBadge.textContent = `Showing ${activities.length} of ${totalCount} Activities`;
     }
 
-    if (!container) return;
+    if (!tbody) return;
 
     if (activities.length === 0) {
-      container.innerHTML = `
-        <div class="p-8 text-center bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 space-y-2">
-          <div class="text-slate-400 text-sm font-semibold">No activities match your search/filter criteria.</div>
-          <p class="text-xs text-slate-500">Try resetting the in-report filters or search keyword.</p>
-        </div>
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="p-8 text-center text-slate-400">
+            No activities match your search / filter criteria.
+          </td>
+        </tr>
       `;
       return;
     }
 
-    container.innerHTML = activities.map((t, idx) => {
+    tbody.innerHTML = activities.map((t, idx) => {
       const seqStr = t.seq_num ? (t.seq_num < 10 ? '0' + t.seq_num : t.seq_num) : (idx + 1 < 10 ? '0' + (idx + 1) : idx + 1);
       const subtasks = t.subtasks || [];
-      const timelogs = t.timelogs || [];
-      const history = t.activity_history || [];
       const tags = t.tags || [];
       const dependsOn = t.dependencies?.depends_on || [];
       const blocks = t.dependencies?.blocks || [];
 
       return `
-        <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 space-y-4 hover:border-slate-300 dark:hover:border-slate-600 transition report-activity-card">
+        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition align-top">
           
-          <!-- Card Header: #01, Title, Badges, Edit Action -->
-          <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700/80">
+          <!-- Column 1: Number -->
+          <td class="py-3 px-3 text-center font-bold font-mono text-slate-400 text-xs">
+            ${seqStr}
+          </td>
+
+          <!-- Column 2: Item & Specification / Scope -->
+          <td class="py-3 px-4 space-y-1.5">
+            <div class="font-black text-slate-900 dark:text-white text-xs leading-snug">
+              ${this.escapeHtml(t.title)}
+            </div>
             
-            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
-              <span class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-mono font-black text-xs flex items-center justify-center flex-shrink-0">
-                #${seqStr}
-              </span>
-              <div class="min-w-0">
-                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
-                  ${this.escapeHtml(t.title)}
-                </h3>
-                <div class="text-[10px] text-slate-400 font-mono flex items-center gap-2 mt-0.5">
-                  <span>Task ID: #${t.id}</span>
-                  <span>•</span>
-                  <span>Sprint/Phase: ${this.escapeHtml(t.sprint_name || 'Standard Phase')}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Badges -->
-            <div class="flex items-center space-x-2 flex-shrink-0">
-              ${this.getReportStatusBadge(t.status)}
-              ${this.getReportPriorityBadge(t.priority)}
-            </div>
-
-          </div>
-
-          <!-- Structured Metadata Grid (4 Columns) -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs bg-slate-50/70 dark:bg-slate-850/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-750">
-            
-            <!-- Assignee / Ownership -->
-            <div>
-              <span class="text-slate-400 text-[10px] uppercase font-bold block mb-1">Assigned Resource</span>
-              <div class="flex items-center space-x-2">
-                <div class="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#3B82F6'}">
-                  ${this.escapeHtml((t.assignee_name || 'U').charAt(0).toUpperCase())}
-                </div>
-                <div class="min-w-0">
-                  <div class="font-bold text-slate-900 dark:text-white truncate">${this.escapeHtml(t.assignee_name || 'Unassigned')}</div>
-                  <div class="text-[10px] text-slate-500 truncate">${this.escapeHtml(t.assignee_role || 'Not Set')}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Schedule Timeline & Duration -->
-            <div>
-              <span class="text-slate-400 text-[10px] uppercase font-bold block mb-1">Schedule & Timeline</span>
-              <div class="font-semibold text-slate-800 dark:text-slate-200">
-                <span>${this.escapeHtml(t.start_date || 'Not Set')}</span> → <span class="${t.is_overdue ? 'text-rose-600 font-bold' : ''}">${this.escapeHtml(t.due_date || 'Not Set')}</span>
-              </div>
-              <div class="text-[10px] text-slate-500 mt-0.5">
-                ${t.duration_days ? `Duration: ${t.duration_days} days` : 'Duration: Not Available'}
-                ${t.is_overdue ? `<span class="text-rose-600 font-bold ml-1">(${t.delay_days}d overdue)</span>` : ''}
-              </div>
-            </div>
-
-            <!-- Progress & Completion -->
-            <div>
-              <span class="text-slate-400 text-[10px] uppercase font-bold block mb-1">Activity Progress</span>
-              <div class="flex items-center space-x-2">
-                <div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div class="bg-emerald-500 h-full" style="width: ${t.progress_pct || 0}%"></div>
-                </div>
-                <span class="font-bold text-slate-900 dark:text-white text-xs w-9 text-right">${t.progress_pct || 0}%</span>
-              </div>
-              <div class="text-[10px] text-slate-500 mt-0.5">
-                ${subtasks.length > 0 ? `${t.subtask_completed_count || 0}/${subtasks.length} subtasks done` : 'Direct task execution'}
-              </div>
-            </div>
-
-            <!-- Work Hours -->
-            <div>
-              <span class="text-slate-400 text-[10px] uppercase font-bold block mb-1">Effort / Work Hours</span>
-              <div class="font-bold text-slate-900 dark:text-white">
-                <span>${t.actual_hours || 0} hrs Logged</span>
-                <span class="text-slate-400 font-normal"> / ${t.estimated_hours || 0} hrs Est.</span>
-              </div>
-              <div class="text-[10px] text-slate-500 mt-0.5">
-                ${timelogs.length > 0 ? `${timelogs.length} timelog entry/entries` : 'No logs submitted'}
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Description & Deliverables Block -->
-          <div class="space-y-2 text-xs">
-            <div>
-              <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Description / Scope:</span>
-              <p class="text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed bg-slate-50/50 dark:bg-slate-900/30 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                ${this.escapeHtml(t.description || 'Not Available')}
-              </p>
-            </div>
-
-            ${t.deliverables ? `
-              <div>
-                <span class="text-[11px] font-bold text-blue-700 dark:text-blue-300">Deliverables & Expected Output:</span>
-                <p class="text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed bg-blue-50/30 dark:bg-blue-950/20 p-2.5 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                  ${this.escapeHtml(t.deliverables)}
-                </p>
+            ${t.description ? `
+              <div class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                ${this.escapeHtml(t.description)}
               </div>
             ` : ''}
-          </div>
 
-          <!-- Tags Badges -->
-          ${tags.length > 0 ? `
-            <div class="flex flex-wrap items-center gap-1.5 text-xs">
-              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Tags:</span>
-              ${tags.map(tg => `<span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 dark:bg-slate-750 dark:text-slate-300 border border-slate-200 dark:border-slate-700">#${this.escapeHtml(tg)}</span>`).join('')}
-            </div>
-          ` : ''}
-
-          <!-- Subtasks Tree Hierarchy -->
-          ${subtasks.length > 0 ? `
-            <div class="p-3 bg-slate-50/80 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-750 space-y-2 text-xs">
-              <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                <span>Subtasks Breakdown & Hierarchy Tree:</span>
-                <span class="text-slate-400 font-mono text-[10px]">${t.subtask_completed_count || 0} of ${subtasks.length} Completed</span>
+            ${t.deliverables ? `
+              <div class="text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30 px-2 py-1 rounded border border-blue-100 dark:border-blue-900/40">
+                <strong>Deliverable:</strong> ${this.escapeHtml(t.deliverables)}
               </div>
-              <div class="space-y-1 font-mono text-[11px] pl-1">
+            ` : ''}
+
+            <!-- Subtasks Tree Hierarchy -->
+            ${subtasks.length > 0 ? `
+              <div class="font-mono text-[10px] space-y-0.5 pt-0.5 text-slate-600 dark:text-slate-400">
                 ${subtasks.map((st, s_idx) => {
                   const isLast = s_idx === subtasks.length - 1;
                   const prefix = isLast ? '└── ' : '├── ';
                   return `
-                    <div class="flex items-center space-x-2 ${st.completed ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}">
+                    <div class="flex items-center space-x-1.5 ${st.completed ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : ''}">
                       <span class="text-slate-400 select-none">${prefix}</span>
-                      <span class="font-bold">[${st.completed ? '✔ DONE' : '  TODO'}]</span>
+                      <span>[${st.completed ? '✔' : ' '}]</span>
                       <span class="${st.completed ? 'line-through opacity-80' : ''}">${this.escapeHtml(st.title)}</span>
                     </div>
                   `;
                 }).join('')}
               </div>
-            </div>
-          ` : ''}
+            ` : ''}
 
-          <!-- Dependencies Matrix -->
-          ${(dependsOn.length > 0 || blocks.length > 0) ? `
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              
-              <!-- Depends On -->
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 space-y-1.5">
-                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Pre-requisite (Depends On):</span>
-                ${dependsOn.length > 0 ? dependsOn.map(d => `
-                  <div class="flex items-center justify-between gap-1 text-[11px]">
-                    <span class="font-bold text-slate-800 dark:text-slate-200 truncate">#${d.seq_num ? (d.seq_num < 10 ? '0' + d.seq_num : d.seq_num) : d.id} ${this.escapeHtml(d.title)}</span>
-                    ${this.getReportStatusBadge(d.status)}
-                  </div>
-                `).join('') : '<span class="text-slate-400 italic text-[11px]">None (Independent activity)</span>'}
+            <!-- Dependencies & Tags -->
+            ${(dependsOn.length > 0 || blocks.length > 0 || tags.length > 0) ? `
+              <div class="flex flex-wrap items-center gap-1.5 text-[10px] pt-1">
+                ${dependsOn.length > 0 ? `
+                  <span class="text-slate-500">Depends on: <strong>${dependsOn.map(d => '#' + d.seq_num).join(', ')}</strong></span>
+                ` : ''}
+                ${blocks.length > 0 ? `
+                  <span class="text-slate-500">| Blocks: <strong>${blocks.map(b => '#' + b.seq_num).join(', ')}</strong></span>
+                ` : ''}
+                ${tags.map(tg => `<span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-mono">#${this.escapeHtml(tg)}</span>`).join('')}
               </div>
+            ` : ''}
+          </td>
 
-              <!-- Blocks -->
-              <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 space-y-1.5">
-                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Downstream (Blocks):</span>
-                ${blocks.length > 0 ? blocks.map(b => `
-                  <div class="flex items-center justify-between gap-1 text-[11px]">
-                    <span class="font-bold text-slate-800 dark:text-slate-200 truncate">#${b.seq_num ? (b.seq_num < 10 ? '0' + b.seq_num : b.seq_num) : b.id} ${this.escapeHtml(b.title)}</span>
-                    ${this.getReportStatusBadge(b.status)}
-                  </div>
-                `).join('') : '<span class="text-slate-400 italic text-[11px]">None (No dependencies waiting)</span>'}
-              </div>
-
+          <!-- Column 3: Owner & Role -->
+          <td class="py-3 px-3 text-xs">
+            <div class="font-bold text-slate-900 dark:text-white truncate max-w-[130px]">
+              ${this.escapeHtml(t.assignee_name || 'Unassigned')}
             </div>
-          ` : ''}
-
-          <!-- Timelogs Record (if any) -->
-          ${timelogs.length > 0 ? `
-            <div class="p-3 bg-slate-50/60 dark:bg-slate-850/60 rounded-xl border border-slate-200 dark:border-slate-750 space-y-2 text-xs">
-              <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Logged Work Hours Log:</div>
-              <div class="space-y-1 max-h-36 overflow-y-auto custom-scroll">
-                ${timelogs.map(tl => `
-                  <div class="flex items-center justify-between p-1.5 rounded bg-white dark:bg-slate-800 text-[11px] border border-slate-100 dark:border-slate-750">
-                    <span class="font-bold text-slate-800 dark:text-slate-200">${this.escapeHtml(tl.member_name)}</span>
-                    <span class="text-slate-500 truncate flex-1 px-3">${this.escapeHtml(tl.description || 'Logged work')}</span>
-                    <span class="font-mono text-slate-400 mr-2">${this.escapeHtml(tl.logged_date)}</span>
-                    <span class="font-black text-blue-600 dark:text-blue-400">${tl.hours}h</span>
-                  </div>
-                `).join('')}
-              </div>
+            <div class="text-[10px] text-slate-400 truncate max-w-[130px]">
+              ${this.escapeHtml(t.assignee_role || 'Contributor')}
             </div>
-          ` : ''}
+          </td>
 
-          <!-- Timestamps Footer -->
-          <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-750/80 text-[10px] text-slate-400 font-mono">
-            <div>Created: ${t.created_at ? this.escapeHtml(t.created_at.slice(0,10)) : 'Inception'}</div>
-            <div>Last Modified: ${t.updated_at ? this.escapeHtml(t.updated_at.slice(0,19).replace('T', ' ')) : 'Recent'}</div>
-          </div>
+          <!-- Column 4: Timeline -->
+          <td class="py-3 px-3 text-xs font-mono">
+            <div class="text-slate-700 dark:text-slate-300 whitespace-nowrap">
+              ${this.escapeHtml(t.start_date || '—')} → <span class="${t.is_overdue ? 'text-rose-600 font-bold' : ''}">${this.escapeHtml(t.due_date || '—')}</span>
+            </div>
+            <div class="text-[10px] text-slate-400">
+              ${t.duration_days ? `${t.duration_days} days` : 'Ongoing'}
+              ${t.is_overdue ? `<span class="text-rose-600 font-bold">(${t.delay_days}d overdue)</span>` : ''}
+            </div>
+          </td>
 
-        </div>
+          <!-- Column 5: Status -->
+          <td class="py-3 px-2.5 text-center">
+            ${this.getReportStatusBadge(t.status)}
+          </td>
+
+          <!-- Column 6: Priority -->
+          <td class="py-3 px-2.5 text-center">
+            ${this.getReportPriorityBadge(t.priority)}
+          </td>
+
+          <!-- Column 7: Est / Act -->
+          <td class="py-3 px-3 text-center text-xs font-mono">
+            <span class="font-bold text-slate-900 dark:text-white">${t.actual_hours || 0}h</span>
+            <span class="text-slate-400"> / ${t.estimated_hours || 0}h</span>
+          </td>
+
+          <!-- Column 8: Progress % -->
+          <td class="py-3 px-3 text-right font-mono font-bold text-xs">
+            <div class="text-slate-900 dark:text-white">${t.progress_pct || 0}%</div>
+            <div class="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden ml-auto mt-1">
+              <div class="bg-emerald-500 h-full" style="width: ${t.progress_pct || 0}%"></div>
+            </div>
+          </td>
+
+        </tr>
       `;
     }).join('');
   },
