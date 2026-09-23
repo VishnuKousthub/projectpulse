@@ -6050,9 +6050,6 @@ const app = {
     const skillsInput = document.getElementById('res-input-skills');
     const statusInput = document.getElementById('res-input-status');
     const availInput = document.getElementById('res-input-availability');
-    const costInput = document.getElementById('res-input-cost');
-    const currInput = document.getElementById('res-input-currency');
-    const emailInput = document.getElementById('res-input-email');
     const phoneInput = document.getElementById('res-input-phone');
     const locInput = document.getElementById('res-input-location');
     const notesInput = document.getElementById('res-input-notes');
@@ -6075,9 +6072,6 @@ const app = {
         if (skillsInput) skillsInput.value = (r.skills || []).join(', ');
         if (statusInput) statusInput.value = r.status || 'active';
         if (availInput) availInput.value = r.availability_status || 'available';
-        if (costInput) costInput.value = r.cost_per_hour || '';
-        if (currInput) currInput.value = r.currency || 'USD';
-        if (emailInput) emailInput.value = r.contact_email || '';
         if (phoneInput) phoneInput.value = r.contact_phone || '';
         if (locInput) locInput.value = r.location || '';
         if (notesInput) notesInput.value = r.notes || '';
@@ -6098,9 +6092,6 @@ const app = {
       if (skillsInput) skillsInput.value = '';
       if (statusInput) statusInput.value = 'active';
       if (availInput) availInput.value = 'available';
-      if (costInput) costInput.value = '';
-      if (currInput) currInput.value = 'USD';
-      if (emailInput) emailInput.value = '';
       if (phoneInput) phoneInput.value = '';
       if (locInput) locInput.value = '';
       if (notesInput) notesInput.value = '';
@@ -6136,9 +6127,6 @@ const app = {
       skills,
       status: document.getElementById('res-input-status')?.value || 'active',
       availability_status: document.getElementById('res-input-availability')?.value || 'available',
-      cost_per_hour: parseFloat(document.getElementById('res-input-cost')?.value) || 0.0,
-      currency: document.getElementById('res-input-currency')?.value || 'USD',
-      contact_email: document.getElementById('res-input-email')?.value.trim(),
       contact_phone: document.getElementById('res-input-phone')?.value.trim(),
       location: document.getElementById('res-input-location')?.value.trim(),
       notes: document.getElementById('res-input-notes')?.value.trim()
@@ -6368,7 +6356,6 @@ const app = {
       const allocBadge = document.getElementById('dossier-alloc-badge');
       const allocMeter = document.getElementById('dossier-alloc-meter');
       const availText = document.getElementById('dossier-avail-status-text');
-      const rateText = document.getElementById('dossier-hourly-rate');
 
       if (allocBadge) {
         allocBadge.textContent = `${totalAlloc}% Allocated`;
@@ -6381,9 +6368,6 @@ const app = {
       if (availText) {
         availText.textContent = `Availability: ${dossier.computed_availability_status?.replace(/_/g, ' ')?.toUpperCase() || 'AVAILABLE'}`;
       }
-      if (rateText) {
-        rateText.textContent = `Rate: ${dossier.currency || 'USD'} $${dossier.cost_per_hour || '0.00'} / hr`;
-      }
 
       // Skills
       const skillsContainer = document.getElementById('dossier-skills-container');
@@ -6394,10 +6378,8 @@ const app = {
       }
 
       // Contact info
-      const emailEl = document.getElementById('dossier-email');
       const phoneEl = document.getElementById('dossier-phone');
       const locEl = document.getElementById('dossier-location');
-      if (emailEl) emailEl.innerHTML = `<i data-lucide="mail" class="w-3.5 h-3.5 text-slate-400"></i><span>${this.escapeHtml(dossier.contact_email || 'Not provided')}</span>`;
       if (phoneEl) phoneEl.innerHTML = `<i data-lucide="phone" class="w-3.5 h-3.5 text-slate-400"></i><span>${this.escapeHtml(dossier.contact_phone || 'Not provided')}</span>`;
       if (locEl) locEl.innerHTML = `<i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i><span>${this.escapeHtml(dossier.location || 'Not provided')}</span>`;
 
