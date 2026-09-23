@@ -5269,38 +5269,23 @@ const app = {
 
     sheet.innerHTML = `
       <!-- ==================== HEADER: SIMPLE & SOPHISTICATED ==================== -->
-      <div id="report-sec-header" class="space-y-3 pb-3 border-b-2 border-slate-900 dark:border-slate-300">
+      <div id="report-sec-header" class="space-y-2.5 pb-3 border-b-2 border-slate-900 dark:border-slate-300">
         
-        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <!-- Left: Document Type & Reference Codes -->
-          <div class="space-y-1">
-            <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
-              Project Activity Report
-            </h1>
-            <div class="text-xs text-slate-600 dark:text-slate-400 font-medium">
-              <span>Report Ref: <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'} (Rev 1)</strong></span>
-              <span class="mx-1.5 text-slate-300 dark:text-slate-600">|</span>
-              <span>Linked Project: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.name || 'Project')}</strong></span>
-            </div>
-            <div class="text-xs text-slate-600 dark:text-slate-400 font-medium">
-              <span>Date: <strong class="text-slate-900 dark:text-white">${dateFormatted}</strong></span>
-              <span class="mx-1.5 text-slate-300 dark:text-slate-600">|</span>
-              <span>Reporting Scope: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(reportingPeriod)}</strong></span>
-            </div>
+        <div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+          <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+            Project Activity Report
+          </h1>
+          <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">
+            Date: <strong class="text-slate-900 dark:text-white font-mono">${dateFormatted}</strong>
           </div>
+        </div>
 
-          <!-- Right: Organization & Manufacturing Context -->
-          <div class="text-left sm:text-right space-y-0.5">
-            <div class="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight">
-              Nidhims Pharmaceutical & CDMO Solutions
-            </div>
-            <div class="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Contract Development & Project Execution Systems
-            </div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-              GSTIN: 36AABCN1234F1Z8 | Hyderabad, India
-            </div>
-          </div>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400 font-medium">
+          <div>Report Ref: <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'} (Rev 1)</strong></div>
+          <span class="text-slate-300 dark:text-slate-600">|</span>
+          <div>Linked Project: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.name || 'Project')}</strong></div>
+          <span class="text-slate-300 dark:text-slate-600">|</span>
+          <div>Reporting Scope: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(reportingPeriod)}</strong></div>
         </div>
 
       </div>
