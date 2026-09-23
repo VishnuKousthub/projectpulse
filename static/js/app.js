@@ -5371,7 +5371,6 @@ const app = {
           <div><span class="text-slate-500">Execution Site:</span> Reactor Facility A, Hyderabad</div>
           <div><span class="text-slate-500">Delivery Target:</span> Chemtatva Global Client Supply, Basel / Global</div>
           <div><span class="text-slate-500">Total Activities in Scope:</span> <strong>${k.total_activities || 0} Activities</strong></div>
-          <div><span class="text-slate-500">Logged / Estimated Hours:</span> <strong>${k.total_actual_hours || 0} hrs</strong> Logged / ${k.total_estimated_hours || 0} hrs Est.</div>
           <div><span class="text-slate-500">Schedule Status:</span> ${k.overdue > 0 ? `<strong class="text-rose-600">${k.overdue} Overdue Activities</strong>` : '<strong class="text-emerald-600">On Track (All Deliverables Current)</strong>'}</div>
         </div>
 
@@ -5396,10 +5395,9 @@ const app = {
                 <th class="report-col-num py-2.5 px-2 text-center">#</th>
                 <th class="report-col-spec py-2.5 px-3">Item & Specification / Scope</th>
                 <th class="report-col-owner py-2.5 px-2">Owner / Role</th>
-                <th class="report-col-timeline py-2.5 px-2">Timeline</th>
+                <th class="report-col-start py-2.5 px-2 text-center">Start Date</th>
+                <th class="report-col-end py-2.5 px-2 text-center">End Date</th>
                 <th class="report-col-status py-2.5 px-1.5 text-center">Status</th>
-                <th class="report-col-priority py-2.5 px-1.5 text-center">Priority</th>
-                <th class="report-col-hours py-2.5 px-2 text-center">Est / Act</th>
                 <th class="report-col-progress py-2.5 px-2 text-right">Progress</th>
               </tr>
             </thead>
@@ -5442,10 +5440,6 @@ const app = {
             <span class="text-slate-600 dark:text-slate-400">Critical Overdue Deliverables:</span>
             <span class="font-bold ${k.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">${k.overdue || 0}</span>
           </div>
-          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
-            <span class="text-slate-600 dark:text-slate-400">Total Work Hours Logged:</span>
-            <span class="font-bold text-slate-900 dark:text-white">${k.total_actual_hours || 0} hrs <span class="font-normal text-slate-400">(${k.total_estimated_hours || 0} hrs Est.)</span></span>
-          </div>
           
           <!-- Double-bordered Final Totals Row -->
           <div class="flex justify-between items-center pt-2 pb-1 border-t-2 border-b-2 border-slate-900 dark:border-slate-300 text-xs">
@@ -5481,7 +5475,7 @@ const app = {
     if (activities.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="8" class="p-8 text-center text-slate-400">
+          <td colspan="7" class="p-8 text-center text-slate-400">
             No activities match your search / filter criteria.
           </td>
         </tr>
@@ -5563,34 +5557,25 @@ const app = {
             </div>
           </td>
 
-          <!-- Column 4: Timeline -->
-          <td class="report-col-timeline py-2.5 px-2 text-xs font-mono">
-            <div class="text-slate-700 dark:text-slate-300 whitespace-nowrap">
-              ${this.escapeHtml(t.start_date || '—')} → <span class="${t.is_overdue ? 'text-rose-600 font-bold' : ''}">${this.escapeHtml(t.due_date || '—')}</span>
-            </div>
-            <div class="text-[10px] text-slate-400">
-              ${t.duration_days ? `${t.duration_days} days` : 'Ongoing'}
-              ${t.is_overdue ? `<span class="text-rose-600 font-bold">(${t.delay_days}d late)</span>` : ''}
-            </div>
+          <!-- Column 4: Start Date -->
+          <td class="report-col-start py-2.5 px-2 text-center text-xs font-mono text-slate-700 dark:text-slate-300">
+            ${this.escapeHtml(t.start_date || '—')}
           </td>
 
-          <!-- Column 5: Status -->
+          <!-- Column 5: End Date -->
+          <td class="report-col-end py-2.5 px-2 text-center text-xs font-mono">
+            <div class="${t.is_overdue ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}">
+              ${this.escapeHtml(t.due_date || '—')}
+            </div>
+            ${t.is_overdue ? `<div class="text-[10px] text-rose-600 font-bold">(${t.delay_days}d late)</div>` : ''}
+          </td>
+
+          <!-- Column 6: Status -->
           <td class="report-col-status py-2.5 px-1.5 text-center">
             ${this.getReportStatusBadge(t.status)}
           </td>
 
-          <!-- Column 6: Priority -->
-          <td class="report-col-priority py-2.5 px-1.5 text-center">
-            ${this.getReportPriorityBadge(t.priority)}
-          </td>
-
-          <!-- Column 7: Est / Act -->
-          <td class="report-col-hours py-2.5 px-2 text-center text-xs font-mono">
-            <span class="font-bold text-slate-900 dark:text-white">${t.actual_hours || 0}h</span>
-            <span class="text-slate-400 text-[10px]"> / ${t.estimated_hours || 0}h</span>
-          </td>
-
-          <!-- Column 8: Progress % -->
+          <!-- Column 7: Progress % -->
           <td class="report-col-progress py-2.5 px-2 text-right font-mono font-bold text-xs">
             <div class="text-slate-900 dark:text-white">${t.progress_pct || 0}%</div>
             <div class="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden ml-auto mt-0.5">
@@ -5755,7 +5740,21 @@ const app = {
     const assignedTaskCount = (this.state.tasks || []).filter(t => (t.resources && t.resources.length > 0) || (t.resource_ids && t.resource_ids.length > 0)).length;
     if (projTasksCount) projTasksCount.textContent = `${assignedTaskCount} Activities`;
 
-    // 5. Render active tab
+    // 5. Update designation filter options
+    const typeFilter = document.getElementById('res-lib-filter-type');
+    if (typeFilter) {
+      const currentVal = typeFilter.value;
+      const baseList = ['Manager', 'Research Chemist'];
+      const customList = Array.from(new Set(resources.map(r => r.type).filter(Boolean)));
+      const allTypes = Array.from(new Set([...baseList, ...customList]));
+      typeFilter.innerHTML = `<option value="">All Designations</option>` +
+        allTypes.map(t => `<option value="${this.escapeHtml(t)}">${this.escapeHtml(t)}</option>`).join('');
+      if (currentVal && allTypes.includes(currentVal)) {
+        typeFilter.value = currentVal;
+      }
+    }
+
+    // 6. Render active tab
     if (currentTab === 'project') {
       this.renderProjectResourcesTable(projResources || []);
     } else {
@@ -5797,6 +5796,8 @@ const app = {
 
   getResourceTypeBadgeHTML(type) {
     const typeClassMap = {
+      'Manager': 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+      'Research Chemist': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
       'Employee': 'resource-type-employee',
       'Contractor': 'resource-type-contractor',
       'Equipment': 'resource-type-equipment',
@@ -5807,7 +5808,7 @@ const app = {
       'Material': 'resource-type-material',
       'Facility': 'resource-type-facility'
     };
-    const cls = typeClassMap[type] || 'resource-type-other';
+    const cls = typeClassMap[type] || 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800';
     return `<span class="resource-badge ${cls}">${this.escapeHtml(type || 'Resource')}</span>`;
   },
 
@@ -6036,6 +6037,63 @@ const app = {
     this.initLucide();
   },
 
+  handleDesignationSelectChange(selectEl) {
+    const container = document.getElementById('res-custom-designation-container');
+    const customInput = document.getElementById('res-input-custom-designation');
+    if (selectEl.value === '__add_new__') {
+      if (container) container.classList.remove('hidden');
+      if (customInput) {
+        customInput.value = '';
+        customInput.focus();
+      }
+    } else {
+      if (container) container.classList.add('hidden');
+    }
+  },
+
+  applyCustomDesignation() {
+    const customInput = document.getElementById('res-input-custom-designation');
+    const selectEl = document.getElementById('res-input-type');
+    const container = document.getElementById('res-custom-designation-container');
+    const val = customInput?.value.trim();
+    if (!val) {
+      this.showToast('Please enter a designation name', 'error');
+      return;
+    }
+
+    if (selectEl) {
+      let existingOpt = Array.from(selectEl.options).find(o => o.value.toLowerCase() === val.toLowerCase());
+      if (existingOpt) {
+        selectEl.value = existingOpt.value;
+      } else {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        const addNewOpt = selectEl.querySelector('option[value="__add_new__"]');
+        if (addNewOpt) {
+          selectEl.insertBefore(opt, addNewOpt);
+        } else {
+          selectEl.appendChild(opt);
+        }
+        selectEl.value = val;
+      }
+    }
+
+    if (container) container.classList.add('hidden');
+    if (customInput) customInput.value = '';
+  },
+
+  cancelCustomDesignation() {
+    const container = document.getElementById('res-custom-designation-container');
+    const selectEl = document.getElementById('res-input-type');
+    const customInput = document.getElementById('res-input-custom-designation');
+    if (container) container.classList.add('hidden');
+    if (customInput) customInput.value = '';
+    if (selectEl && selectEl.value === '__add_new__') {
+      selectEl.value = 'Manager';
+    }
+  },
+
   async openResourceModal(resourceId = null) {
     const modal = document.getElementById('resource-modal');
     if (!modal) return;
@@ -6043,7 +6101,7 @@ const app = {
     const idInput = document.getElementById('res-input-id');
     const nameInput = document.getElementById('res-input-name');
     const codeInput = document.getElementById('res-input-code');
-    const typeInput = document.getElementById('res-input-type');
+    const typeSelect = document.getElementById('res-input-type');
     const catInput = document.getElementById('res-input-category');
     const deptInput = document.getElementById('res-input-department');
     const roleInput = document.getElementById('res-input-role');
@@ -6055,6 +6113,26 @@ const app = {
     const notesInput = document.getElementById('res-input-notes');
     const delBtn = document.getElementById('res-delete-btn');
     const titleEl = document.getElementById('resource-modal-title');
+    const customContainer = document.getElementById('res-custom-designation-container');
+    const customInput = document.getElementById('res-input-custom-designation');
+
+    if (customContainer) customContainer.classList.add('hidden');
+    if (customInput) customInput.value = '';
+
+    const baseDesignations = ['Manager', 'Research Chemist'];
+    const existingDesignations = Array.from(new Set((this.state.resources || []).map(r => r.type).filter(Boolean)));
+    const allDesignations = Array.from(new Set([...baseDesignations, ...existingDesignations]));
+
+    const populateDesignations = (selectedVal) => {
+      if (typeSelect) {
+        if (selectedVal && !allDesignations.includes(selectedVal) && selectedVal !== '__add_new__') {
+          allDesignations.push(selectedVal);
+        }
+        typeSelect.innerHTML = allDesignations.map(d => `<option value="${this.escapeHtml(d)}">${this.escapeHtml(d)}</option>`).join('') +
+          `<option value="__add_new__">+ Add Custom Designation...</option>`;
+        typeSelect.value = selectedVal || 'Manager';
+      }
+    };
 
     if (resourceId) {
       if (titleEl) titleEl.textContent = 'Edit Central Resource';
@@ -6065,7 +6143,7 @@ const app = {
         if (idInput) idInput.value = r.id;
         if (nameInput) nameInput.value = r.name || '';
         if (codeInput) codeInput.value = r.resource_code || '';
-        if (typeInput) typeInput.value = r.type || 'Employee';
+        populateDesignations(r.type || 'Manager');
         if (catInput) catInput.value = r.category || 'Internal';
         if (deptInput) deptInput.value = r.department || '';
         if (roleInput) roleInput.value = r.role || '';
@@ -6085,7 +6163,7 @@ const app = {
       if (idInput) idInput.value = '';
       if (nameInput) nameInput.value = '';
       if (codeInput) codeInput.value = '';
-      if (typeInput) typeInput.value = 'Employee';
+      populateDesignations('Manager');
       if (catInput) catInput.value = 'Internal';
       if (deptInput) deptInput.value = '';
       if (roleInput) roleInput.value = '';
@@ -6117,10 +6195,16 @@ const app = {
     const skillsRaw = document.getElementById('res-input-skills')?.value || '';
     const skills = skillsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
+    let type = document.getElementById('res-input-type')?.value || 'Manager';
+    if (type === '__add_new__') {
+      const customVal = document.getElementById('res-input-custom-designation')?.value.trim();
+      type = customVal || 'Manager';
+    }
+
     const payload = {
       name,
       resource_code: document.getElementById('res-input-code')?.value.trim() || undefined,
-      type: document.getElementById('res-input-type')?.value || 'Employee',
+      type,
       category: document.getElementById('res-input-category')?.value || 'Internal',
       department: document.getElementById('res-input-department')?.value.trim(),
       role: document.getElementById('res-input-role')?.value.trim(),
@@ -6203,10 +6287,6 @@ const app = {
 
     const mappingIdInput = document.getElementById('proj-res-mapping-id');
     const roleInput = document.getElementById('proj-res-input-role');
-    const allocInput = document.getElementById('proj-res-input-alloc');
-    const allocLabel = document.getElementById('proj-res-alloc-label');
-    const startInput = document.getElementById('proj-res-input-start');
-    const endInput = document.getElementById('proj-res-input-end');
     const respInput = document.getElementById('proj-res-input-responsibility');
     const statusInput = document.getElementById('proj-res-input-status');
     const projNameEl = document.getElementById('proj-res-modal-project-name');
@@ -6224,10 +6304,6 @@ const app = {
         select.disabled = true;
       }
       if (roleInput) roleInput.value = mapping.project_role || mapping.role || '';
-      if (allocInput) allocInput.value = mapping.allocation_pct || 100;
-      if (allocLabel) allocLabel.textContent = `${mapping.allocation_pct || 100}%`;
-      if (startInput) startInput.value = mapping.start_date || '';
-      if (endInput) endInput.value = mapping.end_date || '';
       if (respInput) respInput.value = mapping.responsibility || '';
       if (statusInput) statusInput.value = mapping.status || 'active';
     } else {
@@ -6235,10 +6311,6 @@ const app = {
       if (mappingIdInput) mappingIdInput.value = '';
       if (select) select.disabled = false;
       if (roleInput) roleInput.value = '';
-      if (allocInput) allocInput.value = 100;
-      if (allocLabel) allocLabel.textContent = '100%';
-      if (startInput) startInput.value = '';
-      if (endInput) endInput.value = '';
       if (respInput) respInput.value = '';
       if (statusInput) statusInput.value = 'active';
     }
@@ -6284,9 +6356,7 @@ const app = {
     const payload = {
       resource_id: resourceId,
       project_role: document.getElementById('proj-res-input-role')?.value.trim() || undefined,
-      allocation_pct: Number(document.getElementById('proj-res-input-alloc')?.value) || 100,
-      start_date: document.getElementById('proj-res-input-start')?.value || undefined,
-      end_date: document.getElementById('proj-res-input-end')?.value || undefined,
+      allocation_pct: 100,
       responsibility: document.getElementById('proj-res-input-responsibility')?.value.trim() || undefined,
       status: document.getElementById('proj-res-input-status')?.value || 'active'
     };

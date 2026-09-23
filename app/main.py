@@ -2277,9 +2277,9 @@ def generate_cumulative_project_excel(report):
     ws2.views.sheetView[0].showGridLines = True
 
     act_headers = [
-        "Seq #", "ID", "Activity Title", "Status", "Priority",
+        "Seq #", "ID", "Activity Title", "Status",
         "Owner", "Role", "Start Date", "End Date", "Duration (Days)",
-        "Progress %", "Est Hours", "Actual Hours", "Subtasks (Done/Total)",
+        "Progress %", "Subtasks (Done/Total)",
         "Tags", "Description", "Deliverables", "Dependencies (Depends On)", "Dependencies (Blocks)"
     ]
 
@@ -2308,30 +2308,21 @@ def generate_cumulative_project_excel(report):
             status_cell.fill = status_done_fill
         elif t["status"] == "in_progress":
             status_cell.fill = status_prog_fill
-        
-        prio_cell = ws2.cell(row=r_idx, column=5, value=t["priority"].upper())
-        prio_cell.alignment = Alignment(horizontal="center")
-        if t["priority"] == "urgent":
-            prio_cell.fill = prio_urgent_fill
-        elif t["priority"] == "high":
-            prio_cell.fill = prio_high_fill
 
-        ws2.cell(row=r_idx, column=6, value=t["assignee_name"])
-        ws2.cell(row=r_idx, column=7, value=t["assignee_role"])
-        ws2.cell(row=r_idx, column=8, value=t["start_date"] or "Not Set").alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=9, value=t["due_date"] or "Not Set").alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=10, value=t["duration_days"] or "N/A").alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=11, value=f"{t['progress_pct']}%").alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=12, value=t["estimated_hours"]).alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=13, value=t["actual_hours"]).alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=14, value=subtasks_str).alignment = Alignment(horizontal="center")
-        ws2.cell(row=r_idx, column=15, value=tags_str)
-        ws2.cell(row=r_idx, column=16, value=t["description"] or "Not Available")
-        ws2.cell(row=r_idx, column=17, value=t["deliverables"] or "Not Available")
-        ws2.cell(row=r_idx, column=18, value=depends_on_str)
-        ws2.cell(row=r_idx, column=19, value=blocks_str)
+        ws2.cell(row=r_idx, column=5, value=t["assignee_name"])
+        ws2.cell(row=r_idx, column=6, value=t["assignee_role"])
+        ws2.cell(row=r_idx, column=7, value=t["start_date"] or "Not Set").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=8, value=t["due_date"] or "Not Set").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=9, value=t["duration_days"] or "N/A").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=10, value=f"{t['progress_pct']}%").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=11, value=subtasks_str).alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=12, value=tags_str)
+        ws2.cell(row=r_idx, column=13, value=t["description"] or "Not Available")
+        ws2.cell(row=r_idx, column=14, value=t["deliverables"] or "Not Available")
+        ws2.cell(row=r_idx, column=15, value=depends_on_str)
+        ws2.cell(row=r_idx, column=16, value=blocks_str)
 
-        for c in range(1, 20):
+        for c in range(1, 17):
             ws2.cell(row=r_idx, column=c).border = thin_border
             if c != 3:
                 ws2.cell(row=r_idx, column=c).font = regular_font

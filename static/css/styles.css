@@ -379,12 +379,11 @@ main.app-main {
   /* Precise A4 Proportional Column Widths */
   .report-col-num { width: 4% !important; text-align: center !important; }
   .report-col-spec { width: 44% !important; }
-  .report-col-owner { width: 13% !important; }
-  .report-col-timeline { width: 12% !important; }
-  .report-col-status { width: 10% !important; text-align: center !important; }
-  .report-col-priority { width: 6% !important; text-align: center !important; }
-  .report-col-hours { width: 6% !important; text-align: center !important; }
-  .report-col-progress { width: 5% !important; text-align: right !important; }
+  .report-col-owner { width: 15% !important; }
+  .report-col-start { width: 11% !important; text-align: center !important; }
+  .report-col-end { width: 11% !important; text-align: center !important; }
+  .report-col-status { width: 9% !important; text-align: center !important; }
+  .report-col-progress { width: 6% !important; text-align: right !important; }
 
   /* Compact Badge Styling in Print */
   .report-badge {
