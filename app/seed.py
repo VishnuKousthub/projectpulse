@@ -358,7 +358,144 @@ def seed_database():
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (p1_id, None, user_name, action, details, act_time))
 
-        print("Database initialized and successfully seeded with demo projects!")
+        # Central Resources Seeding
+        seed_resources(cursor, now, p1_id, p2_id, p3_id)
+
+        print("Database initialized and successfully seeded with demo projects and resources!")
+
+def seed_resources(cursor, now, p1_id=1, p2_id=2, p3_id=3):
+    cursor.execute("SELECT COUNT(*) as count FROM resources")
+    if cursor.fetchone()["count"] > 0:
+        return
+
+    now_str = now.isoformat()
+    today_str = now.strftime("%Y-%m-%d")
+    next_month_str = (now + timedelta(days=45)).strftime("%Y-%m-%d")
+
+    initial_resources = [
+        ("RES-001", "Dr. Alex Morgan", "Employee", "Engineering", "Architecture & DevOps", "Lead Architect & PM",
+         ["Cloud Architecture", "System Design", "Microservices", "Security Compliance"],
+         "Principal enterprise architect and delivery lead for distributed infrastructure.",
+         "alex.morgan@company.internal", "+1 (555) 234-5678", "HQ - Floor 4", 120.0, "hr", "active"),
+
+        ("RES-002", "Radhika Patel", "Employee", "Operations", "Project Management", "Senior Project Manager",
+         ["Project Budget", "Gantt Scheduling", "Procurement", "Resource Planning"],
+         "Lead PM overseeing chemical synthesis timelines, capital budgets, and supply logistics.",
+         "radhika.patel@chemtatva.com", "+91 98765 43210", "Hyderabad Facility", 95.0, "hr", "active"),
+
+        ("RES-003", "Vishal Sharma", "Employee", "R&D", "Formulation & Synthesis", "Research Chemist Lead",
+         ["Organic Synthesis", "Reaction Optimization", "Process Chemistry", "Scale-up"],
+         "Specialist in active compound synthesis, reactor batch recipes, and process scale-up.",
+         "vishal.sharma@chemtatva.com", "+91 98765 43211", "Reactor Facility A", 85.0, "hr", "active"),
+
+        ("RES-004", "Rajagopal Rao", "Employee", "QC/QA", "Quality Assurance", "QA & Validation Manager",
+         ["ICH Guidelines", "GMP Compliance", "SOP Authoring", "Audit Readiness"],
+         "Head of quality assurance and regulatory documentation for CDMO projects.",
+         "rajagopal.rao@chemtatva.com", "+91 98765 43212", "QA Building 2", 90.0, "hr", "active"),
+
+        ("RES-005", "Agilent 1290 Infinity HPLC System", "Laboratory Equipment", "QC/QA", "Analytical Chemistry", "High-Pressure Liquid Chromatograph",
+         ["UHPLC", "Method Validation", "Purity Assay", "Impurity Profiling"],
+         "Ultra-high-performance liquid chromatography instrument equipped with diode array detector.",
+         "lab304.hplc@chemtatva.internal", "Ext. 3041", "Lab 304 - Analytical Suite", 45.0, "hr", "active"),
+
+        ("RES-006", "Waters Xevo G2-XS Mass Spectrometer", "Laboratory Equipment", "QC/QA", "Mass Spectrometry", "Q-ToF MS Instrument",
+         ["HRMS", "Structural Elucidation", "Peptide Mapping", "Intact Mass"],
+         "High-resolution quadrupole time-of-flight mass spectrometry analyzer for molecular identification.",
+         "lab308.ms@chemtatva.internal", "Ext. 3082", "Lab 308 - MS Suite", 75.0, "hr", "active"),
+
+        ("RES-007", "Store & Raw Materials Inventory", "External Resource", "Operations", "Supply Chain", "Inventory & Warehouse Team",
+         ["Material Ingestion", "Reagent Storage", "Dispensing", "Safety Protocol"],
+         "Central warehouse team handling chemical precursors, inventory logs, and dispatch.",
+         "store@chemtatva.com", "Ext. 1002", "Central Warehouse B", 35.0, "hr", "active"),
+
+        ("RES-008", "QC Analytical Support Team", "Contractor", "QC/QA", "Analytical Testing", "Contract QC Analysis Group",
+         ["Batch Release", "Stability Testing", "Karl Fischer", "Dissolution Testing"],
+         "Dedicated laboratory analysis team for fast-turnaround raw material and in-process testing.",
+         "qc.team@chemtatva.com", "Ext. 3010", "QC Analytical Wing", 60.0, "hr", "active"),
+
+        ("RES-009", "500L Pilot Glass-Lined Reactor", "Equipment", "Operations", "Reactor Facility A", "Pilot Synthesis Reactor",
+         ["Batch Synthesis", "Jacket Heating/Cooling", "Pressure Rating 3 Bar", "Reflux Condenser"],
+         "Main pilot production vessel for kilogram-scale chemical synthesis and validation batches.",
+         "reactor.a500@chemtatva.internal", "Ext. 2011", "Reactor Bay 1", 110.0, "hr", "active"),
+
+        ("RES-010", "Eurofins Scientific Services", "Vendor", "Procurement", "External Testing", "Certified Reference Lab",
+         ["Bioassay", "Genotoxicity", "Heavy Metals Analysis", "Third-Party Certificate"],
+         "External accredited testing vendor for independent batch certification and compliance.",
+         "support@eurofins.internal", "+1 (800) 555-0199", "External Service (Europe / USA)", 250.0, "hr", "active")
+    ]
+
+    res_ids = {}
+    for code, name, r_type, cat, dept, role, skills, desc, email, phone, loc, rate, unit, status in initial_resources:
+        cursor.execute("""
+            INSERT INTO resources (
+                resource_code, name, type, category, department, role, skills,
+                description, contact_email, contact_phone, location, cost_rate,
+                cost_unit, status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            code, name, r_type, cat, dept, role, json.dumps(skills),
+            desc, email, phone, loc, rate, unit, status, now_str, now_str
+        ))
+        res_ids[code] = cursor.lastrowid
+
+    # Map resources to Project 1
+    p1_mappings = [
+        (res_ids["RES-001"], "Lead Architect", 80.0, today_str, next_month_str, "Overall Architecture & Performance", "active"),
+        (res_ids["RES-002"], "Project Manager", 50.0, today_str, next_month_str, "Budgeting & Milestone Delivery", "active"),
+        (res_ids["RES-005"], "Primary Analytical Instrument", 60.0, today_str, next_month_str, "High-Throughput Verification", "active"),
+        (res_ids["RES-007"], "Logistics Support", 30.0, today_str, next_month_str, "Materials Intake", "active"),
+        (res_ids["RES-008"], "QC Validation", 40.0, today_str, next_month_str, "Batch Testing & Calibration", "active")
+    ]
+    for r_id, role, alloc, s_date, e_date, resp, st in p1_mappings:
+        cursor.execute("""
+            INSERT OR IGNORE INTO project_resources (
+                project_id, resource_id, role, allocation_pct, start_date, end_date,
+                responsibility, status, notes, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (p1_id, r_id, role, alloc, s_date, e_date, resp, st, "Seeded project mapping", now_str, now_str))
+
+    # Map resources to Project 2 (Multi-project allocation test)
+    p2_mappings = [
+        (res_ids["RES-002"], "Advisory PM", 30.0, today_str, next_month_str, "Cross-Team Sync", "active"),
+        (res_ids["RES-003"], "Chemical Lead", 70.0, today_str, next_month_str, "Pilot Scaling Synthesis", "active"),
+        (res_ids["RES-009"], "Pilot Reactor Unit", 50.0, today_str, next_month_str, "Reactor Batch Runs", "active")
+    ]
+    for r_id, role, alloc, s_date, e_date, resp, st in p2_mappings:
+        if p2_id:
+            cursor.execute("""
+                INSERT OR IGNORE INTO project_resources (
+                    project_id, resource_id, role, allocation_pct, start_date, end_date,
+                    responsibility, status, notes, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (p2_id, r_id, role, alloc, s_date, e_date, resp, st, "Seeded project mapping", now_str, now_str))
+
+    # Map resources to tasks in Project 1
+    cursor.execute("SELECT id, title FROM tasks WHERE project_id = ?", (p1_id,))
+    p1_tasks = cursor.fetchall()
+    if p1_tasks:
+        for idx, task in enumerate(p1_tasks[:4]):
+            t_id = task["id"]
+            # Map Radhika to task 1 & 2
+            if idx in (0, 1) and "RES-002" in res_ids:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO task_resources (task_id, resource_id, project_id, role, responsibility, allocation_pct, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (t_id, res_ids["RES-002"], p1_id, "Project Manager", "Project Budget & Approval", 50.0, now_str))
+            # Map HPLC instrument to task 2 & 3
+            if idx in (1, 2) and "RES-005" in res_ids:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO task_resources (task_id, resource_id, project_id, role, responsibility, allocation_pct, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (t_id, res_ids["RES-005"], p1_id, "Analytical Instrument", "Chromatography Verification", 60.0, now_str))
+            # Map Store team to task 0 & 3
+            if idx in (0, 3) and "RES-007" in res_ids:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO task_resources (task_id, resource_id, project_id, role, responsibility, allocation_pct, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (t_id, res_ids["RES-007"], p1_id, "Logistics", "Raw Material Delivery", 30.0, now_str))
 
 if __name__ == "__main__":
     seed_database()

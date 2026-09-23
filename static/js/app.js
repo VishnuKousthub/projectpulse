@@ -38,6 +38,7 @@ const app = {
 
   async init() {
     this.initTheme();
+    this.initSidebarMode();
     this.initKeyboardShortcuts();
     this.initClickOutside();
     this.initLucide();
@@ -117,6 +118,14 @@ const app = {
           userMenu.classList.add('hidden');
         }
       }
+
+      const sbCtrlBtn = document.getElementById('sidebar-control-btn');
+      const sbCtrlPopover = document.getElementById('sidebar-control-popover');
+      if (sbCtrlPopover && !sbCtrlPopover.classList.contains('hidden')) {
+        if (!sbCtrlBtn?.contains(e.target) && !sbCtrlPopover.contains(e.target)) {
+          sbCtrlPopover.classList.add('hidden');
+        }
+      }
     });
   },
 
@@ -128,6 +137,10 @@ const app = {
     this.closeNotificationsModal?.();
     this.closeEmailPreviewModal?.();
     this.closeProjectReportModal();
+    this.closeResourceModal?.();
+    this.closeMapProjectResourceModal?.();
+    this.closeResourceDetailsModal?.();
+    document.getElementById('sidebar-control-popover')?.classList.add('hidden');
     this.closeUserMenu();
   },
 
@@ -403,6 +416,7 @@ const app = {
       gantt: 'Gantt & Timeline',
       table: 'Table Grid',
       calendar: 'Calendar Schedule',
+      resources: 'Resource Management & Mapping',
       analytics: 'Analytics Dashboard'
     };
     const titleText = titles[viewName] || 'Project Management';
@@ -426,6 +440,9 @@ const app = {
         break;
       case 'calendar':
         this.renderCalendar();
+        break;
+      case 'resources':
+        this.renderResourcesView();
         break;
       case 'analytics':
         this.renderAnalytics();
@@ -782,6 +799,17 @@ const app = {
         </h4>
 
         ${tagsHtml ? `<div class="flex flex-wrap gap-1">${tagsHtml}</div>` : ''}
+
+        ${(task.resources && task.resources.length > 0) ? `
+          <div class="flex flex-wrap gap-1">
+            ${task.resources.slice(0, 2).map(r => `
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200/80 dark:border-cyan-800/60 truncate max-w-[120px]" title="${this.escapeHtml(r.resource_name || r.name)} (${this.escapeHtml(r.resource_type || r.type)})">
+                <i data-lucide="cpu" class="w-2.5 h-2.5 flex-shrink-0"></i>
+                <span class="truncate">${this.escapeHtml(r.resource_name || r.name)}</span>
+              </span>
+            `).join('') + (task.resources.length > 2 ? `<span class="text-[9px] text-cyan-600 dark:text-cyan-400 font-bold self-center">+${task.resources.length - 2}</span>` : '')}
+          </div>
+        ` : ''}
 
         <!-- Subtasks Progress (if any) -->
         ${subtaskTotal > 0 ? `
@@ -3098,6 +3126,7 @@ const app = {
         if (actInput) actInput.value = localTask.actual_hours || 0;
         tagsInput.value = (localTask.tags || []).join(', ');
         this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
+        this.renderTaskModalResourceChips(localTask.resources || []);
       }
 
       this.updateTaskAssigneeDeleteBtnVisibility();
@@ -3137,6 +3166,7 @@ const app = {
           if (actInput) actInput.value = task.actual_hours || 0;
           tagsInput.value = (task.tags || []).join(', ');
           this.renderSubtaskList(task.subtasks || []);
+          this.renderTaskModalResourceChips(task.resources || []);
           this.updateTaskAssigneeDeleteBtnVisibility();
           this.updateTaskModalDateBadges();
         }
@@ -3168,6 +3198,7 @@ const app = {
       estInput.value = '4.0';
       if (actInput) actInput.value = '0.0';
       tagsInput.value = '';
+      this.renderTaskModalResourceChips([]);
 
       if (params.insert_after_id && posSelect) {
         posSelect.value = `after_${params.insert_after_id}`;
@@ -3650,6 +3681,9 @@ const app = {
     const tempSubtasks = Array.from(document.querySelectorAll('.temporary-subtask')).map(el => el.textContent);
     const position = document.getElementById('task-input-position')?.value || 'end';
 
+    const selectedChips = document.querySelectorAll('#task-modal-resources-container .task-resource-chip.selected-chip');
+    const resourceIds = Array.from(selectedChips).map(c => Number(c.dataset.resourceId)).filter(Boolean);
+
     const payload = {
       title,
       description: desc,
@@ -3663,7 +3697,8 @@ const app = {
       estimated_hours: isNaN(estHours) ? 0.0 : estHours,
       actual_hours: isNaN(actHours) ? 0.0 : actHours,
       tags,
-      subtasks: tempSubtasks
+      subtasks: tempSubtasks,
+      resource_ids: resourceIds
     };
 
     // Close modal immediately (instant 0ms UX)
@@ -3689,8 +3724,20 @@ const app = {
           due_date: dueDate,
           estimated_hours: isNaN(estHours) ? 0.0 : estHours,
           actual_hours: isNaN(actHours) ? 0.0 : actHours,
-          tags
+          tags,
+          resource_ids: resourceIds
         });
+        if (this.state.projectResources) {
+          localTask.resources = this.state.projectResources
+            .filter(r => resourceIds.includes(r.id))
+            .map(r => ({
+              id: r.id,
+              name: r.name,
+              resource_name: r.name,
+              type: r.type,
+              resource_type: r.type
+            }));
+        }
         this.renderCurrentView();
         this.syncCurrentProjectCache();
       }
@@ -5554,6 +5601,928 @@ const app = {
         </tr>
       `;
     }).join('');
+  },
+
+  // ==================== SIDEBAR CONTROLLER ====================
+  initSidebarMode() {
+    const savedMode = localStorage.getItem('projectpulse_sidebar_mode') || 'expanded';
+    this.setSidebarMode(savedMode, false);
+  },
+
+  setSidebarMode(mode, save = true) {
+    if (!['expanded', 'collapsed', 'hover'].includes(mode)) {
+      mode = 'expanded';
+    }
+    if (save) {
+      localStorage.setItem('projectpulse_sidebar_mode', mode);
+    }
+
+    // Update radio buttons
+    document.querySelectorAll('input[name="sidebar_mode_radio"]').forEach(radio => {
+      radio.checked = (radio.value === mode);
+    });
+
+    // Update badge in sidebar controller trigger button
+    const badge = document.getElementById('sidebar-mode-badge');
+    if (badge) {
+      const labelMap = { expanded: 'Expanded', collapsed: 'Collapsed', hover: 'Hover' };
+      badge.textContent = labelMap[mode] || 'Expanded';
+    }
+
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    // Reset mode classes
+    sidebar.classList.remove('sidebar-collapsed', 'sidebar-hover-expand');
+    document.body.classList.remove('sidebar-mode-collapsed', 'sidebar-mode-hover');
+
+    if (mode === 'collapsed') {
+      sidebar.classList.add('sidebar-collapsed');
+      document.body.classList.add('sidebar-mode-collapsed');
+    } else if (mode === 'hover') {
+      sidebar.classList.add('sidebar-hover-expand');
+      document.body.classList.add('sidebar-mode-hover');
+    }
+
+    // Close popover
+    document.getElementById('sidebar-control-popover')?.classList.add('hidden');
+    this.initLucide();
+  },
+
+  toggleSidebarControlMenu() {
+    const popover = document.getElementById('sidebar-control-popover');
+    if (popover) {
+      popover.classList.toggle('hidden');
+      this.initLucide();
+    }
+  },
+
+  // ==================== RESOURCE MANAGEMENT & MAPPING ====================
+  setResourceTab(tabName) {
+    this._activeResourceTab = tabName;
+    const btnLib = document.getElementById('res-tab-btn-library');
+    const btnProj = document.getElementById('res-tab-btn-project');
+    const panelLib = document.getElementById('res-panel-library');
+    const panelProj = document.getElementById('res-panel-project');
+    const btnAddLib = document.getElementById('res-add-library-btn');
+    const btnMapProj = document.getElementById('res-map-project-btn');
+
+    if (tabName === 'project') {
+      btnLib?.classList.remove('border-blue-600', 'text-blue-600', 'dark:text-blue-400');
+      btnLib?.classList.add('border-transparent', 'text-slate-500');
+      btnProj?.classList.add('border-blue-600', 'text-blue-600', 'dark:text-blue-400');
+      btnProj?.classList.remove('border-transparent', 'text-slate-500');
+      panelLib?.classList.add('hidden');
+      panelProj?.classList.remove('hidden');
+      btnAddLib?.classList.add('hidden');
+      btnMapProj?.classList.remove('hidden');
+    } else {
+      btnProj?.classList.remove('border-blue-600', 'text-blue-600', 'dark:text-blue-400');
+      btnProj?.classList.add('border-transparent', 'text-slate-500');
+      btnLib?.classList.add('border-blue-600', 'text-blue-600', 'dark:text-blue-400');
+      btnLib?.classList.remove('border-transparent', 'text-slate-500');
+      panelProj?.classList.add('hidden');
+      panelLib?.classList.remove('hidden');
+      btnMapProj?.classList.add('hidden');
+      btnAddLib?.classList.remove('hidden');
+    }
+    this.renderResourcesView();
+  },
+
+  async loadResources() {
+    try {
+      const [resources, summary] = await Promise.all([
+        this.api('/api/resources'),
+        this.api('/api/resources/summary')
+      ]);
+      this.state.resources = Array.isArray(resources) ? resources : [];
+      this.state.resourceSummary = summary || {};
+      return this.state.resources;
+    } catch (e) {
+      console.error('Failed to load central resources:', e);
+      return [];
+    }
+  },
+
+  async loadProjectResources() {
+    if (!this.state.currentProjectId) return [];
+    try {
+      const mapped = await this.api(`/api/projects/${this.state.currentProjectId}/resources`);
+      this.state.projectResources = Array.isArray(mapped) ? mapped : [];
+      return this.state.projectResources;
+    } catch (e) {
+      console.error('Failed to load project resources:', e);
+      return [];
+    }
+  },
+
+  async renderResourcesView() {
+    const currentTab = this._activeResourceTab || 'library';
+
+    // 1. Fetch latest data concurrently
+    const [resources, projResources] = await Promise.all([
+      this.loadResources(),
+      this.loadProjectResources()
+    ]);
+
+    // 2. Update KPI Stats Bar
+    const summary = this.state.resourceSummary || {};
+    const kpiTotal = document.getElementById('res-kpi-total');
+    const kpiActive = document.getElementById('res-kpi-active');
+    const kpiAvgAlloc = document.getElementById('res-kpi-avg-alloc');
+    const kpiMappings = document.getElementById('res-kpi-mappings');
+    const kpiTasks = document.getElementById('res-kpi-tasks');
+
+    if (kpiTotal) kpiTotal.textContent = summary.total_resources ?? resources.length;
+    if (kpiActive) kpiActive.textContent = summary.active_resources ?? resources.filter(r => r.status === 'active').length;
+    if (kpiAvgAlloc) kpiAvgAlloc.textContent = `${summary.avg_allocation_pct ?? 0}%`;
+    if (kpiMappings) kpiMappings.textContent = summary.total_project_mappings ?? 0;
+    if (kpiTasks) kpiTasks.textContent = summary.total_assigned_tasks ?? 0;
+
+    // 3. Update tab count badges
+    const countLib = document.getElementById('res-tab-count-library');
+    const countProj = document.getElementById('res-tab-count-project');
+    if (countLib) countLib.textContent = resources.length;
+    if (countProj) countProj.textContent = (projResources || []).length;
+
+    // 4. Update project banner info
+    const bannerName = document.getElementById('res-project-banner-name');
+    const projMappedCount = document.getElementById('res-proj-mapped-count');
+    const projTasksCount = document.getElementById('res-proj-tasks-count');
+    if (bannerName) bannerName.textContent = this.state.currentProject?.name || 'Current Project';
+    if (projMappedCount) projMappedCount.textContent = `${(projResources || []).length} Resources`;
+    
+    const assignedTaskCount = (this.state.tasks || []).filter(t => (t.resources && t.resources.length > 0) || (t.resource_ids && t.resource_ids.length > 0)).length;
+    if (projTasksCount) projTasksCount.textContent = `${assignedTaskCount} Activities`;
+
+    // 5. Render active tab
+    if (currentTab === 'project') {
+      this.renderProjectResourcesTable(projResources || []);
+    } else {
+      this.handleResourceLibraryFilter();
+    }
+
+    this.initLucide();
+  },
+
+  handleResourceLibraryFilter() {
+    const search = (document.getElementById('res-lib-search-input')?.value || '').trim().toLowerCase();
+    const type = document.getElementById('res-lib-filter-type')?.value || '';
+    const dept = document.getElementById('res-lib-filter-dept')?.value || '';
+    const avail = document.getElementById('res-lib-filter-avail')?.value || '';
+
+    const all = this.state.resources || [];
+    const filtered = all.filter(r => {
+      if (search) {
+        const matchName = (r.name || '').toLowerCase().includes(search);
+        const matchCode = (r.resource_code || '').toLowerCase().includes(search);
+        const matchRole = (r.role || '').toLowerCase().includes(search);
+        const matchDept = (r.department || '').toLowerCase().includes(search);
+        const matchSkills = (r.skills || []).some(s => s.toLowerCase().includes(search));
+        if (!matchName && !matchCode && !matchRole && !matchDept && !matchSkills) return false;
+      }
+      if (type && r.type !== type) return false;
+      if (dept && r.department !== dept) return false;
+      if (avail && r.computed_availability_status !== avail) return false;
+      return true;
+    });
+
+    const countSummary = document.getElementById('res-lib-count-summary');
+    if (countSummary) {
+      countSummary.textContent = `Showing ${filtered.length} of ${all.length} resources`;
+    }
+
+    this.renderResourceLibraryTable(filtered);
+  },
+
+  getResourceTypeBadgeHTML(type) {
+    const typeClassMap = {
+      'Employee': 'resource-type-employee',
+      'Contractor': 'resource-type-contractor',
+      'Equipment': 'resource-type-equipment',
+      'Laboratory Equipment': 'resource-type-lab-equipment',
+      'Software': 'resource-type-software',
+      'Vendor': 'resource-type-vendor',
+      'External Resource': 'resource-type-external',
+      'Material': 'resource-type-material',
+      'Facility': 'resource-type-facility'
+    };
+    const cls = typeClassMap[type] || 'resource-type-other';
+    return `<span class="resource-badge ${cls}">${this.escapeHtml(type || 'Resource')}</span>`;
+  },
+
+  getAvailabilityStatusBadgeHTML(status, totalAlloc = 0) {
+    const map = {
+      'available': { text: 'Available (0%)', cls: 'status-available', dot: 'bg-emerald-500' },
+      'partially_allocated': { text: `${totalAlloc}% Allocated`, cls: 'status-partially-allocated', dot: 'bg-blue-500' },
+      'fully_allocated': { text: '100% Allocated', cls: 'status-fully-allocated', dot: 'bg-amber-500' },
+      'overallocated': { text: `${totalAlloc}% Overallocated`, cls: 'status-overallocated', dot: 'bg-rose-500' },
+      'unavailable': { text: 'Unavailable', cls: 'status-unavailable', dot: 'bg-slate-400' }
+    };
+    const item = map[status] || map['available'];
+    return `
+      <span class="availability-gauge ${item.cls}">
+        <span class="gauge-dot ${item.dot}"></span>
+        <span>${item.text}</span>
+      </span>
+    `;
+  },
+
+  renderResourceLibraryTable(resources = []) {
+    const tbody = document.getElementById('res-library-table-body');
+    if (!tbody) return;
+
+    if (!resources || resources.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="py-12 text-center text-slate-400">
+            <i data-lucide="cpu" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+            <div class="font-semibold text-xs text-slate-500">No resources match the selected criteria</div>
+            <div class="text-[11px] mt-0.5">Add a new resource or adjust your filters</div>
+          </td>
+        </tr>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    tbody.innerHTML = resources.map(r => {
+      const skillsHtml = (r.skills || []).slice(0, 3).map(s => `
+        <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+          ${this.escapeHtml(s)}
+        </span>
+      `).join('') + ((r.skills || []).length > 3 ? `<span class="text-[10px] text-slate-400 font-bold self-center">+${r.skills.length - 3}</span>` : '');
+
+      const alloc = r.total_allocation_pct || 0;
+      const meterWidth = Math.min(100, alloc);
+      const meterColor = alloc > 100 ? 'bg-rose-500' : (alloc === 100 ? 'bg-amber-500' : (alloc > 0 ? 'bg-blue-500' : 'bg-emerald-500'));
+
+      return `
+        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition group">
+          <!-- Resource & ID -->
+          <td class="px-3.5 py-3">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 flex-shrink-0">
+                ${this.escapeHtml((r.name || 'R').substring(0, 2).toUpperCase())}
+              </div>
+              <div class="min-w-0">
+                <div class="font-bold text-xs text-slate-800 dark:text-white truncate cursor-pointer hover:text-blue-600" onclick="app.openResourceDetailsModal(${r.id})" title="${this.escapeHtml(r.name)}">
+                  ${this.escapeHtml(r.name)}
+                </div>
+                <div class="text-[10px] font-mono text-slate-400">${this.escapeHtml(r.resource_code || '-')}</div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Type & Category -->
+          <td class="px-3.5 py-3">
+            <div class="space-y-1">
+              ${this.getResourceTypeBadgeHTML(r.type)}
+              <div class="text-[10px] text-slate-400">${this.escapeHtml(r.category || 'Internal')}</div>
+            </div>
+          </td>
+
+          <!-- Department & Role -->
+          <td class="px-3.5 py-3">
+            <div class="font-semibold text-slate-800 dark:text-slate-200 truncate" title="${this.escapeHtml(r.role || '-')}">
+              ${this.escapeHtml(r.role || '-')}
+            </div>
+            <div class="text-[10px] text-slate-400 truncate">${this.escapeHtml(r.department || 'General')}</div>
+          </td>
+
+          <!-- Skills -->
+          <td class="px-3.5 py-3">
+            <div class="flex flex-wrap gap-1 max-w-xs">
+              ${skillsHtml || '<span class="text-slate-400 italic text-[11px]">—</span>'}
+            </div>
+          </td>
+
+          <!-- Allocation Status & Gauge -->
+          <td class="px-3.5 py-3">
+            <div class="space-y-1">
+              ${this.getAvailabilityStatusBadgeHTML(r.computed_availability_status, alloc)}
+              <div class="allocation-meter-bar w-28">
+                <div class="${meterColor} h-full rounded-full transition-all duration-300" style="width: ${meterWidth}%;"></div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Projects Count -->
+          <td class="px-3.5 py-3">
+            <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              ${r.project_mappings_count || 0} projects
+            </span>
+          </td>
+
+          <!-- Actions -->
+          <td class="px-3.5 py-3 text-right">
+            <div class="flex items-center justify-end space-x-1">
+              <button onclick="app.openResourceDetailsModal(${r.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="View Full Resource Dossier">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+              <button onclick="app.openResourceModal(${r.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Resource">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
+              <button onclick="app.deleteResource(${r.id}, '${this.escapeHtml(r.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Delete Resource">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    this.initLucide();
+  },
+
+  renderProjectResourcesTable(projectResources = []) {
+    const tbody = document.getElementById('res-project-table-body');
+    if (!tbody) return;
+
+    if (!projectResources || projectResources.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="py-12 text-center text-slate-400">
+            <i data-lucide="git-fork" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+            <div class="font-semibold text-xs text-slate-500">No enterprise resources mapped to this project yet</div>
+            <div class="text-[11px] mt-1">Click "Map Resource to Project" above to allocate specialists, equipment, or tools.</div>
+          </td>
+        </tr>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    tbody.innerHTML = projectResources.map(mapping => {
+      const globalAlloc = mapping.total_allocation_pct || mapping.allocation_pct || 0;
+      const meterWidth = Math.min(100, globalAlloc);
+      const meterColor = globalAlloc > 100 ? 'bg-rose-500' : (globalAlloc === 100 ? 'bg-amber-500' : 'bg-blue-500');
+
+      return `
+        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition group">
+          <!-- Mapped Resource -->
+          <td class="px-3.5 py-3">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-200 dark:border-blue-900/60 flex-shrink-0">
+                ${this.escapeHtml((mapping.name || 'R').substring(0, 2).toUpperCase())}
+              </div>
+              <div class="min-w-0">
+                <div class="font-bold text-xs text-slate-800 dark:text-white truncate cursor-pointer hover:text-blue-600" onclick="app.openResourceDetailsModal(${mapping.id})" title="${this.escapeHtml(mapping.name)}">
+                  ${this.escapeHtml(mapping.name)}
+                </div>
+                <div class="text-[10px] font-mono text-slate-400">${this.escapeHtml(mapping.resource_code || '-')} • ${this.escapeHtml(mapping.department || 'General')}</div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Type -->
+          <td class="px-3.5 py-3">
+            ${this.getResourceTypeBadgeHTML(mapping.type)}
+          </td>
+
+          <!-- Project Role -->
+          <td class="px-3.5 py-3">
+            <span class="font-semibold text-slate-800 dark:text-slate-200">${this.escapeHtml(mapping.project_role || mapping.role || 'Contributor')}</span>
+          </td>
+
+          <!-- Allocation % -->
+          <td class="px-3.5 py-3">
+            <span class="px-2 py-0.5 rounded-md text-xs font-bold font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              ${mapping.allocation_pct}%
+            </span>
+          </td>
+
+          <!-- Timeline -->
+          <td class="px-3.5 py-3 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+            ${mapping.start_date || '—'} → ${mapping.end_date || '—'}
+          </td>
+
+          <!-- Responsibility / Scope -->
+          <td class="px-3.5 py-3 max-w-xs truncate" title="${this.escapeHtml(mapping.responsibility || 'General project duties')}">
+            <span class="text-slate-600 dark:text-slate-400">${this.escapeHtml(mapping.responsibility || 'General project duties')}</span>
+          </td>
+
+          <!-- Overall Allocation Gauge -->
+          <td class="px-3.5 py-3">
+            <div class="space-y-1">
+              <div class="flex items-center justify-between text-[10px]">
+                <span class="text-slate-400">Global Workload</span>
+                <span class="font-bold ${globalAlloc > 100 ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'}">${globalAlloc}%</span>
+              </div>
+              <div class="allocation-meter-bar w-24">
+                <div class="${meterColor} h-full rounded-full transition-all duration-300" style="width: ${meterWidth}%;"></div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Actions -->
+          <td class="px-3.5 py-3 text-right">
+            <div class="flex items-center justify-end space-x-1">
+              <button onclick="app.openMapProjectResourceModal(${JSON.stringify(mapping).replace(/"/g, '&quot;')})" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Allocation & Role">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
+              <button onclick="app.openResourceDetailsModal(${mapping.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Resource Dossier">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+              <button onclick="app.unmapProjectResource(${mapping.id}, '${this.escapeHtml(mapping.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Unmap from Project">
+                <i data-lucide="unlink" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    this.initLucide();
+  },
+
+  async openResourceModal(resourceId = null) {
+    const modal = document.getElementById('resource-modal');
+    if (!modal) return;
+
+    const idInput = document.getElementById('res-input-id');
+    const nameInput = document.getElementById('res-input-name');
+    const codeInput = document.getElementById('res-input-code');
+    const typeInput = document.getElementById('res-input-type');
+    const catInput = document.getElementById('res-input-category');
+    const deptInput = document.getElementById('res-input-department');
+    const roleInput = document.getElementById('res-input-role');
+    const skillsInput = document.getElementById('res-input-skills');
+    const statusInput = document.getElementById('res-input-status');
+    const availInput = document.getElementById('res-input-availability');
+    const costInput = document.getElementById('res-input-cost');
+    const currInput = document.getElementById('res-input-currency');
+    const emailInput = document.getElementById('res-input-email');
+    const phoneInput = document.getElementById('res-input-phone');
+    const locInput = document.getElementById('res-input-location');
+    const notesInput = document.getElementById('res-input-notes');
+    const delBtn = document.getElementById('res-delete-btn');
+    const titleEl = document.getElementById('resource-modal-title');
+
+    if (resourceId) {
+      if (titleEl) titleEl.textContent = 'Edit Central Resource';
+      if (delBtn) delBtn.classList.remove('hidden');
+
+      try {
+        const r = await this.api(`/api/resources/${resourceId}`);
+        if (idInput) idInput.value = r.id;
+        if (nameInput) nameInput.value = r.name || '';
+        if (codeInput) codeInput.value = r.resource_code || '';
+        if (typeInput) typeInput.value = r.type || 'Employee';
+        if (catInput) catInput.value = r.category || 'Internal';
+        if (deptInput) deptInput.value = r.department || '';
+        if (roleInput) roleInput.value = r.role || '';
+        if (skillsInput) skillsInput.value = (r.skills || []).join(', ');
+        if (statusInput) statusInput.value = r.status || 'active';
+        if (availInput) availInput.value = r.availability_status || 'available';
+        if (costInput) costInput.value = r.cost_per_hour || '';
+        if (currInput) currInput.value = r.currency || 'USD';
+        if (emailInput) emailInput.value = r.contact_email || '';
+        if (phoneInput) phoneInput.value = r.contact_phone || '';
+        if (locInput) locInput.value = r.location || '';
+        if (notesInput) notesInput.value = r.notes || '';
+      } catch (e) {
+        console.error('Failed to load resource for edit:', e);
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Add Central Resource';
+      if (delBtn) delBtn.classList.add('hidden');
+
+      if (idInput) idInput.value = '';
+      if (nameInput) nameInput.value = '';
+      if (codeInput) codeInput.value = '';
+      if (typeInput) typeInput.value = 'Employee';
+      if (catInput) catInput.value = 'Internal';
+      if (deptInput) deptInput.value = '';
+      if (roleInput) roleInput.value = '';
+      if (skillsInput) skillsInput.value = '';
+      if (statusInput) statusInput.value = 'active';
+      if (availInput) availInput.value = 'available';
+      if (costInput) costInput.value = '';
+      if (currInput) currInput.value = 'USD';
+      if (emailInput) emailInput.value = '';
+      if (phoneInput) phoneInput.value = '';
+      if (locInput) locInput.value = '';
+      if (notesInput) notesInput.value = '';
+    }
+
+    modal.classList.remove('hidden');
+    nameInput?.focus();
+    this.initLucide();
+  },
+
+  closeResourceModal() {
+    document.getElementById('resource-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveResource() {
+    const name = document.getElementById('res-input-name')?.value.trim();
+    if (!name) {
+      this.showToast('Please enter a resource name', 'error');
+      return;
+    }
+
+    const id = document.getElementById('res-input-id')?.value;
+    const skillsRaw = document.getElementById('res-input-skills')?.value || '';
+    const skills = skillsRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+    const payload = {
+      name,
+      resource_code: document.getElementById('res-input-code')?.value.trim() || undefined,
+      type: document.getElementById('res-input-type')?.value || 'Employee',
+      category: document.getElementById('res-input-category')?.value || 'Internal',
+      department: document.getElementById('res-input-department')?.value.trim(),
+      role: document.getElementById('res-input-role')?.value.trim(),
+      skills,
+      status: document.getElementById('res-input-status')?.value || 'active',
+      availability_status: document.getElementById('res-input-availability')?.value || 'available',
+      cost_per_hour: parseFloat(document.getElementById('res-input-cost')?.value) || 0.0,
+      currency: document.getElementById('res-input-currency')?.value || 'USD',
+      contact_email: document.getElementById('res-input-email')?.value.trim(),
+      contact_phone: document.getElementById('res-input-phone')?.value.trim(),
+      location: document.getElementById('res-input-location')?.value.trim(),
+      notes: document.getElementById('res-input-notes')?.value.trim()
+    };
+
+    try {
+      if (id) {
+        await this.api(`/api/resources/${id}`, {
+          method: 'PUT',
+          body: payload
+        });
+        this.showToast('Resource updated successfully', 'success');
+      } else {
+        await this.api('/api/resources', {
+          method: 'POST',
+          body: payload
+        });
+        this.showToast('Central resource added', 'success');
+      }
+
+      this.closeResourceModal();
+      this.renderResourcesView();
+    } catch (e) {
+      console.error('Failed to save resource:', e);
+      this.showToast(e.message || 'Failed to save resource', 'error');
+    }
+  },
+
+  handleDeleteResource() {
+    const id = document.getElementById('res-input-id')?.value;
+    const name = document.getElementById('res-input-name')?.value || 'this resource';
+    if (!id) return;
+    this.deleteResource(Number(id), name);
+  },
+
+  async deleteResource(id, name = 'this resource') {
+    if (!confirm(`Are you sure you want to delete "${name}" from the Central Resource Library? This will remove all associated project mappings.`)) {
+      return;
+    }
+
+    try {
+      await this.api(`/api/resources/${id}`, { method: 'DELETE' });
+      this.showToast(`Deleted resource: ${name}`, 'success');
+      this.closeResourceModal();
+      this.renderResourcesView();
+    } catch (e) {
+      console.error('Failed to delete resource:', e);
+      this.showToast(e.message || 'Failed to delete resource', 'error');
+    }
+  },
+
+  async openMapProjectResourceModal(mapping = null) {
+    const modal = document.getElementById('project-resource-map-modal');
+    if (!modal) return;
+
+    if (!this.state.currentProjectId) {
+      this.showToast('Please select a project first', 'error');
+      return;
+    }
+
+    // Load latest central resources if needed
+    if (!this.state.resources || this.state.resources.length === 0) {
+      await this.loadResources();
+    }
+
+    const select = document.getElementById('proj-res-select-resource');
+    if (select) {
+      select.innerHTML = (this.state.resources || []).map(r => `
+        <option value="${r.id}">
+          ${this.escapeHtml(r.name)} (${this.escapeHtml(r.type)} - ${this.escapeHtml(r.department || 'General')}) [${r.total_allocation_pct || 0}% Allocated]
+        </option>
+      `).join('');
+    }
+
+    const mappingIdInput = document.getElementById('proj-res-mapping-id');
+    const roleInput = document.getElementById('proj-res-input-role');
+    const allocInput = document.getElementById('proj-res-input-alloc');
+    const allocLabel = document.getElementById('proj-res-alloc-label');
+    const startInput = document.getElementById('proj-res-input-start');
+    const endInput = document.getElementById('proj-res-input-end');
+    const respInput = document.getElementById('proj-res-input-responsibility');
+    const statusInput = document.getElementById('proj-res-input-status');
+    const projNameEl = document.getElementById('proj-res-modal-project-name');
+    const titleEl = document.getElementById('proj-res-modal-title');
+
+    if (projNameEl) {
+      projNameEl.textContent = this.state.currentProject?.name || 'Current Project';
+    }
+
+    if (mapping) {
+      if (titleEl) titleEl.textContent = 'Edit Project Resource Mapping';
+      if (mappingIdInput) mappingIdInput.value = mapping.id;
+      if (select) {
+        select.value = String(mapping.id || mapping.resource_id);
+        select.disabled = true;
+      }
+      if (roleInput) roleInput.value = mapping.project_role || mapping.role || '';
+      if (allocInput) allocInput.value = mapping.allocation_pct || 100;
+      if (allocLabel) allocLabel.textContent = `${mapping.allocation_pct || 100}%`;
+      if (startInput) startInput.value = mapping.start_date || '';
+      if (endInput) endInput.value = mapping.end_date || '';
+      if (respInput) respInput.value = mapping.responsibility || '';
+      if (statusInput) statusInput.value = mapping.status || 'active';
+    } else {
+      if (titleEl) titleEl.textContent = 'Map Resource to Project';
+      if (mappingIdInput) mappingIdInput.value = '';
+      if (select) select.disabled = false;
+      if (roleInput) roleInput.value = '';
+      if (allocInput) allocInput.value = 100;
+      if (allocLabel) allocLabel.textContent = '100%';
+      if (startInput) startInput.value = '';
+      if (endInput) endInput.value = '';
+      if (respInput) respInput.value = '';
+      if (statusInput) statusInput.value = 'active';
+    }
+
+    if (select) {
+      this.handleProjectResourceSelectChange(select.value);
+    }
+
+    modal.classList.remove('hidden');
+    this.initLucide();
+  },
+
+  closeMapProjectResourceModal() {
+    document.getElementById('project-resource-map-modal')?.classList.add('hidden');
+  },
+
+  handleProjectResourceSelectChange(resourceId) {
+    const resource = (this.state.resources || []).find(r => r.id === Number(resourceId));
+    const currAllocEl = document.getElementById('proj-res-curr-alloc');
+    const currDeptEl = document.getElementById('proj-res-curr-dept');
+    const roleInput = document.getElementById('proj-res-input-role');
+
+    if (resource) {
+      if (currAllocEl) currAllocEl.textContent = `${resource.total_allocation_pct || 0}%`;
+      if (currDeptEl) currDeptEl.textContent = `${resource.type} • ${resource.department || 'General'}`;
+      if (roleInput && !roleInput.value && resource.role) {
+        roleInput.value = resource.role;
+      }
+    }
+  },
+
+  async handleSaveProjectResourceMapping() {
+    const projectId = this.state.currentProjectId;
+    if (!projectId) return;
+
+    const select = document.getElementById('proj-res-select-resource');
+    const resourceId = Number(select?.value);
+    if (!resourceId) {
+      this.showToast('Please select a resource to map', 'error');
+      return;
+    }
+
+    const payload = {
+      resource_id: resourceId,
+      project_role: document.getElementById('proj-res-input-role')?.value.trim() || undefined,
+      allocation_pct: Number(document.getElementById('proj-res-input-alloc')?.value) || 100,
+      start_date: document.getElementById('proj-res-input-start')?.value || undefined,
+      end_date: document.getElementById('proj-res-input-end')?.value || undefined,
+      responsibility: document.getElementById('proj-res-input-responsibility')?.value.trim() || undefined,
+      status: document.getElementById('proj-res-input-status')?.value || 'active'
+    };
+
+    try {
+      await this.api(`/api/projects/${projectId}/resources`, {
+        method: 'POST',
+        body: payload
+      });
+      this.showToast('Resource mapped to project successfully', 'success');
+      this.closeMapProjectResourceModal();
+      this.renderResourcesView();
+    } catch (e) {
+      console.error('Failed to map resource to project:', e);
+      this.showToast(e.message || 'Failed to map resource', 'error');
+    }
+  },
+
+  async unmapProjectResource(resourceId, resourceName = 'Resource') {
+    const projectId = this.state.currentProjectId;
+    if (!projectId) return;
+
+    if (!confirm(`Unmap "${resourceName}" from this project? Assigned task allocations in this project will be removed.`)) {
+      return;
+    }
+
+    try {
+      await this.api(`/api/projects/${projectId}/resources/${resourceId}`, {
+        method: 'DELETE'
+      });
+      this.showToast(`Unmapped ${resourceName} from project`, 'success');
+      this.renderResourcesView();
+    } catch (e) {
+      console.error('Failed to unmap resource:', e);
+      this.showToast(e.message || 'Failed to unmap resource', 'error');
+    }
+  },
+
+  async openResourceDetailsModal(resourceId) {
+    const modal = document.getElementById('resource-details-modal');
+    if (!modal) return;
+
+    try {
+      const dossier = await this.api(`/api/resources/${resourceId}`);
+      if (!dossier) return;
+
+      const avatar = document.getElementById('dossier-avatar');
+      const nameEl = document.getElementById('dossier-name');
+      const codeEl = document.getElementById('dossier-code');
+      const typeBadge = document.getElementById('dossier-type-badge');
+      const roleDeptEl = document.getElementById('dossier-role-dept');
+
+      if (avatar) avatar.textContent = (dossier.name || 'R').substring(0, 2).toUpperCase();
+      if (nameEl) nameEl.textContent = dossier.name;
+      if (codeEl) codeEl.textContent = dossier.resource_code || `RES-${String(dossier.id).padStart(3, '0')}`;
+      if (typeBadge) {
+        const typeSlug = (dossier.type || 'employee').toLowerCase().replace(/\s+/g, '-');
+        typeBadge.className = `resource-badge resource-type-${typeSlug}`;
+        typeBadge.textContent = dossier.type || 'Resource';
+      }
+      if (roleDeptEl) {
+        roleDeptEl.textContent = `${dossier.role || 'Unspecified Role'} • ${dossier.department || 'General'} (${dossier.category || 'Internal'})`;
+      }
+
+      // Allocation gauge
+      const totalAlloc = dossier.total_allocation_pct || 0;
+      const allocBadge = document.getElementById('dossier-alloc-badge');
+      const allocMeter = document.getElementById('dossier-alloc-meter');
+      const availText = document.getElementById('dossier-avail-status-text');
+      const rateText = document.getElementById('dossier-hourly-rate');
+
+      if (allocBadge) {
+        allocBadge.textContent = `${totalAlloc}% Allocated`;
+        allocBadge.className = `font-extrabold text-sm ${totalAlloc > 100 ? 'text-rose-600' : (totalAlloc === 100 ? 'text-amber-600' : (totalAlloc > 0 ? 'text-blue-600' : 'text-emerald-600'))}`;
+      }
+      if (allocMeter) {
+        allocMeter.style.width = `${Math.min(100, totalAlloc)}%`;
+        allocMeter.className = `h-full rounded-full transition-all duration-300 ${totalAlloc > 100 ? 'bg-rose-500' : (totalAlloc === 100 ? 'bg-amber-500' : 'bg-blue-600')}`;
+      }
+      if (availText) {
+        availText.textContent = `Availability: ${dossier.computed_availability_status?.replace(/_/g, ' ')?.toUpperCase() || 'AVAILABLE'}`;
+      }
+      if (rateText) {
+        rateText.textContent = `Rate: ${dossier.currency || 'USD'} $${dossier.cost_per_hour || '0.00'} / hr`;
+      }
+
+      // Skills
+      const skillsContainer = document.getElementById('dossier-skills-container');
+      if (skillsContainer) {
+        skillsContainer.innerHTML = (dossier.skills || []).length > 0
+          ? dossier.skills.map(s => `<span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">${this.escapeHtml(s)}</span>`).join('')
+          : '<span class="text-slate-400 italic">No specific skills declared</span>';
+      }
+
+      // Contact info
+      const emailEl = document.getElementById('dossier-email');
+      const phoneEl = document.getElementById('dossier-phone');
+      const locEl = document.getElementById('dossier-location');
+      if (emailEl) emailEl.innerHTML = `<i data-lucide="mail" class="w-3.5 h-3.5 text-slate-400"></i><span>${this.escapeHtml(dossier.contact_email || 'Not provided')}</span>`;
+      if (phoneEl) phoneEl.innerHTML = `<i data-lucide="phone" class="w-3.5 h-3.5 text-slate-400"></i><span>${this.escapeHtml(dossier.contact_phone || 'Not provided')}</span>`;
+      if (locEl) locEl.innerHTML = `<i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i><span>${this.escapeHtml(dossier.location || 'Not provided')}</span>`;
+
+      // Edit Button
+      const editBtn = document.getElementById('dossier-edit-btn');
+      if (editBtn) {
+        editBtn.onclick = () => {
+          this.closeResourceDetailsModal();
+          this.openResourceModal(dossier.id);
+        };
+      }
+
+      // Mapped projects table
+      const projBody = document.getElementById('dossier-projects-body');
+      const projCount = document.getElementById('dossier-projects-count');
+      const mappings = dossier.project_mappings || [];
+      if (projCount) projCount.textContent = `${mappings.length} Projects`;
+
+      if (projBody) {
+        projBody.innerHTML = mappings.length > 0 ? mappings.map(m => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+            <td class="px-3 py-2 font-bold text-slate-800 dark:text-white">${this.escapeHtml(m.project_name)}</td>
+            <td class="px-3 py-2 text-slate-600 dark:text-slate-300">${this.escapeHtml(m.project_role || 'Contributor')}</td>
+            <td class="px-3 py-2 font-mono font-bold text-blue-600">${m.allocation_pct}%</td>
+            <td class="px-3 py-2 font-mono text-slate-500">${m.start_date || '—'} → ${m.end_date || '—'}</td>
+            <td class="px-3 py-2 capitalize font-semibold ${m.status === 'active' ? 'text-emerald-600' : 'text-slate-500'}">${m.status}</td>
+          </tr>
+        `).join('') : `<tr><td colspan="5" class="px-3 py-4 text-center text-slate-400">No project mappings active</td></tr>`;
+      }
+
+      // Assigned tasks table
+      const tasksBody = document.getElementById('dossier-tasks-body');
+      const tasksCount = document.getElementById('dossier-tasks-count');
+      const tasks = dossier.assigned_tasks || [];
+      if (tasksCount) tasksCount.textContent = `${tasks.length} Activities`;
+
+      if (tasksBody) {
+        tasksBody.innerHTML = tasks.length > 0 ? tasks.map(t => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+            <td class="px-3 py-2 font-bold text-slate-800 dark:text-white">${this.escapeHtml(t.title)}</td>
+            <td class="px-3 py-2 text-slate-600 dark:text-slate-300">${this.escapeHtml(t.project_name)}</td>
+            <td class="px-3 py-2 capitalize font-semibold ${t.status === 'done' ? 'text-emerald-600' : 'text-blue-600'}">${t.status}</td>
+            <td class="px-3 py-2 capitalize">${t.priority}</td>
+            <td class="px-3 py-2 font-mono text-slate-500">${t.due_date || '—'}</td>
+          </tr>
+        `).join('') : `<tr><td colspan="5" class="px-3 py-4 text-center text-slate-400">No specific activities assigned</td></tr>`;
+      }
+
+      modal.classList.remove('hidden');
+      this.initLucide();
+    } catch (e) {
+      console.error('Failed to open resource dossier:', e);
+      this.showToast('Failed to load resource details', 'error');
+    }
+  },
+
+  closeResourceDetailsModal() {
+    document.getElementById('resource-details-modal')?.classList.add('hidden');
+  },
+
+  async renderTaskModalResourceChips(assignedResources = []) {
+    const container = document.getElementById('task-modal-resources-container');
+    if (!container) return;
+
+    // Fetch / verify project resources
+    let projResources = this.state.projectResources;
+    if (!projResources || projResources.length === 0) {
+      projResources = await this.loadProjectResources();
+    }
+
+    if (!projResources || projResources.length === 0) {
+      container.innerHTML = `
+        <div class="text-[11px] text-slate-400 py-1 flex items-center justify-between w-full">
+          <span>No resources mapped to this project yet.</span>
+          <button type="button" onclick="app.closeTaskModal(); app.switchView('resources'); app.setResourceTab('project'); app.openMapProjectResourceModal();" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold flex items-center gap-1">
+            <i data-lucide="plus" class="w-3 h-3"></i>
+            <span>Map Resources</span>
+          </button>
+        </div>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    const assignedIds = new Set((assignedResources || []).map(r => typeof r === 'object' ? r.id : Number(r)));
+
+    container.innerHTML = projResources.map(r => {
+      const isSelected = assignedIds.has(r.id);
+      return `
+        <button type="button"
+          data-resource-id="${r.id}"
+          onclick="app.toggleTaskResourceChip(this)"
+          class="task-resource-chip ${isSelected ? 'selected-chip bg-blue-100 dark:bg-blue-900/60 border-blue-500 text-blue-700 dark:text-blue-300 font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'} px-2.5 py-1 rounded-lg text-[11px] border flex items-center space-x-1.5 transition hover:scale-[1.02] cursor-pointer shadow-2xs"
+          title="${this.escapeHtml(r.name)} (${this.escapeHtml(r.type)}) - Click to toggle assignment">
+          <i data-lucide="${isSelected ? 'check-circle-2' : 'cpu'}" class="w-3 h-3 flex-shrink-0 ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}"></i>
+          <span class="truncate max-w-[140px]">${this.escapeHtml(r.name)}</span>
+          <span class="text-[9px] opacity-75 font-normal">(${this.escapeHtml(r.type)})</span>
+        </button>
+      `;
+    }).join('');
+
+    this.initLucide();
+  },
+
+  toggleTaskResourceChip(chipEl) {
+    if (!chipEl) return;
+    const isSelected = chipEl.classList.toggle('selected-chip');
+    if (isSelected) {
+      chipEl.classList.remove('bg-white', 'dark:bg-slate-800', 'border-slate-200', 'dark:border-slate-700', 'text-slate-700', 'dark:text-slate-300');
+      chipEl.classList.add('bg-blue-100', 'dark:bg-blue-900/60', 'border-blue-500', 'text-blue-700', 'dark:text-blue-300', 'font-bold');
+      const icon = chipEl.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', 'check-circle-2');
+        icon.className = 'w-3 h-3 flex-shrink-0 text-blue-600 dark:text-blue-400';
+      }
+    } else {
+      chipEl.classList.remove('bg-blue-100', 'dark:bg-blue-900/60', 'border-blue-500', 'text-blue-700', 'dark:text-blue-300', 'font-bold');
+      chipEl.classList.add('bg-white', 'dark:bg-slate-800', 'border-slate-200', 'dark:border-slate-700', 'text-slate-700', 'dark:text-slate-300');
+      const icon = chipEl.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', 'cpu');
+        icon.className = 'w-3 h-3 flex-shrink-0 text-slate-400';
+      }
+    }
+    this.initLucide();
   },
 
   // ==================== TOAST NOTIFICATIONS ====================

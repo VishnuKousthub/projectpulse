@@ -358,6 +358,71 @@ def init_db():
         )
         """)
 
+        # Central Resource Management & Library
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            resource_code TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL, -- 'Employee', 'Contractor', 'Equipment', 'Laboratory Equipment', 'Software', 'Vendor', 'External Resource', 'Material', 'Other'
+            category TEXT DEFAULT 'General', -- 'R&D', 'QC/QA', 'Engineering', 'Operations', 'IT & Systems', 'Procurement', etc.
+            department TEXT DEFAULT 'General',
+            role TEXT DEFAULT 'Resource',
+            skills TEXT DEFAULT '[]', -- JSON array of tags/skills
+            description TEXT,
+            availability TEXT DEFAULT 'available', -- 'available', 'partially_allocated', 'fully_allocated', 'unavailable'
+            status TEXT DEFAULT 'active', -- 'active', 'inactive', 'archived'
+            contact_email TEXT,
+            contact_phone TEXT,
+            location TEXT,
+            cost_rate REAL DEFAULT 0.0,
+            cost_unit TEXT DEFAULT 'hr', -- 'hr', 'day', 'month', 'fixed'
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """)
+
+        # Project Resource Mapping
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            resource_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'Member',
+            allocation_pct REAL DEFAULT 100.0,
+            start_date TEXT,
+            end_date TEXT,
+            responsibility TEXT,
+            status TEXT DEFAULT 'active', -- 'active', 'planned', 'completed', 'released'
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (resource_id) REFERENCES resources (id) ON DELETE CASCADE,
+            UNIQUE(project_id, resource_id)
+        )
+        """)
+
+        # Task/Activity Resource Mapping
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            resource_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            role TEXT,
+            responsibility TEXT,
+            allocation_pct REAL DEFAULT 100.0,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE,
+            FOREIGN KEY (resource_id) REFERENCES resources (id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            UNIQUE(task_id, resource_id)
+        )
+        """)
+
         # Ensure default settings row exists
         existing_settings = cursor.execute("SELECT id FROM email_settings WHERE id = 1").fetchone()
         if not existing_settings:
@@ -397,6 +462,15 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_task ON email_logs(task_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_sent ON email_logs(sent_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_dispatches_lookup ON notification_dispatches(task_id, trigger_type, dispatch_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_resources_code ON resources(resource_code)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_resources_type ON resources(type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_resources_status ON resources(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_resources_dept ON resources(department)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_proj_res_proj ON project_resources(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_proj_res_res ON project_resources(resource_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_res_task ON task_resources(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_res_res ON task_resources(resource_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_res_proj ON task_resources(project_id)")
     
     # Immediately flush initial database structure to persistent storage if needed
     _perform_storage_sync()

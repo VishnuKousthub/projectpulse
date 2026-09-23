@@ -443,3 +443,191 @@ main.app-main {
     page-break-inside: avoid !important;
   }
 }
+
+/* ==================== SIDEBAR CONTROLLER STYLING ==================== */
+
+#sidebar {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
+}
+
+/* Collapsed Mode */
+#sidebar.sidebar-collapsed {
+  width: 68px !important;
+}
+
+#sidebar.sidebar-collapsed .sidebar-label,
+#sidebar.sidebar-collapsed .sidebar-extra,
+#sidebar.sidebar-collapsed #projects-list-sidebar,
+#sidebar.sidebar-collapsed #project-select-container,
+#sidebar.sidebar-collapsed .brand-text,
+#sidebar.sidebar-collapsed .sidebar-footer-btn-text {
+  display: none !important;
+}
+
+#sidebar.sidebar-collapsed .brand-header-inner {
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+#sidebar.sidebar-collapsed .nav-item {
+  justify-content: center !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+#sidebar.sidebar-collapsed .sidebar-footer-grid {
+  grid-template-columns: 1fr !important;
+}
+
+/* Hover-Expand Mode */
+#sidebar.sidebar-hover-expand {
+  width: 68px !important;
+  position: fixed !important;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 50;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+}
+
+#sidebar.sidebar-hover-expand .sidebar-label,
+#sidebar.sidebar-hover-expand .sidebar-extra,
+#sidebar.sidebar-hover-expand #projects-list-sidebar,
+#sidebar.sidebar-hover-expand #project-select-container,
+#sidebar.sidebar-hover-expand .brand-text,
+#sidebar.sidebar-hover-expand .sidebar-footer-btn-text {
+  display: none;
+}
+
+#sidebar.sidebar-hover-expand .brand-header-inner {
+  justify-content: center;
+  padding: 0;
+}
+
+#sidebar.sidebar-hover-expand .nav-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#sidebar.sidebar-hover-expand .sidebar-footer-grid {
+  grid-template-columns: 1fr;
+}
+
+#sidebar.sidebar-hover-expand:hover {
+  width: 16rem !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .sidebar-label,
+#sidebar.sidebar-hover-expand:hover .sidebar-extra,
+#sidebar.sidebar-hover-expand:hover #projects-list-sidebar,
+#sidebar.sidebar-hover-expand:hover #project-select-container,
+#sidebar.sidebar-hover-expand:hover .brand-text {
+  display: block !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .brand-header-inner {
+  justify-content: space-between !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .brand-text {
+  display: flex !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .nav-item {
+  justify-content: flex-start !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .sidebar-footer-btn-text {
+  display: inline !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .sidebar-footer-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.sidebar-hover-placeholder {
+  width: 68px;
+  flex-shrink: 0;
+  display: none;
+}
+
+body.sidebar-mode-hover .sidebar-hover-placeholder {
+  display: block;
+}
+
+/* ==================== RESOURCE MANAGEMENT STYLING ==================== */
+
+.resource-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.resource-type-employee { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.dark .resource-type-employee { background: rgba(30, 58, 138, 0.4); color: #93c5fd; border-color: rgba(59, 130, 246, 0.3); }
+
+.resource-type-contractor { background: #fdf4ff; color: #a21caf; border: 1px solid #f5d0fe; }
+.dark .resource-type-contractor { background: rgba(112, 26, 117, 0.4); color: #f0abfc; border-color: rgba(217, 70, 239, 0.3); }
+
+.resource-type-equipment, .resource-type-lab { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.dark .resource-type-equipment, .dark .resource-type-lab { background: rgba(6, 78, 59, 0.4); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+
+.resource-type-software { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+.dark .resource-type-software { background: rgba(76, 29, 149, 0.4); color: #c4b5fd; border-color: rgba(139, 92, 246, 0.3); }
+
+.resource-type-vendor, .resource-type-external { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.dark .resource-type-vendor, .dark .resource-type-external { background: rgba(124, 45, 18, 0.4); color: #fdba74; border-color: rgba(249, 115, 22, 0.3); }
+
+.resource-type-material { background: #fefce8; color: #a16207; border: 1px solid #fef08a; }
+.dark .resource-type-material { background: rgba(113, 63, 18, 0.4); color: #fde047; border-color: rgba(234, 179, 8, 0.3); }
+
+.resource-avail-available { color: #059669; }
+.resource-avail-partially { color: #2563eb; }
+.resource-avail-fully { color: #d97706; }
+.resource-avail-overallocated { color: #dc2626; }
+.resource-avail-unavailable { color: #64748b; }
+
+.allocation-meter-bar {
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #e2e8f0;
+  overflow: hidden;
+}
+.dark .allocation-meter-bar {
+  background-color: #334155;
+}
+
+.resource-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.375rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s ease;
+}
+.dark .resource-chip {
+  background: #1e293b;
+  color: #cbd5e1;
+  border-color: #334155;
+}
+.resource-chip:hover {
+  background: #e2e8f0;
+}
+.dark .resource-chip:hover {
+  background: #334155;
+}
+

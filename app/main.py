@@ -797,6 +797,20 @@ def get_tasks(project_id):
         """, (project_id,)).fetchall()
         logged_hours_by_task = {row["task_id"]: row["total_logged_hours"] for row in timelogs_raw}
 
+        # Batch fetch all task resources in 1 single query
+        resources_raw = conn.execute("""
+            SELECT tr.id as task_resource_id, r.id, tr.resource_id, tr.task_id, tr.role, tr.responsibility,
+                   r.resource_code, r.name, r.name as resource_name, r.type, r.type as resource_type,
+                   r.category, r.category as resource_category, r.department, r.department as resource_department
+            FROM task_resources tr
+            JOIN resources r ON tr.resource_id = r.id
+            WHERE tr.project_id = ?
+            ORDER BY r.name ASC
+        """, (project_id,)).fetchall()
+        resources_by_task = {}
+        for r in resources_raw:
+            resources_by_task.setdefault(r["task_id"], []).append(dict(r))
+
         result = []
         for t in tasks:
             t_dict = dict(t)
@@ -810,6 +824,7 @@ def get_tasks(project_id):
             t_dict["subtask_count"] = len(t_subtasks)
             t_dict["subtask_completed_count"] = sum(1 for s in t_subtasks if s.get("completed"))
             t_dict["logged_hours_sum"] = safe_float(logged_hours_by_task.get(t["id"], 0.0))
+            t_dict["resources"] = resources_by_task.get(t["id"], [])
             result.append(t_dict)
 
         return json_response(result)
@@ -967,6 +982,19 @@ def create_task(project_id):
                         VALUES (?, ?, 0, ?)
                     """, (t_id, sub_title.strip(), idx))
 
+        # Mapped Resources if provided
+        raw_res_ids = data.get("resource_ids")
+        if isinstance(raw_res_ids, list):
+            for r_id in raw_res_ids:
+                try:
+                    r_int = int(r_id)
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO task_resources (task_id, resource_id, project_id, created_at)
+                        VALUES (?, ?, ?, ?)
+                    """, (t_id, r_int, project_id, now_str))
+                except Exception:
+                    pass
+
         record_activity(conn, project_id, "User", "Task Created", f'Created task "{title}"', task_id=t_id)
 
         if assignee_id:
@@ -1009,12 +1037,23 @@ def get_task_dict(conn, task_id: int):
         ORDER BY tl.logged_date DESC, tl.id DESC
     """, (task_id,)).fetchall()]
 
+    task_resources_list = [dict(tr) for tr in conn.execute("""
+        SELECT tr.id as task_resource_id, r.id, tr.resource_id, tr.task_id, tr.role, tr.responsibility,
+               r.resource_code, r.name, r.name as resource_name, r.type, r.type as resource_type,
+               r.category, r.category as resource_category, r.department, r.department as resource_department
+        FROM task_resources tr
+        JOIN resources r ON tr.resource_id = r.id
+        WHERE tr.task_id = ?
+        ORDER BY r.name ASC
+    """, (task_id,)).fetchall()]
+
     t_dict["subtasks"] = subtasks_list
     t_dict["subtasks_list"] = subtasks_list
     t_dict["subtask_count"] = len(subtasks_list)
     t_dict["subtask_completed_count"] = sum(1 for s in subtasks_list if s.get("completed") == 1)
     t_dict["timelogs"] = timelogs_list
     t_dict["logged_hours_sum"] = sum(safe_float(tl.get("hours"), 0.0) for tl in timelogs_list)
+    t_dict["resources"] = task_resources_list
     t_dict["activities"] = [dict(a) for a in conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()]
 
     return t_dict
@@ -1155,6 +1194,19 @@ def update_task(task_id):
                         INSERT INTO subtasks (task_id, title, completed, order_index)
                         VALUES (?, ?, 0, ?)
                     """, (task_id, sub_title.strip(), sub_count + idx))
+
+        # 8. Mapped Resources if provided
+        if "resource_ids" in data and isinstance(data["resource_ids"], list):
+            conn.execute("DELETE FROM task_resources WHERE task_id = ?", (task_id,))
+            for r_id in data["resource_ids"]:
+                try:
+                    r_int = int(r_id)
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO task_resources (task_id, resource_id, project_id, created_at)
+                        VALUES (?, ?, ?, ?)
+                    """, (task_id, r_int, project_id, now_str))
+                except Exception:
+                    pass
 
         changes = []
         if status != task["status"]:
@@ -2791,6 +2843,606 @@ def get_notification_log_detail(log_id):
         if not log:
             return json_response({"error": "Log not found"}, status=404)
         return json_response(dict(log))
+
+# ==================== RESOURCE MANAGEMENT & RESOURCE MAPPING ====================
+
+def compute_resource_availability(total_alloc: float, status: str = "active") -> str:
+    if status != "active":
+        return "unavailable"
+    if total_alloc <= 0:
+        return "available"
+    elif total_alloc < 100:
+        return "partially_allocated"
+    elif total_alloc == 100:
+        return "fully_allocated"
+    else:
+        return "overallocated"
+
+def get_resource_dict(conn, resource_id: int):
+    r = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+    if not r:
+        return None
+    
+    r_dict = dict(r)
+    try:
+        r_dict["skills"] = json.loads(r_dict["skills"]) if r_dict.get("skills") else []
+    except Exception:
+        r_dict["skills"] = []
+
+    # Total allocation across all active project mappings
+    alloc_row = conn.execute("""
+        SELECT COALESCE(SUM(allocation_pct), 0) as total_alloc
+        FROM project_resources
+        WHERE resource_id = ? AND status = 'active'
+    """, (resource_id,)).fetchone()
+    total_alloc = safe_float(alloc_row["total_alloc"] if alloc_row else 0.0)
+    r_dict["total_allocation_pct"] = total_alloc
+    r_dict["computed_availability_status"] = compute_resource_availability(total_alloc, r_dict.get("status", "active"))
+    r_dict["computed_availability"] = r_dict["computed_availability_status"]
+    r_dict["cost_per_hour"] = safe_float(r_dict.get("cost_rate", 0.0))
+    r_dict["currency"] = r_dict.get("cost_unit", "USD")
+    r_dict["availability_status"] = r_dict.get("availability", "available")
+    r_dict["phone"] = r_dict.get("contact_phone", "")
+
+    # Project mappings
+    proj_mappings = conn.execute("""
+        SELECT pr.*, pr.role as project_role, pr.allocation_pct as allocation_percentage,
+               p.name as project_name, p.color as project_color
+        FROM project_resources pr
+        JOIN projects p ON pr.project_id = p.id
+        WHERE pr.resource_id = ?
+        ORDER BY pr.id DESC
+    """, (resource_id,)).fetchall()
+    r_dict["project_mappings"] = [dict(pm) for pm in proj_mappings]
+    r_dict["project_mappings_count"] = len(r_dict["project_mappings"])
+    r_dict["mapped_project_count"] = len(r_dict["project_mappings"])
+
+    # Task assignments
+    task_mappings = conn.execute("""
+        SELECT tr.*, t.title as task_title, t.status as task_status, t.priority as task_priority,
+               t.due_date as task_due_date, p.name as project_name, p.color as project_color
+        FROM task_resources tr
+        JOIN tasks t ON tr.task_id = t.id
+        JOIN projects p ON tr.project_id = p.id
+        WHERE tr.resource_id = ?
+        ORDER BY tr.id DESC
+    """, (resource_id,)).fetchall()
+    r_dict["task_mappings"] = [dict(tm) for tm in task_mappings]
+    r_dict["assigned_tasks_count"] = len(r_dict["task_mappings"])
+    r_dict["assigned_task_count"] = len(r_dict["task_mappings"])
+    r_dict["assigned_tasks"] = [
+        {
+            "id": tm["task_id"],
+            "title": tm.get("task_title", ""),
+            "project_name": tm.get("project_name", ""),
+            "status": tm.get("task_status", ""),
+            "priority": tm.get("task_priority", ""),
+            "due_date": tm.get("task_due_date", "")
+        }
+        for tm in r_dict["task_mappings"]
+    ]
+
+    return r_dict
+
+@app.get("/api/resources")
+def get_resources():
+    res_type = request.query.get("type")
+    category = request.query.get("category")
+    department = request.query.get("department")
+    status = request.query.get("status")
+    search = request.query.get("search")
+    availability_filter = request.query.get("availability")
+
+    with get_db() as conn:
+        query = "SELECT * FROM resources WHERE 1=1"
+        params = []
+
+        if res_type:
+            query += " AND type = ?"
+            params.append(res_type)
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if department:
+            query += " AND department = ?"
+            params.append(department)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if search:
+            query += " AND (name LIKE ? OR resource_code LIKE ? OR role LIKE ? OR skills LIKE ? OR department LIKE ?)"
+            s_param = f"%{search}%"
+            params.extend([s_param, s_param, s_param, s_param, s_param])
+
+        query += " ORDER BY name ASC"
+        rows = conn.execute(query, params).fetchall()
+
+        # Batch compute allocation & counts
+        alloc_rows = conn.execute("""
+            SELECT resource_id, COALESCE(SUM(allocation_pct), 0) as total_alloc, COUNT(DISTINCT project_id) as proj_cnt
+            FROM project_resources
+            WHERE status = 'active'
+            GROUP BY resource_id
+        """).fetchall()
+        alloc_map = {row["resource_id"]: (safe_float(row["total_alloc"]), row["proj_cnt"]) for row in alloc_rows}
+
+        task_cnt_rows = conn.execute("""
+            SELECT resource_id, COUNT(DISTINCT task_id) as task_cnt
+            FROM task_resources
+            GROUP BY resource_id
+        """).fetchall()
+        task_cnt_map = {row["resource_id"]: row["task_cnt"] for row in task_cnt_rows}
+
+        results = []
+        for r in rows:
+            r_dict = dict(r)
+            try:
+                r_dict["skills"] = json.loads(r_dict["skills"]) if r_dict.get("skills") else []
+            except Exception:
+                r_dict["skills"] = []
+
+            total_alloc, proj_cnt = alloc_map.get(r["id"], (0.0, 0))
+            r_dict["total_allocation_pct"] = total_alloc
+            comp_avail = compute_resource_availability(total_alloc, r_dict.get("status", "active"))
+            r_dict["computed_availability_status"] = comp_avail
+            r_dict["computed_availability"] = comp_avail
+            r_dict["cost_per_hour"] = safe_float(r_dict.get("cost_rate", 0.0))
+            r_dict["currency"] = r_dict.get("cost_unit", "USD")
+            r_dict["availability_status"] = r_dict.get("availability", "available")
+            r_dict["phone"] = r_dict.get("contact_phone", "")
+            r_dict["project_mappings_count"] = proj_cnt
+            r_dict["mapped_project_count"] = proj_cnt
+            r_dict["assigned_tasks_count"] = task_cnt_map.get(r["id"], 0)
+            r_dict["assigned_task_count"] = task_cnt_map.get(r["id"], 0)
+
+            if availability_filter and comp_avail != availability_filter:
+                continue
+
+            results.append(r_dict)
+
+        return json_response(results)
+
+@app.post("/api/resources")
+def create_resource():
+    data = request.json or {}
+    name = clean_text(data.get("name"))
+    res_type = clean_text(data.get("type") or "Employee")
+    
+    if not name:
+        return json_response({"error": "Resource name is required"}, status=400)
+
+    category = clean_text(data.get("category") or "Internal")
+    department = clean_text(data.get("department") or "Engineering")
+    role = clean_text(data.get("role") or "")
+    status = clean_text(data.get("status") or "active")
+    availability = clean_text(data.get("availability_status") or data.get("availability") or "available")
+    description = clean_text(data.get("description") or "")
+    contact_email = clean_text(data.get("contact_email") or "")
+    contact_phone = clean_text(data.get("contact_phone") or data.get("phone") or "")
+    location = clean_text(data.get("location") or "")
+    cost_rate = safe_float(data.get("cost_per_hour") if data.get("cost_per_hour") is not None else data.get("cost_rate"), 0.0)
+    cost_unit = clean_text(data.get("currency") or data.get("cost_unit") or "USD")
+    notes = clean_text(data.get("notes") or "")
+
+    raw_skills = data.get("skills", [])
+    if isinstance(raw_skills, list):
+        skills_list = [str(s).strip() for s in raw_skills if str(s).strip()]
+    elif isinstance(raw_skills, str):
+        skills_list = [s.strip() for s in raw_skills.split(',') if s.strip()]
+    else:
+        skills_list = []
+    skills_json = json.dumps(skills_list)
+
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Auto-generate resource code if not provided
+        resource_code = clean_text(data.get("resource_code"))
+        if not resource_code:
+            prefix_map = {
+                "Employee": "EMP",
+                "Contractor": "CTR",
+                "Equipment": "EQP",
+                "Laboratory Equipment": "LAB",
+                "Software": "SFT",
+                "Vendor": "VND",
+                "External Resource": "EXT",
+                "Material": "MAT",
+                "Facility": "FAC"
+            }
+            pfx = prefix_map.get(res_type, "RES")
+            count_row = conn.execute("SELECT COUNT(*) as cnt FROM resources WHERE type = ?", (res_type,)).fetchone()
+            next_num = (count_row["cnt"] if count_row else 0) + 101
+            resource_code = f"{pfx}-{next_num:03d}"
+            
+            # Ensure unique
+            dup = conn.execute("SELECT id FROM resources WHERE resource_code = ?", (resource_code,)).fetchone()
+            if dup:
+                import random
+                resource_code = f"{pfx}-{random.randint(1000, 9999)}"
+
+        try:
+            cursor.execute("""
+                INSERT INTO resources (
+                    resource_code, name, type, category, department, role, skills,
+                    description, availability, status, contact_email, contact_phone, location,
+                    cost_rate, cost_unit, notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                resource_code, name, res_type, category, department, role, skills_json,
+                description, availability, status, contact_email, contact_phone, location,
+                cost_rate, cost_unit, notes, now_str, now_str
+            ))
+            r_id = cursor.lastrowid
+            
+            # Record activity on first project if available
+            p_first = conn.execute("SELECT id FROM projects ORDER BY id ASC LIMIT 1").fetchone()
+            if p_first:
+                record_activity(conn, p_first["id"], "Manager", "Resource Created", f'Created resource "{name}" ({resource_code})')
+
+            return json_response(get_resource_dict(conn, r_id), status=201)
+        except sqlite3.IntegrityError as e:
+            return json_response({"error": f"Resource code or name already exists: {e}"}, status=400)
+
+@app.get("/api/resources/summary")
+def get_resources_summary():
+    with get_db() as conn:
+        all_resources = conn.execute("SELECT * FROM resources").fetchall()
+        total_count = len(all_resources)
+        active_count = sum(1 for r in all_resources if r["status"] == "active")
+
+        # Allocations
+        alloc_rows = conn.execute("""
+            SELECT resource_id, COALESCE(SUM(allocation_pct), 0) as total_alloc
+            FROM project_resources
+            WHERE status = 'active'
+            GROUP BY resource_id
+        """).fetchall()
+        alloc_map = {row["resource_id"]: safe_float(row["total_alloc"]) for row in alloc_rows}
+
+        by_type = {}
+        by_dept = {}
+        by_avail = {
+            "available": 0,
+            "partially_allocated": 0,
+            "fully_allocated": 0,
+            "overallocated": 0,
+            "unavailable": 0
+        }
+
+        total_alloc_sum = 0.0
+        for r in all_resources:
+            t = r["type"] or "Other"
+            by_type[t] = by_type.get(t, 0) + 1
+
+            d = r["department"] or "General"
+            by_dept[d] = by_dept.get(d, 0) + 1
+
+            alloc = alloc_map.get(r["id"], 0.0)
+            total_alloc_sum += alloc
+            avail = compute_resource_availability(alloc, r.get("status", "active"))
+            by_avail[avail] = by_avail.get(avail, 0) + 1
+
+        avg_alloc = (total_alloc_sum / total_count) if total_count > 0 else 0.0
+
+        proj_res_count = conn.execute("SELECT COUNT(*) as cnt FROM project_resources").fetchone()["cnt"]
+        task_res_count = conn.execute("SELECT COUNT(*) as cnt FROM task_resources").fetchone()["cnt"]
+
+        return json_response({
+            "total_resources": total_count,
+            "active_resources": active_count,
+            "avg_allocation_pct": round(avg_alloc, 1),
+            "average_allocation_pct": round(avg_alloc, 1),
+            "total_project_mappings": proj_res_count,
+            "total_assigned_tasks": task_res_count,
+            "total_task_assignments": task_res_count,
+            "by_type": by_type,
+            "by_department": by_dept,
+            "by_availability": by_avail
+        })
+
+@app.get("/api/resources/<resource_id:int>")
+def get_resource_detail(resource_id):
+    with get_db() as conn:
+        r_dict = get_resource_dict(conn, resource_id)
+        if not r_dict:
+            return json_response({"error": "Resource not found"}, status=404)
+        return json_response(r_dict)
+
+@app.put("/api/resources/<resource_id:int>")
+def update_resource(resource_id):
+    data = request.json or {}
+    with get_db() as conn:
+        existing = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+        if not existing:
+            return json_response({"error": "Resource not found"}, status=404)
+
+        name = clean_text(data.get("name", existing["name"]))
+        resource_code = clean_text(data.get("resource_code", existing["resource_code"]))
+        res_type = clean_text(data.get("type", existing["type"]))
+        category = clean_text(data.get("category", existing["category"]))
+        department = clean_text(data.get("department", existing["department"]))
+        role = clean_text(data.get("role", existing["role"]))
+        status = clean_text(data.get("status", existing["status"]))
+        availability = clean_text(data.get("availability_status", data.get("availability", existing["availability"])))
+        description = clean_text(data.get("description", existing["description"]))
+        contact_email = clean_text(data.get("contact_email", existing["contact_email"]))
+        contact_phone = clean_text(data.get("contact_phone", data.get("phone", existing["contact_phone"])))
+        location = clean_text(data.get("location", existing["location"]))
+        cost_rate = safe_float(data.get("cost_per_hour") if data.get("cost_per_hour") is not None else data.get("cost_rate", existing["cost_rate"]))
+        cost_unit = clean_text(data.get("currency", data.get("cost_unit", existing["cost_unit"])))
+        notes = clean_text(data.get("notes", existing["notes"]))
+
+        if "skills" in data:
+            raw_skills = data["skills"]
+            if isinstance(raw_skills, list):
+                skills_list = [str(s).strip() for s in raw_skills if str(s).strip()]
+            elif isinstance(raw_skills, str):
+                skills_list = [s.strip() for s in raw_skills.split(',') if s.strip()]
+            else:
+                skills_list = []
+            skills_json = json.dumps(skills_list)
+        else:
+            skills_json = existing["skills"] or "[]"
+
+        now_str = get_now_iso()
+
+        conn.execute("""
+            UPDATE resources SET
+                resource_code = ?, name = ?, type = ?, category = ?, department = ?,
+                role = ?, skills = ?, description = ?, availability = ?, status = ?,
+                contact_email = ?, contact_phone = ?, location = ?, cost_rate = ?,
+                cost_unit = ?, notes = ?, updated_at = ?
+            WHERE id = ?
+        """, (
+            resource_code, name, res_type, category, department,
+            role, skills_json, description, availability, status,
+            contact_email, contact_phone, location, cost_rate,
+            cost_unit, notes, now_str, resource_id
+        ))
+
+        return json_response(get_resource_dict(conn, resource_id))
+
+@app.delete("/api/resources/<resource_id:int>")
+def delete_resource(resource_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM task_resources WHERE resource_id = ?", (resource_id,))
+        conn.execute("DELETE FROM project_resources WHERE resource_id = ?", (resource_id,))
+        conn.execute("DELETE FROM resources WHERE id = ?", (resource_id,))
+        return json_response({"success": True})
+
+# ==================== PROJECT RESOURCE MAPPING ====================
+
+@app.get("/api/projects/<project_id:int>/resources")
+def get_project_resources(project_id):
+    with get_db() as conn:
+        mappings = conn.execute("""
+            SELECT pr.id as mapping_id, r.id as id, pr.project_id, pr.resource_id, pr.role, pr.role as project_role,
+                   pr.allocation_pct, pr.allocation_pct as allocation_percentage,
+                   pr.start_date, pr.start_date as mapping_start_date,
+                   pr.end_date, pr.end_date as mapping_end_date,
+                   pr.responsibility, pr.status, pr.status as mapping_status,
+                   pr.created_at as mapping_created_at,
+                   r.resource_code, r.name, r.type, r.category, r.department,
+                   r.role as primary_role, r.skills, r.availability as availability_status,
+                   r.status as resource_status, r.contact_email, r.contact_phone, r.contact_phone as phone,
+                   r.location, r.cost_rate as cost_per_hour, r.cost_unit as currency
+            FROM project_resources pr
+            JOIN resources r ON pr.resource_id = r.id
+            WHERE pr.project_id = ?
+            ORDER BY r.name ASC
+        """, (project_id,)).fetchall()
+
+        # Get global allocation for each resource across ALL active projects
+        alloc_rows = conn.execute("""
+            SELECT resource_id, COALESCE(SUM(allocation_pct), 0) as total_alloc
+            FROM project_resources
+            WHERE status = 'active'
+            GROUP BY resource_id
+        """).fetchall()
+        alloc_map = {row["resource_id"]: safe_float(row["total_alloc"]) for row in alloc_rows}
+
+        # Count assigned tasks in this project
+        task_cnt_rows = conn.execute("""
+            SELECT resource_id, COUNT(DISTINCT task_id) as task_cnt
+            FROM task_resources
+            WHERE project_id = ?
+            GROUP BY resource_id
+        """, (project_id,)).fetchall()
+        task_cnt_map = {row["resource_id"]: row["task_cnt"] for row in task_cnt_rows}
+
+        results = []
+        for m in mappings:
+            m_dict = dict(m)
+            try:
+                m_dict["skills"] = json.loads(m_dict["skills"]) if m_dict.get("skills") else []
+            except Exception:
+                m_dict["skills"] = []
+            
+            total_alloc = alloc_map.get(m["resource_id"], 0.0)
+            m_dict["total_allocation_pct"] = total_alloc
+            m_dict["global_allocation_pct"] = total_alloc
+            m_dict["computed_availability_status"] = compute_resource_availability(total_alloc, m_dict.get("resource_status", "active"))
+            m_dict["computed_availability"] = m_dict["computed_availability_status"]
+            m_dict["project_tasks_count"] = task_cnt_map.get(m["resource_id"], 0)
+            results.append(m_dict)
+
+        return json_response(results)
+
+@app.post("/api/projects/<project_id:int>/resources")
+def map_project_resource(project_id):
+    data = request.json or {}
+    resource_id = safe_int(data.get("resource_id"))
+    if not resource_id:
+        return json_response({"error": "Resource ID is required"}, status=400)
+
+    project_role = clean_text(data.get("project_role") or data.get("role") or "")
+    allocation_pct = safe_float(data.get("allocation_pct") if data.get("allocation_pct") is not None else data.get("allocation_percentage"), 100.0)
+    start_date = data.get("start_date")
+    start_date = str(start_date).strip() if start_date and str(start_date).strip() not in ("", "null", "undefined", "None") else None
+    end_date = data.get("end_date")
+    end_date = str(end_date).strip() if end_date and str(end_date).strip() not in ("", "null", "undefined", "None") else None
+    responsibility = clean_text(data.get("responsibility") or "")
+    status = clean_text(data.get("status") or "active")
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        # Check resource exists
+        r = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+        if not r:
+            return json_response({"error": "Resource not found"}, status=404)
+
+        if not project_role:
+            project_role = r["role"] or r["type"]
+
+        cursor = conn.cursor()
+        existing_map = conn.execute(
+            "SELECT id FROM project_resources WHERE project_id = ? AND resource_id = ?",
+            (project_id, resource_id)
+        ).fetchone()
+
+        if existing_map:
+            cursor.execute("""
+                UPDATE project_resources SET
+                    role = ?, allocation_pct = ?, start_date = ?,
+                    end_date = ?, responsibility = ?, status = ?, updated_at = ?
+                WHERE id = ?
+            """, (project_role, allocation_pct, start_date, end_date, responsibility, status, now_str, existing_map["id"]))
+            mapping_id = existing_map["id"]
+        else:
+            cursor.execute("""
+                INSERT INTO project_resources (
+                    project_id, resource_id, role, allocation_pct,
+                    start_date, end_date, responsibility, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (project_id, resource_id, project_role, allocation_pct, start_date, end_date, responsibility, status, now_str, now_str))
+            mapping_id = cursor.lastrowid
+
+        record_activity(conn, project_id, "Manager", "Resource Mapped", f'Mapped resource "{r["name"]}" as {project_role} ({allocation_pct}%)')
+
+        mapping = conn.execute("""
+            SELECT pr.id, pr.id as mapping_id, pr.project_id, pr.resource_id, pr.role, pr.role as project_role,
+                   pr.allocation_pct, pr.allocation_pct as allocation_percentage,
+                   pr.start_date, pr.start_date as mapping_start_date,
+                   pr.end_date, pr.end_date as mapping_end_date,
+                   pr.responsibility, pr.status, pr.status as mapping_status,
+                   r.resource_code, r.name, r.type, r.department
+            FROM project_resources pr
+            JOIN resources r ON pr.resource_id = r.id
+            WHERE pr.id = ?
+        """, (mapping_id,)).fetchone()
+
+        return json_response(dict(mapping), status=201)
+
+@app.put("/api/projects/<project_id:int>/resources/<mapping_id:int>")
+def update_project_resource_mapping(project_id, mapping_id):
+    data = request.json or {}
+    with get_db() as conn:
+        existing = conn.execute("SELECT * FROM project_resources WHERE id = ? AND project_id = ?", (mapping_id, project_id)).fetchone()
+        if not existing:
+            return json_response({"error": "Project resource mapping not found"}, status=404)
+
+        project_role = clean_text(data.get("project_role", data.get("role", existing["role"])))
+        allocation_pct = safe_float(data.get("allocation_pct", data.get("allocation_percentage", existing["allocation_pct"])))
+        start_date = data.get("start_date", existing["start_date"])
+        start_date = str(start_date).strip() if start_date and str(start_date).strip() not in ("", "null", "undefined", "None") else None
+        end_date = data.get("end_date", existing["end_date"])
+        end_date = str(end_date).strip() if end_date and str(end_date).strip() not in ("", "null", "undefined", "None") else None
+        responsibility = clean_text(data.get("responsibility", existing["responsibility"]))
+        status = clean_text(data.get("status", existing["status"]))
+        now_str = get_now_iso()
+
+        conn.execute("""
+            UPDATE project_resources SET
+                role = ?, allocation_pct = ?, start_date = ?,
+                end_date = ?, responsibility = ?, status = ?, updated_at = ?
+            WHERE id = ?
+        """, (project_role, allocation_pct, start_date, end_date, responsibility, status, now_str, mapping_id))
+
+        mapping = conn.execute("""
+            SELECT pr.id, pr.id as mapping_id, pr.project_id, pr.resource_id, pr.role, pr.role as project_role,
+                   pr.allocation_pct, pr.allocation_pct as allocation_percentage,
+                   pr.start_date, pr.start_date as mapping_start_date,
+                   pr.end_date, pr.end_date as mapping_end_date,
+                   pr.responsibility, pr.status, pr.status as mapping_status,
+                   r.resource_code, r.name, r.type, r.department
+            FROM project_resources pr
+            JOIN resources r ON pr.resource_id = r.id
+            WHERE pr.id = ?
+        """, (mapping_id,)).fetchone()
+
+        return json_response(dict(mapping))
+
+@app.delete("/api/projects/<project_id:int>/resources/<resource_or_mapping_id:int>")
+def unmap_project_resource(project_id, resource_or_mapping_id):
+    with get_db() as conn:
+        mapping = conn.execute(
+            "SELECT * FROM project_resources WHERE (id = ? OR resource_id = ?) AND project_id = ?",
+            (resource_or_mapping_id, resource_or_mapping_id, project_id)
+        ).fetchone()
+        if not mapping:
+            return json_response({"error": "Project resource mapping not found"}, status=404)
+
+        r = conn.execute("SELECT name FROM resources WHERE id = ?", (mapping["resource_id"],)).fetchone()
+        r_name = r["name"] if r else "Resource"
+
+        # Remove task resource assignments for this resource within this project
+        conn.execute("DELETE FROM task_resources WHERE resource_id = ? AND project_id = ?", (mapping["resource_id"], project_id))
+        conn.execute("DELETE FROM project_resources WHERE id = ?", (mapping["id"],))
+
+        record_activity(conn, project_id, "Manager", "Resource Unmapped", f'Removed resource "{r_name}" from project')
+        return json_response({"success": True})
+
+# ==================== TASK RESOURCE MAPPING ====================
+
+@app.get("/api/tasks/<task_id:int>/resources")
+def get_task_resources(task_id):
+    with get_db() as conn:
+        task = conn.execute("SELECT project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            return json_response({"error": "Task not found"}, status=404)
+
+        trs = conn.execute("""
+            SELECT tr.*, r.id as resource_id, r.id, r.resource_code, r.name as resource_name, r.name,
+                   r.type as resource_type, r.type, r.category as resource_category, r.department as resource_department
+            FROM task_resources tr
+            JOIN resources r ON tr.resource_id = r.id
+            WHERE tr.task_id = ?
+            ORDER BY r.name ASC
+        """, (task_id,)).fetchall()
+        return json_response([dict(t) for t in trs])
+
+@app.post("/api/tasks/<task_id:int>/resources")
+def map_task_resource(task_id):
+    data = request.json or {}
+    resource_id = safe_int(data.get("resource_id"))
+    if not resource_id:
+        return json_response({"error": "Resource ID is required"}, status=400)
+
+    with get_db() as conn:
+        task = conn.execute("SELECT project_id, title FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            return json_response({"error": "Task not found"}, status=404)
+
+        role = clean_text(data.get("role") or "")
+        responsibility = clean_text(data.get("responsibility") or "")
+        now_str = get_now_iso()
+
+        conn.execute("""
+            INSERT OR REPLACE INTO task_resources (task_id, resource_id, project_id, role, responsibility, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (task_id, resource_id, task["project_id"], role, responsibility, now_str))
+
+        record_activity(conn, task["project_id"], "User", "Resource Assigned", f'Assigned resource to task "{task["title"]}"', task_id=task_id)
+        return json_response({"success": True})
+
+@app.delete("/api/tasks/<task_id:int>/resources/<resource_id:int>")
+def unmap_task_resource(task_id, resource_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM task_resources WHERE task_id = ? AND resource_id = ?", (task_id, resource_id))
+        return json_response({"success": True})
 
 # ==================== GLOBAL JSON ERROR HANDLERS ====================
 

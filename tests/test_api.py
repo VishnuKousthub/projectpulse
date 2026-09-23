@@ -926,6 +926,209 @@ class TestProjectPulseAPI(unittest.TestCase):
             excel_bytes = excel_data
         self.assertTrue(excel_bytes.startswith(b"PK\x03\x04") or b"PK" in excel_bytes[:10])
 
+    def test_26_central_resources_library_crud_and_summary(self):
+        # 1. Fetch all resources
+        status, resources = self.request("/api/resources")
+        self.assertEqual(status, 200)
+        self.assertIsInstance(resources, list)
+        self.assertGreaterEqual(len(resources), 5)
+        
+        # Check required fields
+        res = resources[0]
+        self.assertIn("id", res)
+        self.assertIn("name", res)
+        self.assertIn("type", res)
+        self.assertIn("category", res)
+        self.assertIn("department", res)
+        self.assertIn("skills", res)
+        self.assertIn("total_allocation_pct", res)
+        self.assertIn("computed_availability_status", res)
+        self.assertIn("project_mappings_count", res)
+
+        # 2. Summary stats
+        status_sum, summary = self.request("/api/resources/summary")
+        self.assertEqual(status_sum, 200)
+        self.assertIn("total_resources", summary)
+        self.assertIn("active_resources", summary)
+        self.assertIn("avg_allocation_pct", summary)
+        self.assertIn("total_project_mappings", summary)
+        self.assertIn("total_assigned_tasks", summary)
+
+        # 3. Create new Resource
+        new_res_payload = {
+            "name": "Thermo Fisher Orbitrap Exploris 480",
+            "resource_code": "EQ-ORBI-480",
+            "type": "Laboratory Equipment",
+            "category": "Shared",
+            "department": "Analytical QC",
+            "role": "High-Resolution Mass Spectrometer",
+            "skills": ["LC-MS", "Proteomics", "Metabolomics", "High-Resolution Mass Spec"],
+            "status": "active",
+            "availability_status": "available",
+            "cost_per_hour": 150.00,
+            "currency": "USD",
+            "contact_email": "lab-masspec@projectpulse.demo",
+            "location": "Building C, Cleanroom 101"
+        }
+        status_create, created_res = self.request("/api/resources", method="POST", body=new_res_payload)
+        self.assertEqual(status_create, 201)
+        self.assertIn("id", created_res)
+        created_id = created_res["id"]
+        self.assertEqual(created_res["name"], new_res_payload["name"])
+        self.assertEqual(created_res["resource_code"], "EQ-ORBI-480")
+
+        # 4. Get Dossier
+        status_dossier, dossier = self.request(f"/api/resources/{created_id}")
+        self.assertEqual(status_dossier, 200)
+        self.assertEqual(dossier["id"], created_id)
+        self.assertIn("project_mappings", dossier)
+        self.assertIn("assigned_tasks", dossier)
+        self.assertEqual(dossier["total_allocation_pct"], 0)
+
+        # 5. Update Resource
+        update_payload = {
+            "name": "Thermo Fisher Orbitrap Exploris 480 (Calibrated)",
+            "cost_per_hour": 175.00,
+            "skills": ["LC-MS", "Proteomics", "Metabolomics", "GMP Validation"]
+        }
+        status_update, updated_res = self.request(f"/api/resources/{created_id}", method="PUT", body=update_payload)
+        self.assertEqual(status_update, 200)
+        self.assertEqual(updated_res["cost_per_hour"], 175.00)
+        self.assertEqual(updated_res["name"], "Thermo Fisher Orbitrap Exploris 480 (Calibrated)")
+
+        # 6. Delete Resource
+        status_del, del_res = self.request(f"/api/resources/{created_id}", method="DELETE")
+        self.assertEqual(status_del, 200)
+
+        # Verify 404
+        status_get404, _ = self.request(f"/api/resources/{created_id}")
+        self.assertEqual(status_get404, 404)
+
+    def test_27_project_resource_mapping(self):
+        # 1. Create a dedicated resource for mapping tests
+        res_payload = {
+            "name": "Dr. Sarah Lin, Formulation Specialist",
+            "type": "Employee",
+            "department": "R&D",
+            "role": "Principal Formulation Scientist",
+            "skills": ["Lyophilization", "Nanoparticles", "Lipid Chemistry"],
+            "status": "active"
+        }
+        status_c, res = self.request("/api/resources", method="POST", body=res_payload)
+        self.assertEqual(status_c, 201)
+        res_id = res["id"]
+
+        # 2. Map resource to Project 1
+        map_payload = {
+            "resource_id": res_id,
+            "project_role": "Lead Formulation Scientist",
+            "allocation_pct": 60,
+            "start_date": "2026-03-01",
+            "end_date": "2026-08-30",
+            "responsibility": "Design and validate stable mRNA nanoparticle formulations",
+            "status": "active"
+        }
+        status_map, mapped = self.request("/api/projects/1/resources", method="POST", body=map_payload)
+        self.assertEqual(status_map, 201)
+        self.assertEqual(mapped["resource_id"], res_id)
+        self.assertEqual(mapped["allocation_pct"], 60)
+
+        # 3. Verify Project 1 Resources list contains newly mapped resource
+        status_list, p1_resources = self.request("/api/projects/1/resources")
+        self.assertEqual(status_list, 200)
+        found = next((r for r in p1_resources if r["id"] == res_id), None)
+        self.assertIsNotNone(found)
+        self.assertEqual(found["allocation_pct"], 60)
+        self.assertEqual(found["project_role"], "Lead Formulation Scientist")
+
+        # 4. Map resource to Project 2 as well (cross-project allocation)
+        map_payload2 = {
+            "resource_id": res_id,
+            "project_role": "Advisory Formulator",
+            "allocation_pct": 50,
+            "status": "active"
+        }
+        status_map2, _ = self.request("/api/projects/2/resources", method="POST", body=map_payload2)
+        self.assertEqual(status_map2, 201)
+
+        # 5. Verify total global allocation is 60 + 50 = 110% (overallocated)
+        status_dossier, dossier = self.request(f"/api/resources/{res_id}")
+        self.assertEqual(status_dossier, 200)
+        self.assertEqual(dossier["total_allocation_pct"], 110)
+        self.assertEqual(dossier["computed_availability_status"], "overallocated")
+        self.assertEqual(len(dossier["project_mappings"]), 2)
+
+        # 6. Unmap from Project 1
+        status_unmap, _ = self.request(f"/api/projects/1/resources/{res_id}", method="DELETE")
+        self.assertEqual(status_unmap, 200)
+
+        # Verify Project 1 no longer has resource
+        status_list_after, p1_after = self.request("/api/projects/1/resources")
+        found_after = next((r for r in p1_after if r["id"] == res_id), None)
+        self.assertIsNone(found_after)
+
+        # Clean up
+        self.request(f"/api/resources/{res_id}", method="DELETE")
+
+    def test_28_task_resource_assignment(self):
+        # 1. Create a test resource
+        res_payload = {
+            "name": "Biacore T200 SPR System",
+            "type": "Laboratory Equipment",
+            "department": "Biophysics",
+            "role": "Surface Plasmon Resonance Biosensor",
+            "skills": ["Kinetics", "Affinity", "SPR", "Binding Assays"]
+        }
+        status_c, res = self.request("/api/resources", method="POST", body=res_payload)
+        res_id = res["id"]
+
+        # 2. Map to Project 1
+        self.request("/api/projects/1/resources", method="POST", body={
+            "resource_id": res_id,
+            "allocation_pct": 50,
+            "project_role": "Biophysical Assay Instrument"
+        })
+
+        # 3. Create task with resource assignment
+        task_payload = {
+            "title": "Perform SPR Binding Affinity Assay",
+            "status": "in_progress",
+            "priority": "high",
+            "estimated_hours": 12.0,
+            "resource_ids": [res_id]
+        }
+        status_t, created_task = self.request("/api/projects/1/tasks", method="POST", body=task_payload)
+        self.assertIn(status_t, [200, 201])
+        task_id = created_task["id"]
+        self.assertIn("resources", created_task)
+        self.assertEqual(len(created_task["resources"]), 1)
+        self.assertEqual(created_task["resources"][0]["id"], res_id)
+
+        # 4. Verify GET /api/tasks/<tid>/resources
+        status_tr, task_resources = self.request(f"/api/tasks/{task_id}/resources")
+        self.assertEqual(status_tr, 200)
+        self.assertEqual(len(task_resources), 1)
+        self.assertEqual(task_resources[0]["id"], res_id)
+
+        # 5. Check Resource Dossier reflects assigned task
+        status_dossier, dossier = self.request(f"/api/resources/{res_id}")
+        self.assertEqual(status_dossier, 200)
+        self.assertEqual(len(dossier["assigned_tasks"]), 1)
+        self.assertEqual(dossier["assigned_tasks"][0]["id"], task_id)
+        self.assertEqual(dossier["assigned_tasks"][0]["title"], "Perform SPR Binding Affinity Assay")
+
+        # 6. Update task to remove resource
+        update_payload = {
+            "resource_ids": []
+        }
+        status_tu, updated_task = self.request(f"/api/tasks/{task_id}", method="PUT", body=update_payload)
+        self.assertEqual(status_tu, 200)
+        self.assertEqual(len(updated_task.get("resources", [])), 0)
+
+        # Clean up
+        self.request(f"/api/tasks/{task_id}", method="DELETE")
+        self.request(f"/api/resources/{res_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 
