@@ -5225,29 +5225,37 @@ const app = {
     }
   },
 
-  printProjectReport() {
+  printProjectReport(orientation = 'portrait') {
+    if (orientation === 'landscape') {
+      document.body.classList.add('print-orientation-landscape');
+    } else {
+      document.body.classList.remove('print-orientation-landscape');
+    }
     window.print();
+    setTimeout(() => {
+      document.body.classList.remove('print-orientation-landscape');
+    }, 1000);
   },
 
   getReportStatusBadge(status) {
     const map = {
-      'done': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-block text-center whitespace-nowrap">DONE</span>',
-      'in_progress': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 inline-block text-center whitespace-nowrap">IN PROGRESS</span>',
-      'in_review': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-block text-center whitespace-nowrap">IN REVIEW</span>',
-      'todo': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-block text-center whitespace-nowrap">TO DO</span>',
-      'backlog': '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 inline-block text-center whitespace-nowrap">BACKLOG</span>'
+      'done': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 inline-block text-center whitespace-nowrap">DONE</span>',
+      'in_progress': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 inline-block text-center whitespace-nowrap">IN PROGRESS</span>',
+      'in_review': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-block text-center whitespace-nowrap">IN REVIEW</span>',
+      'todo': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-block text-center whitespace-nowrap">TO DO</span>',
+      'backlog': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 inline-block text-center whitespace-nowrap">BACKLOG</span>'
     };
-    return map[status] || `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">${this.escapeHtml(status?.toUpperCase() || 'UNKNOWN')}</span>`;
+    return map[status] || `<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">${this.escapeHtml(status?.toUpperCase() || 'UNKNOWN')}</span>`;
   },
 
   getReportPriorityBadge(priority) {
     const map = {
-      'urgent': '<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-300 dark:border-rose-800 inline-block whitespace-nowrap">URGENT</span>',
-      'high': '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border border-orange-300 dark:border-orange-800 inline-block whitespace-nowrap">HIGH</span>',
-      'medium': '<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800 inline-block whitespace-nowrap">MEDIUM</span>',
-      'low': '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 inline-block whitespace-nowrap">LOW</span>'
+      'urgent': '<span class="report-badge px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-300 dark:border-rose-800 inline-block whitespace-nowrap">URGENT</span>',
+      'high': '<span class="report-badge px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border border-orange-300 dark:border-orange-800 inline-block whitespace-nowrap">HIGH</span>',
+      'medium': '<span class="report-badge px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800 inline-block whitespace-nowrap">MEDIUM</span>',
+      'low': '<span class="report-badge px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 inline-block whitespace-nowrap">LOW</span>'
     };
-    return map[priority] || `<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">${this.escapeHtml(priority?.toUpperCase() || 'NORMAL')}</span>`;
+    return map[priority] || `<span class="report-badge px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">${this.escapeHtml(priority?.toUpperCase() || 'NORMAL')}</span>`;
   },
 
   renderProjectReport() {
@@ -5269,10 +5277,10 @@ const app = {
 
     sheet.innerHTML = `
       <!-- ==================== HEADER: SIMPLE & SOPHISTICATED ==================== -->
-      <div id="report-sec-header" class="space-y-2.5 pb-3 border-b-2 border-slate-900 dark:border-slate-300">
+      <div id="report-sec-header" class="space-y-2 pb-2.5 border-b-2 border-slate-900 dark:border-slate-300">
         
         <div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
-          <h1 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+          <h1 class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
             Project Activity Report
           </h1>
           <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">
@@ -5291,14 +5299,14 @@ const app = {
       </div>
 
       <!-- ==================== TWO SIDE-BY-SIDE METADATA PANELS ==================== -->
-      <div id="report-sec-terms" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div id="report-sec-terms" class="grid grid-cols-1 md:grid-cols-2 gap-3">
         
         <!-- Left Panel: Project & Client Context -->
-        <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 space-y-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-2">
+        <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 space-y-1 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-1.5">
             Project Context & Leadership
           </div>
-          <div class="text-sm font-black text-slate-900 dark:text-white truncate pb-0.5">
+          <div class="text-xs font-black text-slate-900 dark:text-white truncate pb-0.5">
             ${this.escapeHtml(p.name || 'Project')}
           </div>
           <div><span class="text-slate-500">Attention / Lead:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(lead.name || 'Alex Morgan')}</strong> (${this.escapeHtml(lead.role || 'Project Lead')})</div>
@@ -5308,8 +5316,8 @@ const app = {
         </div>
 
         <!-- Right Panel: Project & Schedule Terms -->
-        <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-4 sm:p-5 space-y-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-2">
+        <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 space-y-1 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-1.5">
             Project & Commercial Terms
           </div>
           <div><span class="text-slate-500">Project Code:</span> <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'}</strong></div>
@@ -5323,7 +5331,7 @@ const app = {
       </div>
 
       <!-- ==================== ACTIVITY & SPECIFICATION REGISTER ==================== -->
-      <div id="report-sec-register" class="space-y-3">
+      <div id="report-sec-register" class="space-y-2.5">
         
         <div class="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-700">
           <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white">
@@ -5338,14 +5346,14 @@ const app = {
           <table class="w-full text-left text-xs border-collapse">
             <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700 select-none">
               <tr>
-                <th class="py-3 px-3 w-10 text-center">#</th>
-                <th class="py-3 px-4 min-w-[280px]">Item & Specification / Deliverable Scope</th>
-                <th class="py-3 px-3 min-w-[130px]">Owner / Role</th>
-                <th class="py-3 px-3 min-w-[120px]">Timeline</th>
-                <th class="py-3 px-2.5 text-center min-w-[85px]">Status</th>
-                <th class="py-3 px-2.5 text-center min-w-[75px]">Priority</th>
-                <th class="py-3 px-3 text-center min-w-[85px]">Est / Act</th>
-                <th class="py-3 px-3 text-right min-w-[75px]">Progress</th>
+                <th class="report-col-num py-2.5 px-2 text-center">#</th>
+                <th class="report-col-spec py-2.5 px-3">Item & Specification / Scope</th>
+                <th class="report-col-owner py-2.5 px-2">Owner / Role</th>
+                <th class="report-col-timeline py-2.5 px-2">Timeline</th>
+                <th class="report-col-status py-2.5 px-1.5 text-center">Status</th>
+                <th class="report-col-priority py-2.5 px-1.5 text-center">Priority</th>
+                <th class="report-col-hours py-2.5 px-2 text-center">Est / Act</th>
+                <th class="report-col-progress py-2.5 px-2 text-right">Progress</th>
               </tr>
             </thead>
             <tbody id="report-activities-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
@@ -5357,53 +5365,53 @@ const app = {
       </div>
 
       <!-- ==================== EXECUTIVE TOTALS BLOCK (BOTTOM RIGHT) ==================== -->
-      <div id="report-sec-totals" class="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+      <div id="report-sec-totals" class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-3 border-t border-slate-200 dark:border-slate-700">
         
-        <div class="text-xs text-slate-500 dark:text-slate-400 space-y-1 max-w-sm">
+        <div class="text-xs text-slate-500 dark:text-slate-400 space-y-0.5 max-w-sm">
           <div class="font-bold text-slate-700 dark:text-slate-300">Notes & Compliance Declarations:</div>
           <div>• All project specifications, deliverables and quality parameters are governed under ICH and enterprise standard operating procedures.</div>
           <div>• Timelog records and audit trails are synced with internal project execution database.</div>
         </div>
 
         <!-- Right-Aligned Summary Stack -->
-        <div class="w-full sm:w-80 space-y-1.5 text-xs flex-shrink-0">
-          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+        <div class="w-full sm:w-80 space-y-1 text-xs flex-shrink-0">
+          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span class="text-slate-600 dark:text-slate-400">Total Activities in Scope:</span>
             <span class="font-bold text-slate-900 dark:text-white">${k.total_activities || 0}</span>
           </div>
-          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span class="text-slate-600 dark:text-slate-400">Completed Deliverables:</span>
             <span class="font-bold text-emerald-600 dark:text-emerald-400">${k.completed || 0}</span>
           </div>
-          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span class="text-slate-600 dark:text-slate-400">Active Workflows in Progress:</span>
             <span class="font-bold text-blue-600 dark:text-blue-400">${k.in_progress || 0}</span>
           </div>
-          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span class="text-slate-600 dark:text-slate-400">Pending in Pipeline (To Do / Review):</span>
             <span class="font-bold text-amber-600 dark:text-amber-400">${(k.to_do || 0) + (k.in_review || 0) + (k.backlog || 0)}</span>
           </div>
-          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span class="text-slate-600 dark:text-slate-400">Critical Overdue Deliverables:</span>
             <span class="font-bold ${k.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">${k.overdue || 0}</span>
           </div>
-          <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span class="text-slate-600 dark:text-slate-400">Total Work Hours Logged:</span>
             <span class="font-bold text-slate-900 dark:text-white">${k.total_actual_hours || 0} hrs <span class="font-normal text-slate-400">(${k.total_estimated_hours || 0} hrs Est.)</span></span>
           </div>
           
           <!-- Double-bordered Final Totals Row -->
-          <div class="flex justify-between items-center pt-2.5 pb-1 border-t-2 border-b-2 border-slate-900 dark:border-slate-300 text-sm">
+          <div class="flex justify-between items-center pt-2 pb-1 border-t-2 border-b-2 border-slate-900 dark:border-slate-300 text-xs">
             <span class="font-black text-slate-900 dark:text-white uppercase tracking-tight">Total Project Delivery:</span>
-            <span class="font-black text-slate-900 dark:text-white font-mono text-base">${k.completion_pct || 0}% Complete</span>
+            <span class="font-black text-slate-900 dark:text-white font-mono text-sm">${k.completion_pct || 0}% Complete</span>
           </div>
         </div>
 
       </div>
 
       <!-- Footer Sign-off -->
-      <div class="pt-6 text-center text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800 font-mono">
-        Authorized by Chemtatva Project Intelligence • Single Source of Truth
+      <div class="pt-4 text-center text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-800 font-mono">
+        Authorized by Project Intelligence • Single Source of Truth
       </div>
     `;
 
@@ -5445,12 +5453,12 @@ const app = {
         <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition align-top">
           
           <!-- Column 1: Number -->
-          <td class="py-3 px-3 text-center font-bold font-mono text-slate-400 text-xs">
+          <td class="report-col-num py-2.5 px-2 text-center font-bold font-mono text-slate-400 text-xs">
             ${seqStr}
           </td>
 
           <!-- Column 2: Item & Specification / Scope -->
-          <td class="py-3 px-4 space-y-1.5">
+          <td class="report-col-spec py-2.5 px-3 space-y-1">
             <div class="font-black text-slate-900 dark:text-white text-xs leading-snug">
               ${this.escapeHtml(t.title)}
             </div>
@@ -5462,19 +5470,19 @@ const app = {
             ` : ''}
 
             ${t.deliverables ? `
-              <div class="text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30 px-2 py-1 rounded border border-blue-100 dark:border-blue-900/40">
+              <div class="report-deliverable-box text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-900/40">
                 <strong>Deliverable:</strong> ${this.escapeHtml(t.deliverables)}
               </div>
             ` : ''}
 
             <!-- Subtasks Tree Hierarchy -->
             ${subtasks.length > 0 ? `
-              <div class="font-mono text-[10px] space-y-0.5 pt-0.5 text-slate-600 dark:text-slate-400">
+              <div class="report-subtasks-tree font-mono text-[10px] space-y-0.5 pt-0.5 text-slate-600 dark:text-slate-400">
                 ${subtasks.map((st, s_idx) => {
                   const isLast = s_idx === subtasks.length - 1;
                   const prefix = isLast ? '└── ' : '├── ';
                   return `
-                    <div class="flex items-center space-x-1.5 ${st.completed ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : ''}">
+                    <div class="flex items-center space-x-1 ${st.completed ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : ''}">
                       <span class="text-slate-400 select-none">${prefix}</span>
                       <span>[${st.completed ? '✔' : ' '}]</span>
                       <span class="${st.completed ? 'line-through opacity-80' : ''}">${this.escapeHtml(st.title)}</span>
@@ -5486,59 +5494,59 @@ const app = {
 
             <!-- Dependencies & Tags -->
             ${(dependsOn.length > 0 || blocks.length > 0 || tags.length > 0) ? `
-              <div class="flex flex-wrap items-center gap-1.5 text-[10px] pt-1">
+              <div class="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
                 ${dependsOn.length > 0 ? `
                   <span class="text-slate-500">Depends on: <strong>${dependsOn.map(d => '#' + d.seq_num).join(', ')}</strong></span>
                 ` : ''}
                 ${blocks.length > 0 ? `
                   <span class="text-slate-500">| Blocks: <strong>${blocks.map(b => '#' + b.seq_num).join(', ')}</strong></span>
                 ` : ''}
-                ${tags.map(tg => `<span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-mono">#${this.escapeHtml(tg)}</span>`).join('')}
+                ${tags.map(tg => `<span class="px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-mono text-[9px]">#${this.escapeHtml(tg)}</span>`).join('')}
               </div>
             ` : ''}
           </td>
 
           <!-- Column 3: Owner & Role -->
-          <td class="py-3 px-3 text-xs">
-            <div class="font-bold text-slate-900 dark:text-white truncate max-w-[130px]">
+          <td class="report-col-owner py-2.5 px-2 text-xs">
+            <div class="font-bold text-slate-900 dark:text-white truncate">
               ${this.escapeHtml(t.assignee_name || 'Unassigned')}
             </div>
-            <div class="text-[10px] text-slate-400 truncate max-w-[130px]">
+            <div class="text-[10px] text-slate-400 truncate">
               ${this.escapeHtml(t.assignee_role || 'Contributor')}
             </div>
           </td>
 
           <!-- Column 4: Timeline -->
-          <td class="py-3 px-3 text-xs font-mono">
+          <td class="report-col-timeline py-2.5 px-2 text-xs font-mono">
             <div class="text-slate-700 dark:text-slate-300 whitespace-nowrap">
               ${this.escapeHtml(t.start_date || '—')} → <span class="${t.is_overdue ? 'text-rose-600 font-bold' : ''}">${this.escapeHtml(t.due_date || '—')}</span>
             </div>
             <div class="text-[10px] text-slate-400">
               ${t.duration_days ? `${t.duration_days} days` : 'Ongoing'}
-              ${t.is_overdue ? `<span class="text-rose-600 font-bold">(${t.delay_days}d overdue)</span>` : ''}
+              ${t.is_overdue ? `<span class="text-rose-600 font-bold">(${t.delay_days}d late)</span>` : ''}
             </div>
           </td>
 
           <!-- Column 5: Status -->
-          <td class="py-3 px-2.5 text-center">
+          <td class="report-col-status py-2.5 px-1.5 text-center">
             ${this.getReportStatusBadge(t.status)}
           </td>
 
           <!-- Column 6: Priority -->
-          <td class="py-3 px-2.5 text-center">
+          <td class="report-col-priority py-2.5 px-1.5 text-center">
             ${this.getReportPriorityBadge(t.priority)}
           </td>
 
           <!-- Column 7: Est / Act -->
-          <td class="py-3 px-3 text-center text-xs font-mono">
+          <td class="report-col-hours py-2.5 px-2 text-center text-xs font-mono">
             <span class="font-bold text-slate-900 dark:text-white">${t.actual_hours || 0}h</span>
-            <span class="text-slate-400"> / ${t.estimated_hours || 0}h</span>
+            <span class="text-slate-400 text-[10px]"> / ${t.estimated_hours || 0}h</span>
           </td>
 
           <!-- Column 8: Progress % -->
-          <td class="py-3 px-3 text-right font-mono font-bold text-xs">
+          <td class="report-col-progress py-2.5 px-2 text-right font-mono font-bold text-xs">
             <div class="text-slate-900 dark:text-white">${t.progress_pct || 0}%</div>
-            <div class="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden ml-auto mt-1">
+            <div class="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden ml-auto mt-0.5">
               <div class="bg-emerald-500 h-full" style="width: ${t.progress_pct || 0}%"></div>
             </div>
           </td>
