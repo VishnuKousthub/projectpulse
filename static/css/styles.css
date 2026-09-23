@@ -186,3 +186,108 @@ main.app-main {
 .pulse-indicator {
   animation: pulse-ring 2s infinite ease-in-out;
 }
+
+/* ==================== CUMULATIVE PROJECT ACTIVITY REPORT STYLES ==================== */
+.report-activity-card {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.report-printable-sheet {
+  min-height: 80vh;
+}
+
+/* Print Optimization Styles */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1.2cm 1cm 1.2cm 1cm;
+  }
+
+  /* Hide non-printable app chrome */
+  body, html {
+    overflow: visible !important;
+    height: auto !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  #sidebar,
+  header.app-header,
+  .app-main,
+  #toast-container,
+  #auth-container,
+  #email-preview-modal,
+  #task-modal,
+  #project-modal,
+  #import-export-modal,
+  #gantt-upload-modal,
+  #notifications-modal,
+  #user-dropdown-menu,
+  #project-report-modal > div > div:first-child,
+  #project-report-modal aside {
+    display: none !important;
+  }
+
+  #project-report-modal {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    z-index: 99999 !important;
+  }
+
+  #project-report-modal > div {
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+  }
+
+  #project-report-document-container {
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    height: auto !important;
+  }
+
+  #project-report-sheet {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Prevent awkward page breaks inside cards, tables, sections */
+  .report-activity-card,
+  #report-sec-kpis,
+  #report-sec-workload,
+  #report-sec-attention,
+  #report-sec-roadmap,
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Force background colors on print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

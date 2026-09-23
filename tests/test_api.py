@@ -885,6 +885,47 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(status_alias, 200)
         self.assertEqual(data_alias["kpis"]["total_projects"], kpis["total_projects"])
 
+    def test_25_cumulative_project_report(self):
+        # 1. Fetch JSON cumulative report for project 1
+        status, report = self.request("/api/projects/1/cumulative-report")
+        self.assertEqual(status, 200)
+        self.assertIn("project", report)
+        self.assertIn("metadata", report)
+        self.assertIn("kpis", report)
+        self.assertIn("workload", report)
+        self.assertIn("attention_required", report)
+        self.assertIn("milestones", report)
+        self.assertIn("activities", report)
+
+        self.assertEqual(report["project"]["id"], 1)
+        self.assertGreaterEqual(len(report["activities"]), 1)
+
+        # Check activity fields
+        first_act = report["activities"][0]
+        self.assertIn("seq_num", first_act)
+        self.assertIn("title", first_act)
+        self.assertIn("status", first_act)
+        self.assertIn("priority", first_act)
+        self.assertIn("assignee_name", first_act)
+        self.assertIn("subtasks", first_act)
+        self.assertIn("dependencies", first_act)
+        self.assertIn("timelogs", first_act)
+        self.assertIn("activity_history", first_act)
+
+        # 2. Check 404 for non-existent project
+        status_404, err = self.request("/api/projects/99999/cumulative-report")
+        self.assertEqual(status_404, 404)
+
+        # 3. Test Excel export endpoint
+        status_export, excel_data = self.request("/api/projects/1/cumulative-report/export")
+        self.assertEqual(status_export, 200)
+        # Excel .xlsx is a zip archive starting with PK\x03\x04
+        if isinstance(excel_data, str):
+            excel_bytes = excel_data.encode("latin1")
+        else:
+            excel_bytes = excel_data
+        self.assertTrue(excel_bytes.startswith(b"PK\x03\x04") or b"PK" in excel_bytes[:10])
+
 if __name__ == "__main__":
     unittest.main()
 

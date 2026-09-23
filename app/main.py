@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sqlite3
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -1699,6 +1700,702 @@ def get_activity(project_id):
             LIMIT 40
         """, (project_id,)).fetchall()
         return json_response(acts)
+
+# ==================== CUMULATIVE PROJECT ACTIVITY REPORT ====================
+
+def build_cumulative_project_report(conn, project_id, current_user=None):
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        return None
+
+    # Fetch all activities with assignee, sprint, subtasks, timelogs
+    raw_tasks = conn.execute("""
+        SELECT t.*,
+               m.name as assignee_name, m.role as assignee_role, m.avatar_color as assignee_avatar, m.email as assignee_email,
+               s.name as sprint_name
+        FROM tasks t
+        LEFT JOIN members m ON t.assignee_id = m.id
+        LEFT JOIN sprints s ON t.sprint_id = s.id
+        WHERE t.project_id = ?
+        ORDER BY t.order_index ASC, t.id ASC
+    """, (project_id,)).fetchall()
+
+    members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name ASC", (project_id,)).fetchall()
+    milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
+    sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date ASC", (project_id,)).fetchall()
+
+    # Subtasks
+    subtasks_raw = conn.execute("""
+        SELECT st.*
+        FROM subtasks st
+        JOIN tasks t ON st.task_id = t.id
+        WHERE t.project_id = ?
+        ORDER BY st.task_id, st.order_index ASC, st.id ASC
+    """, (project_id,)).fetchall()
+    subtasks_by_task = {}
+    for st in subtasks_raw:
+        tid = st["task_id"]
+        subtasks_by_task.setdefault(tid, []).append({
+            "id": st["id"],
+            "title": st["title"],
+            "completed": bool(st["completed"]),
+            "order_index": st["order_index"]
+        })
+
+    # Timelogs
+    timelogs_raw = conn.execute("""
+        SELECT tl.*, m.name as member_name
+        FROM timelogs tl
+        JOIN tasks t ON tl.task_id = t.id
+        LEFT JOIN members m ON tl.member_id = m.id
+        WHERE t.project_id = ?
+        ORDER BY tl.logged_date DESC
+    """, (project_id,)).fetchall()
+    timelogs_by_task = {}
+    for tl in timelogs_raw:
+        tid = tl["task_id"]
+        timelogs_by_task.setdefault(tid, []).append({
+            "id": tl["id"],
+            "member_id": tl["member_id"],
+            "member_name": tl["member_name"] or "Team Member",
+            "hours": safe_float(tl["hours"]),
+            "description": tl["description"] or "",
+            "logged_date": tl["logged_date"]
+        })
+
+    # Activity Logs
+    activity_logs_raw = conn.execute("""
+        SELECT * FROM activity_logs
+        WHERE project_id = ?
+        ORDER BY timestamp DESC
+    """, (project_id,)).fetchall()
+    activity_by_task = {}
+    for al in activity_logs_raw:
+        tid = al["task_id"]
+        if tid:
+            activity_by_task.setdefault(tid, []).append({
+                "id": al["id"],
+                "user_name": al["user_name"],
+                "action": al["action"],
+                "details": al["details"] or "",
+                "timestamp": al["timestamp"]
+            })
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    total_activities = len(raw_tasks)
+    completed_count = 0
+    in_progress_count = 0
+    todo_count = 0
+    in_review_count = 0
+    backlog_count = 0
+    overdue_count = 0
+    urgent_high_count = 0
+    total_est_hours = 0.0
+    total_act_hours = 0.0
+    with_dates_count = 0
+    unassigned_count = 0
+
+    status_counts = {"done": 0, "in_progress": 0, "todo": 0, "in_review": 0, "backlog": 0}
+    priority_counts = {"urgent": 0, "high": 0, "medium": 0, "low": 0}
+
+    assignee_stats = {}
+    for m in members:
+        assignee_stats[m["id"]] = {
+            "id": m["id"],
+            "name": m["name"],
+            "role": m["role"] or "Member",
+            "email": m["email"] or "",
+            "avatar_color": m["avatar_color"] or "#6366F1",
+            "total": 0,
+            "completed": 0,
+            "in_progress": 0,
+            "pending": 0,
+            "overdue": 0,
+            "total_est_hours": 0.0,
+            "total_act_hours": 0.0
+        }
+    unassigned_stats = {
+        "id": None,
+        "name": "Unassigned",
+        "role": "Not Assigned",
+        "email": "",
+        "avatar_color": "#94A3B8",
+        "total": 0,
+        "completed": 0,
+        "in_progress": 0,
+        "pending": 0,
+        "overdue": 0,
+        "total_est_hours": 0.0,
+        "total_act_hours": 0.0
+    }
+
+    overdue_list = []
+    urgent_high_pending_list = []
+    missing_dates_list = []
+    unassigned_list = []
+    tasks_output = []
+
+    for idx, t in enumerate(raw_tasks):
+        tid = t["id"]
+        status = t["status"] or "todo"
+        priority = t["priority"] or "medium"
+        est_h = safe_float(t["estimated_hours"])
+        act_h = safe_float(t["actual_hours"])
+        total_est_hours += est_h
+        total_act_hours += act_h
+
+        tags_list = []
+        if t["tags"]:
+            try:
+                tags_list = json.loads(t["tags"]) if isinstance(t["tags"], str) else t["tags"]
+                if not isinstance(tags_list, list):
+                    tags_list = [str(tags_list)]
+            except Exception:
+                tags_list = [tag.strip() for tag in str(t["tags"]).split(",") if tag.strip()]
+
+        subtasks = subtasks_by_task.get(tid, [])
+        st_completed = sum(1 for s in subtasks if s["completed"])
+        st_count = len(subtasks)
+
+        if status == "done":
+            progress_pct = 100
+        elif status == "in_review":
+            progress_pct = 85
+        elif status == "in_progress":
+            progress_pct = max(10, int((st_completed / st_count) * 100)) if st_count > 0 else 50
+        else:
+            progress_pct = 0
+
+        start_d = t["start_date"]
+        due_d = t["due_date"]
+        duration_days = None
+        is_overdue = False
+        delay_days = 0
+
+        if start_d and due_d:
+            try:
+                d1 = datetime.strptime(start_d, "%Y-%m-%d")
+                d2 = datetime.strptime(due_d, "%Y-%m-%d")
+                duration_days = max(1, (d2 - d1).days + 1)
+            except Exception:
+                pass
+
+        if due_d:
+            with_dates_count += 1
+            if status != "done" and due_d < today_str:
+                is_overdue = True
+                overdue_count += 1
+                try:
+                    due_obj = datetime.strptime(due_d, "%Y-%m-%d")
+                    now_obj = datetime.strptime(today_str, "%Y-%m-%d")
+                    delay_days = max(1, (now_obj - due_obj).days)
+                except Exception:
+                    delay_days = 1
+        else:
+            if not start_d and not due_d:
+                missing_dates_list.append({
+                    "id": tid,
+                    "seq_num": idx + 1,
+                    "title": t["title"],
+                    "assignee_name": t["assignee_name"] or "Unassigned",
+                    "status": status,
+                    "priority": priority
+                })
+
+        if status == "done":
+            completed_count += 1
+            status_counts["done"] = status_counts.get("done", 0) + 1
+        elif status == "in_progress":
+            in_progress_count += 1
+            status_counts["in_progress"] = status_counts.get("in_progress", 0) + 1
+        elif status == "in_review":
+            in_review_count += 1
+            status_counts["in_review"] = status_counts.get("in_review", 0) + 1
+        elif status == "backlog":
+            backlog_count += 1
+            status_counts["backlog"] = status_counts.get("backlog", 0) + 1
+        else:
+            todo_count += 1
+            status_counts["todo"] = status_counts.get("todo", 0) + 1
+
+        priority_counts[priority] = priority_counts.get(priority, 0) + 1
+        if priority in ("urgent", "high"):
+            urgent_high_count += 1
+            if status != "done":
+                urgent_high_pending_list.append({
+                    "id": tid,
+                    "seq_num": idx + 1,
+                    "title": t["title"],
+                    "priority": priority,
+                    "status": status,
+                    "assignee_name": t["assignee_name"] or "Unassigned",
+                    "due_date": due_d or "Not Declared"
+                })
+
+        if is_overdue:
+            overdue_list.append({
+                "id": tid,
+                "seq_num": idx + 1,
+                "title": t["title"],
+                "due_date": due_d,
+                "delay_days": delay_days,
+                "assignee_name": t["assignee_name"] or "Unassigned",
+                "priority": priority,
+                "status": status
+            })
+
+        aid = t["assignee_id"]
+        if aid and aid in assignee_stats:
+            astat = assignee_stats[aid]
+            astat["total"] += 1
+            astat["total_est_hours"] += est_h
+            astat["total_act_hours"] += act_h
+            if status == "done":
+                astat["completed"] += 1
+            elif status == "in_progress":
+                astat["in_progress"] += 1
+            else:
+                astat["pending"] += 1
+            if is_overdue:
+                astat["overdue"] += 1
+        else:
+            unassigned_count += 1
+            unassigned_stats["total"] += 1
+            unassigned_stats["total_est_hours"] += est_h
+            unassigned_stats["total_act_hours"] += act_h
+            if status == "done":
+                unassigned_stats["completed"] += 1
+            elif status == "in_progress":
+                unassigned_stats["in_progress"] += 1
+            else:
+                unassigned_stats["pending"] += 1
+            if is_overdue:
+                unassigned_stats["overdue"] += 1
+            unassigned_list.append({
+                "id": tid,
+                "seq_num": idx + 1,
+                "title": t["title"],
+                "status": status,
+                "priority": priority,
+                "due_date": due_d or "Not Declared"
+            })
+
+        deliverables_text = None
+        if t["description"] and "deliverable" in t["description"].lower():
+            deliverables_text = t["description"]
+        elif tags_list:
+            deliverables_text = f"Activity Deliverables Tagged: {', '.join(tags_list)}"
+
+        depends_on = []
+        blocks = []
+        if idx > 0:
+            prev_t = raw_tasks[idx - 1]
+            depends_on.append({
+                "id": prev_t["id"],
+                "seq_num": idx,
+                "title": prev_t["title"],
+                "status": prev_t["status"]
+            })
+        if idx < len(raw_tasks) - 1:
+            next_t = raw_tasks[idx + 1]
+            blocks.append({
+                "id": next_t["id"],
+                "seq_num": idx + 2,
+                "title": next_t["title"],
+                "status": next_t["status"]
+            })
+
+        tasks_output.append({
+            "id": tid,
+            "seq_num": idx + 1,
+            "title": t["title"],
+            "description": t["description"] or "",
+            "status": status,
+            "priority": priority,
+            "order_index": t["order_index"],
+            "start_date": start_d,
+            "due_date": due_d,
+            "duration_days": duration_days,
+            "is_overdue": is_overdue,
+            "delay_days": delay_days,
+            "estimated_hours": est_h,
+            "actual_hours": act_h,
+            "progress_pct": progress_pct,
+            "assignee_id": aid,
+            "assignee_name": t["assignee_name"] or "Unassigned",
+            "assignee_role": t["assignee_role"] or "Not Set",
+            "assignee_avatar": t["assignee_avatar"] or "#94A3B8",
+            "assignee_email": t["assignee_email"] or "",
+            "sprint_id": t["sprint_id"],
+            "sprint_name": t["sprint_name"] or "Standard Phase",
+            "tags": tags_list,
+            "subtasks": subtasks,
+            "subtask_count": st_count,
+            "subtask_completed_count": st_completed,
+            "timelogs": timelogs_by_task.get(tid, []),
+            "activity_history": activity_by_task.get(tid, []),
+            "deliverables": deliverables_text or "",
+            "dependencies": {
+                "depends_on": depends_on,
+                "blocks": blocks
+            },
+            "created_at": t["created_at"],
+            "updated_at": t["updated_at"]
+        })
+
+    completion_pct = round((completed_count / total_activities * 100), 1) if total_activities > 0 else 0.0
+
+    assignee_summary_list = []
+    for uid, s in assignee_stats.items():
+        if s["total"] > 0:
+            s["completion_pct"] = round((s["completed"] / s["total"] * 100), 1)
+            assignee_summary_list.append(s)
+    if unassigned_stats["total"] > 0:
+        unassigned_stats["completion_pct"] = round((unassigned_stats["completed"] / unassigned_stats["total"] * 100), 1)
+        assignee_summary_list.append(unassigned_stats)
+
+    assignee_summary_list.sort(key=lambda x: x["total"], reverse=True)
+
+    gen_by = "System Administrator"
+    if current_user and isinstance(current_user, dict) and current_user.get("full_name"):
+        gen_by = current_user["full_name"]
+
+    first_start = next((t["start_date"] for t in tasks_output if t["start_date"]), "Project Inception")
+    last_due = next((t["due_date"] for t in reversed(tasks_output) if t["due_date"]), "Current Date")
+
+    now_iso = get_now_iso()
+    period_str = f"{first_start} to {last_due}"
+
+    return {
+        "project": {
+            "id": project["id"],
+            "name": project["name"],
+            "description": project["description"] or "",
+            "created_at": project["created_at"],
+            "updated_at": project["updated_at"]
+        },
+        "metadata": {
+            "generated_at": now_iso,
+            "generated_by": gen_by,
+            "reporting_period": period_str,
+            "project_name": project["name"],
+            "project_id": project["id"]
+        },
+        "generated_at": now_iso,
+        "generated_by": gen_by,
+        "reporting_period": period_str,
+        "kpis": {
+            "total_activities": total_activities,
+            "completed": completed_count,
+            "in_progress": in_progress_count,
+            "to_do": todo_count,
+            "in_review": in_review_count,
+            "backlog": backlog_count,
+            "overdue": overdue_count,
+            "urgent_high": urgent_high_count,
+            "completion_pct": completion_pct,
+            "total_estimated_hours": total_est_hours,
+            "total_actual_hours": total_act_hours,
+            "activities_with_dates": with_dates_count,
+            "activities_without_dates": total_activities - with_dates_count,
+            "unassigned_activities": unassigned_count
+        },
+        "status_breakdown": status_counts,
+        "priority_breakdown": priority_counts,
+        "assignee_summary": assignee_summary_list,
+        "workload": assignee_summary_list,
+        "milestones": [dict(m) for m in milestones],
+        "sprints": [dict(s) for s in sprints],
+        "attention_required": {
+            "overdue": overdue_list,
+            "urgent_high_pending": urgent_high_pending_list,
+            "missing_dates": missing_dates_list,
+            "unassigned": unassigned_list
+        },
+        "activities": tasks_output
+    }
+
+def generate_cumulative_project_excel(report):
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+
+    navy_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    blue_header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    accent_fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+    light_blue_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+
+    status_done_fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+    status_prog_fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
+    prio_urgent_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
+    prio_high_fill = PatternFill(start_color="FFEDD5", end_color="FFEDD5", fill_type="solid")
+
+    title_font = Font(name="Calibri", size=15, bold=True, color="FFFFFF")
+    section_font = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True, color="0F172A")
+    regular_font = Font(name="Calibri", size=10, color="334155")
+    small_italic_font = Font(name="Calibri", size=9, italic=True, color="64748B")
+
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+
+    # 1. Executive Summary Sheet
+    ws1 = wb.active
+    ws1.title = "Executive Summary"
+    ws1.views.sheetView[0].showGridLines = True
+
+    ws1.merge_cells("A1:G2")
+    ws1["A1"] = f"ProjectPulse — Cumulative Project Activity Report\n{report['project']['name']} (ID: #{report['project']['id']})"
+    ws1["A1"].font = title_font
+    ws1["A1"].fill = navy_fill
+    ws1["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    ws1["A3"] = f"Generated: {report['generated_at'][:19].replace('T', ' ')} UTC | Generated By: {report['generated_by']} | Period: {report.get('reporting_period', 'All')}"
+    ws1["A3"].font = small_italic_font
+    ws1.merge_cells("A3:G3")
+
+    ws1["A5"] = "1. Executive Key Performance Indicators (KPIs)"
+    ws1["A5"].font = section_font
+    ws1["A5"].fill = accent_fill
+    ws1.merge_cells("A5:G5")
+
+    kpi_items = [
+        ("Total Activities", report["kpis"]["total_activities"], "Completed Activities", report["kpis"]["completed"]),
+        ("In Progress Activities", report["kpis"]["in_progress"], "Pending / To Do", report["kpis"]["to_do"]),
+        ("Overdue Activities", report["kpis"]["overdue"], "Urgent & High Priority", report["kpis"]["urgent_high"]),
+        ("Overall Completion Rate", f"{report['kpis']['completion_pct']}%", "Activities with Dates", report["kpis"]["activities_with_dates"]),
+        ("Total Estimated Hours", f"{report['kpis']['total_estimated_hours']} hrs", "Total Actual Hours Logged", f"{report['kpis']['total_actual_hours']} hrs"),
+    ]
+
+    r_idx = 6
+    for left_label, left_val, right_label, right_val in kpi_items:
+        ws1.cell(row=r_idx, column=1, value=left_label).font = bold_font
+        ws1.cell(row=r_idx, column=2, value=left_val).font = bold_font
+        ws1.cell(row=r_idx, column=4, value=right_label).font = bold_font
+        ws1.cell(row=r_idx, column=5, value=right_val).font = bold_font
+        for c in [1, 2, 4, 5]:
+            ws1.cell(row=r_idx, column=c).border = thin_border
+            if c in [1, 4]:
+                ws1.cell(row=r_idx, column=c).fill = light_blue_fill
+        r_idx += 1
+
+    r_idx += 2
+    ws1.cell(row=r_idx, column=1, value="2. Team Resource Workload & Delivery Summary").font = section_font
+    ws1.cell(row=r_idx, column=1).fill = accent_fill
+    ws1.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=7)
+    r_idx += 1
+
+    team_headers = ["Assignee Name", "Role", "Assigned Activities", "Completed", "In Progress", "Overdue", "Completion %"]
+    for col_idx, h in enumerate(team_headers, 1):
+        cell = ws1.cell(row=r_idx, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = blue_header_fill
+        cell.alignment = Alignment(horizontal="center" if col_idx > 2 else "left")
+        cell.border = thin_border
+    r_idx += 1
+
+    for row_data in report.get("assignee_summary", []):
+        ws1.cell(row=r_idx, column=1, value=row_data["name"]).font = bold_font
+        ws1.cell(row=r_idx, column=2, value=row_data["role"]).font = regular_font
+        ws1.cell(row=r_idx, column=3, value=row_data["total"]).alignment = Alignment(horizontal="center")
+        ws1.cell(row=r_idx, column=4, value=row_data["completed"]).alignment = Alignment(horizontal="center")
+        ws1.cell(row=r_idx, column=5, value=row_data["in_progress"]).alignment = Alignment(horizontal="center")
+        ws1.cell(row=r_idx, column=6, value=row_data["overdue"]).alignment = Alignment(horizontal="center")
+        ws1.cell(row=r_idx, column=7, value=f"{row_data.get('completion_pct', 0)}%").alignment = Alignment(horizontal="center")
+        for c in range(1, 8):
+            ws1.cell(row=r_idx, column=c).border = thin_border
+        r_idx += 1
+
+    for col in ws1.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws1.column_dimensions[col_letter].width = max(max_len + 3, 14)
+
+    # 2. Activity Register Sheet
+    ws2 = wb.create_sheet(title="Activity Register")
+    ws2.views.sheetView[0].showGridLines = True
+
+    act_headers = [
+        "Seq #", "ID", "Activity Title", "Status", "Priority",
+        "Owner", "Role", "Start Date", "End Date", "Duration (Days)",
+        "Progress %", "Est Hours", "Actual Hours", "Subtasks (Done/Total)",
+        "Tags", "Description", "Deliverables", "Dependencies (Depends On)", "Dependencies (Blocks)"
+    ]
+
+    for col_idx, h in enumerate(act_headers, 1):
+        cell = ws2.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = blue_header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = thin_border
+    ws2.row_dimensions[1].height = 28
+
+    r_idx = 2
+    for t in report.get("activities", []):
+        subtasks_str = f"{t.get('subtask_completed_count', 0)} / {t.get('subtask_count', 0)}" if t.get('subtask_count', 0) > 0 else "None"
+        tags_str = ", ".join(t.get("tags", [])) if t.get("tags") else "None"
+        depends_on_str = ", ".join([f"#{d['seq_num']} {d['title']}" for d in t.get("dependencies", {}).get("depends_on", [])]) or "None"
+        blocks_str = ", ".join([f"#{b['seq_num']} {b['title']}" for b in t.get("dependencies", {}).get("blocks", [])]) or "None"
+
+        ws2.cell(row=r_idx, column=1, value=f"#{t['seq_num']:02d}").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=2, value=t["id"]).alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=3, value=t["title"]).font = bold_font
+        
+        status_cell = ws2.cell(row=r_idx, column=4, value=t["status"].upper().replace("_", " "))
+        status_cell.alignment = Alignment(horizontal="center")
+        if t["status"] == "done":
+            status_cell.fill = status_done_fill
+        elif t["status"] == "in_progress":
+            status_cell.fill = status_prog_fill
+        
+        prio_cell = ws2.cell(row=r_idx, column=5, value=t["priority"].upper())
+        prio_cell.alignment = Alignment(horizontal="center")
+        if t["priority"] == "urgent":
+            prio_cell.fill = prio_urgent_fill
+        elif t["priority"] == "high":
+            prio_cell.fill = prio_high_fill
+
+        ws2.cell(row=r_idx, column=6, value=t["assignee_name"])
+        ws2.cell(row=r_idx, column=7, value=t["assignee_role"])
+        ws2.cell(row=r_idx, column=8, value=t["start_date"] or "Not Set").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=9, value=t["due_date"] or "Not Set").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=10, value=t["duration_days"] or "N/A").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=11, value=f"{t['progress_pct']}%").alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=12, value=t["estimated_hours"]).alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=13, value=t["actual_hours"]).alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=14, value=subtasks_str).alignment = Alignment(horizontal="center")
+        ws2.cell(row=r_idx, column=15, value=tags_str)
+        ws2.cell(row=r_idx, column=16, value=t["description"] or "Not Available")
+        ws2.cell(row=r_idx, column=17, value=t["deliverables"] or "Not Available")
+        ws2.cell(row=r_idx, column=18, value=depends_on_str)
+        ws2.cell(row=r_idx, column=19, value=blocks_str)
+
+        for c in range(1, 20):
+            ws2.cell(row=r_idx, column=c).border = thin_border
+            if c != 3:
+                ws2.cell(row=r_idx, column=c).font = regular_font
+        r_idx += 1
+
+    for col in ws2.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws2.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 40)
+
+    # 3. Attention Required Sheet
+    ws3 = wb.create_sheet(title="Attention Required")
+    ws3.views.sheetView[0].showGridLines = True
+
+    ws3["A1"] = "Critical Attention Required — Overdue & High Priority Items"
+    ws3["A1"].font = section_font
+    ws3["A1"].fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")
+    ws3.merge_cells("A1:F1")
+
+    risk_headers = ["Category", "Activity #", "Activity Title", "Assignee", "Due Date", "Status / Delay"]
+    for col_idx, h in enumerate(risk_headers, 1):
+        cell = ws3.cell(row=2, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = blue_header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin_border
+
+    r_idx = 3
+    for o in report.get("attention_required", {}).get("overdue", []):
+        ws3.cell(row=r_idx, column=1, value="OVERDUE").fill = prio_urgent_fill
+        ws3.cell(row=r_idx, column=2, value=f"#{o['seq_num']:02d}").alignment = Alignment(horizontal="center")
+        ws3.cell(row=r_idx, column=3, value=o["title"]).font = bold_font
+        ws3.cell(row=r_idx, column=4, value=o["assignee_name"])
+        ws3.cell(row=r_idx, column=5, value=o["due_date"]).alignment = Alignment(horizontal="center")
+        ws3.cell(row=r_idx, column=6, value=f"Overdue by {o.get('delay_days', 1)} day(s)").font = Font(color="DC2626", bold=True)
+        for c in range(1, 7):
+            ws3.cell(row=r_idx, column=c).border = thin_border
+        r_idx += 1
+
+    for u in report.get("attention_required", {}).get("urgent_high_pending", []):
+        ws3.cell(row=r_idx, column=1, value=f"PENDING ({u['priority'].upper()})").fill = prio_high_fill
+        ws3.cell(row=r_idx, column=2, value=f"#{u['seq_num']:02d}").alignment = Alignment(horizontal="center")
+        ws3.cell(row=r_idx, column=3, value=u["title"]).font = bold_font
+        ws3.cell(row=r_idx, column=4, value=u["assignee_name"])
+        ws3.cell(row=r_idx, column=5, value=u["due_date"]).alignment = Alignment(horizontal="center")
+        ws3.cell(row=r_idx, column=6, value=u["status"].upper())
+        for c in range(1, 7):
+            ws3.cell(row=r_idx, column=c).border = thin_border
+        r_idx += 1
+
+    for col in ws3.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws3.column_dimensions[col_letter].width = max(max_len + 3, 14)
+
+    # 4. Milestones Sheet
+    ws4 = wb.create_sheet(title="Milestones Roadmap")
+    ws4.views.sheetView[0].showGridLines = True
+
+    ws4["A1"] = "Project Milestones & Deliverables Roadmap"
+    ws4["A1"].font = section_font
+    ws4["A1"].fill = accent_fill
+    ws4.merge_cells("A1:D1")
+
+    m_headers = ["Milestone ID", "Milestone Title", "Target Due Date", "Status"]
+    for col_idx, h in enumerate(m_headers, 1):
+        cell = ws4.cell(row=2, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = blue_header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin_border
+
+    r_idx = 3
+    for m in report.get("milestones", []):
+        ws4.cell(row=r_idx, column=1, value=f"#{m['id']}").alignment = Alignment(horizontal="center")
+        ws4.cell(row=r_idx, column=2, value=m["title"]).font = bold_font
+        ws4.cell(row=r_idx, column=3, value=m["due_date"]).alignment = Alignment(horizontal="center")
+        ws4.cell(row=r_idx, column=4, value=m["status"].upper()).alignment = Alignment(horizontal="center")
+        for c in range(1, 5):
+            ws4.cell(row=r_idx, column=c).border = thin_border
+        r_idx += 1
+
+    for col in ws4.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws4.column_dimensions[col_letter].width = max(max_len + 3, 16)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+@app.get("/api/projects/<project_id:int>/cumulative-report")
+def get_cumulative_report_endpoint(project_id):
+    curr_user = get_current_user()
+    with get_db() as conn:
+        report_data = build_cumulative_project_report(conn, project_id, current_user=curr_user)
+        if not report_data:
+            return json_response({"error": "Project not found"}, status=404)
+        return json_response(report_data)
+
+@app.get("/api/projects/<project_id:int>/cumulative-report/export")
+def export_cumulative_report_endpoint(project_id):
+    curr_user = get_current_user()
+    with get_db() as conn:
+        report_data = build_cumulative_project_report(conn, project_id, current_user=curr_user)
+        if not report_data:
+            return json_response({"error": "Project not found"}, status=404)
+        
+        excel_bytes = generate_cumulative_project_excel(report_data)
+        safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', report_data['project']['name'])
+        filename = f"{safe_name}_Cumulative_Activity_Report.xlsx"
+
+        response.content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        response.set_header("Content-Disposition", f'attachment; filename="{filename}"')
+        return excel_bytes
 
 # ==================== EXPORT & IMPORT ====================
 
