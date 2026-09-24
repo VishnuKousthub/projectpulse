@@ -443,43 +443,98 @@ main.app-main {
   }
 }
 
-/* ==================== SIDEBAR CONTROLLER STYLING ==================== */
+/* ==================== SIDEBAR CONTROLLER & SMOOTH TRANSITIONS ==================== */
 
 #sidebar {
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 16rem;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: width;
 }
 
-/* Collapsed Mode */
+/* Sidebar elements default transition properties (when expanded) */
+#sidebar .sidebar-label,
+#sidebar .sidebar-footer-btn-text {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 180px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar .brand-text {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 180px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar .brand-header-inner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  transition: padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  transition: background-color 0.15s ease, color 0.15s ease, padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar .sidebar-extra {
+  overflow: hidden;
+  max-height: 28px;
+  opacity: 1;
+  white-space: nowrap;
+  transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              margin 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar #project-select-container {
+  overflow: hidden;
+  max-height: 120px;
+  opacity: 1;
+  transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.28s ease;
+}
+
+#sidebar #projects-list-sidebar {
+  overflow: hidden;
+  max-height: 160px;
+  opacity: 1;
+  transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar .sidebar-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== COLLAPSED MODE & UNHOVERED HOVER-MODE ==================== */
+
 #sidebar.sidebar-collapsed {
   width: 68px !important;
 }
 
-#sidebar.sidebar-collapsed .sidebar-label,
-#sidebar.sidebar-collapsed .sidebar-extra,
-#sidebar.sidebar-collapsed #projects-list-sidebar,
-#sidebar.sidebar-collapsed #project-select-container,
-#sidebar.sidebar-collapsed .brand-text,
-#sidebar.sidebar-collapsed .sidebar-footer-btn-text {
-  display: none !important;
-}
-
-#sidebar.sidebar-collapsed .brand-header-inner {
-  justify-content: center !important;
-  padding: 0 !important;
-}
-
-#sidebar.sidebar-collapsed .nav-item {
-  justify-content: center !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-#sidebar.sidebar-collapsed .sidebar-footer-grid {
-  grid-template-columns: 1fr !important;
-}
-
-/* Hover-Expand Mode */
 #sidebar.sidebar-hover-expand {
   width: 68px !important;
   position: fixed !important;
@@ -487,51 +542,113 @@ main.app-main {
   top: 0;
   bottom: 0;
   z-index: 50;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.25);
 }
 
-#sidebar.sidebar-hover-expand .sidebar-label,
-#sidebar.sidebar-hover-expand .sidebar-extra,
-#sidebar.sidebar-hover-expand #projects-list-sidebar,
-#sidebar.sidebar-hover-expand #project-select-container,
-#sidebar.sidebar-hover-expand .brand-text,
-#sidebar.sidebar-hover-expand .sidebar-footer-btn-text {
-  display: none;
+#sidebar.sidebar-collapsed .sidebar-label,
+#sidebar.sidebar-collapsed .sidebar-footer-btn-text,
+#sidebar.sidebar-collapsed .brand-text,
+#sidebar.sidebar-hover-expand:not(:hover) .sidebar-label,
+#sidebar.sidebar-hover-expand:not(:hover) .sidebar-footer-btn-text,
+#sidebar.sidebar-hover-expand:not(:hover) .brand-text {
+  max-width: 0 !important;
+  opacity: 0 !important;
+  transform: translateX(-10px) !important;
+  pointer-events: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding: 0 !important;
 }
 
-#sidebar.sidebar-hover-expand .brand-header-inner {
-  justify-content: center;
-  padding: 0;
+#sidebar.sidebar-collapsed .sidebar-extra,
+#sidebar.sidebar-hover-expand:not(:hover) .sidebar-extra {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  pointer-events: none !important;
 }
 
-#sidebar.sidebar-hover-expand .nav-item {
-  justify-content: center;
-  padding-left: 0;
-  padding-right: 0;
+#sidebar.sidebar-collapsed #project-select-container,
+#sidebar.sidebar-hover-expand:not(:hover) #project-select-container {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom-color: transparent !important;
+  pointer-events: none !important;
 }
 
-#sidebar.sidebar-hover-expand .sidebar-footer-grid {
-  grid-template-columns: 1fr;
+#sidebar.sidebar-collapsed #projects-list-sidebar,
+#sidebar.sidebar-hover-expand:not(:hover) #projects-list-sidebar {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
+
+#sidebar.sidebar-collapsed .brand-header-inner,
+#sidebar.sidebar-hover-expand:not(:hover) .brand-header-inner {
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+#sidebar.sidebar-collapsed .nav-item,
+#sidebar.sidebar-hover-expand:not(:hover) .nav-item {
+  justify-content: center !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+#sidebar.sidebar-collapsed .sidebar-footer-grid,
+#sidebar.sidebar-hover-expand:not(:hover) .sidebar-footer-grid {
+  grid-template-columns: 1fr !important;
+}
+
+#sidebar.sidebar-collapsed #sidebar-control-btn,
+#sidebar.sidebar-hover-expand:not(:hover) #sidebar-control-btn {
+  justify-content: center !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* ==================== HOVER-EXPAND MODE: HOVERED STATE ==================== */
 
 #sidebar.sidebar-hover-expand:hover {
   width: 16rem !important;
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
 }
 
 #sidebar.sidebar-hover-expand:hover .sidebar-label,
-#sidebar.sidebar-hover-expand:hover .sidebar-extra,
-#sidebar.sidebar-hover-expand:hover #projects-list-sidebar,
-#sidebar.sidebar-hover-expand:hover #project-select-container,
+#sidebar.sidebar-hover-expand:hover .sidebar-footer-btn-text,
 #sidebar.sidebar-hover-expand:hover .brand-text {
-  display: block !important;
+  max-width: 180px !important;
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-hover-expand:hover .sidebar-extra {
+  max-height: 28px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-hover-expand:hover #project-select-container {
+  max-height: 120px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-hover-expand:hover #projects-list-sidebar {
+  max-height: 160px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 #sidebar.sidebar-hover-expand:hover .brand-header-inner {
-  justify-content: space-between !important;
-}
-
-#sidebar.sidebar-hover-expand:hover .brand-text {
-  display: flex !important;
+  justify-content: flex-start !important;
 }
 
 #sidebar.sidebar-hover-expand:hover .nav-item {
@@ -540,12 +657,14 @@ main.app-main {
   padding-right: 0.75rem !important;
 }
 
-#sidebar.sidebar-hover-expand:hover .sidebar-footer-btn-text {
-  display: inline !important;
-}
-
 #sidebar.sidebar-hover-expand:hover .sidebar-footer-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+#sidebar.sidebar-hover-expand:hover #sidebar-control-btn {
+  justify-content: space-between !important;
+  padding-left: 0.625rem !important;
+  padding-right: 0.625rem !important;
 }
 
 .sidebar-hover-placeholder {
