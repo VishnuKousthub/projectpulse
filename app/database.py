@@ -147,11 +147,11 @@ def seed_default_users(cursor):
     now_str = datetime.now(timezone.utc).isoformat()
     default_users = [
         ("admin", "admin@company.internal", "admin123", "System Administrator", "admin", "#3B82F6"),
-        ("pm", "pm@company.internal", "pm123", "Project Manager", "PM", "#6366F1"),
-        ("lead", "lead@company.internal", "lead123", "Project Lead", "Lead", "#8B5CF6"),
-        ("assignee", "assignee@company.internal", "assignee123", "Task Assignee", "Assignee", "#10B981"),
-        ("vishnu", "srivishnu@chemtatva.com", "chemtatva123", "Sri Vishnu", "PM", "#6366F1"),
-        ("alex", "alex.morgan@company.internal", "alex123", "Alex Morgan", "Assignee", "#10B981")
+        ("pm", "pm@company.internal", "pm123", "Project Manager", "pm", "#6366F1"),
+        ("lead", "lead@company.internal", "lead123", "Project Lead", "lead", "#8B5CF6"),
+        ("assignee", "assignee@company.internal", "assignee123", "Task Assignee", "assignee", "#10B981"),
+        ("vishnu", "srivishnu@chemtatva.com", "chemtatva123", "Sri Vishnu", "pm", "#6366F1"),
+        ("alex", "alex.morgan@company.internal", "alex123", "Alex Morgan", "assignee", "#10B981")
     ]
     for username, email, pwd, full_name, role, color in default_users:
         existing = cursor.execute("SELECT id FROM users WHERE LOWER(username) = ?", (username.lower(),)).fetchone()
@@ -160,6 +160,9 @@ def seed_default_users(cursor):
                 INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (username, email, hash_password(pwd), full_name, role, color, now_str))
+        else:
+            # Keep roles synchronized with standard definitions
+            cursor.execute("UPDATE users SET role = ?, full_name = ? WHERE id = ?", (role, full_name, existing["id"]))
 
 def init_db():
     with get_db() as conn:
@@ -257,6 +260,7 @@ def init_db():
             due_date TEXT,
             estimated_hours REAL DEFAULT 0,
             actual_hours REAL DEFAULT 0,
+            progress_pct INTEGER DEFAULT 0,
             assignee_id INTEGER,
             tags TEXT DEFAULT '[]', -- JSON string array of tags
             created_at TEXT NOT NULL,
@@ -266,6 +270,12 @@ def init_db():
             FOREIGN KEY (assignee_id) REFERENCES members (id) ON DELETE SET NULL
         )
         """)
+
+        # Migration: ensure progress_pct exists on existing tasks table
+        try:
+            cursor.execute("ALTER TABLE tasks ADD COLUMN progress_pct INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS subtasks (

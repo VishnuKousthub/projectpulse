@@ -102,7 +102,7 @@ def serve_favicon():
 def health_check():
     return json_response({"status": "healthy", "service": "ProjectPulse", "timestamp": get_now_iso()})
 
-# ==================== AUTHENTICATION ====================
+# ==================== AUTHENTICATION & ROLE PERMISSIONS ====================
 
 def get_current_user():
     auth_header = request.headers.get("Authorization", "")
@@ -123,6 +123,21 @@ def get_current_user():
             WHERE s.token = ? AND s.expires_at > datetime('now')
         """, (token,)).fetchone()
         return session
+
+def get_user_role(user=None):
+    if user is None:
+        user = get_current_user()
+    if not user:
+        return "admin"  # Default fallback for unauthenticated test requests or scripts
+    return str(user.get("role", "admin")).strip().lower()
+
+def is_full_access(user=None):
+    role = get_user_role(user)
+    return role in ("admin", "pm", "manager", "project manager")
+
+def is_progress_only(user=None):
+    role = get_user_role(user)
+    return role in ("lead", "assignee", "member", "viewer")
 
 def get_all_projects_aggregated(conn):
     return conn.execute("""
@@ -256,7 +271,9 @@ def auth_login():
             "email": user["email"],
             "full_name": user["full_name"],
             "role": user["role"],
-            "avatar_color": user["avatar_color"]
+            "avatar_color": user["avatar_color"],
+            "is_full_access": is_full_access(user),
+            "is_progress_only": is_progress_only(user)
         }
 
         # Precompute full bootstrap payload for instant 0ms landing
@@ -314,7 +331,7 @@ def auth_register():
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at, last_login)
-            VALUES (?, ?, ?, ?, 'manager', ?, ?, ?)
+            VALUES (?, ?, ?, ?, 'pm', ?, ?, ?)
         """, (username, email, pwd_hash, full_name, avatar_color, now_str, now_str))
         user_id = cursor.lastrowid
 
@@ -330,8 +347,10 @@ def auth_register():
             "username": username,
             "email": email,
             "full_name": full_name,
-            "role": "manager",
-            "avatar_color": avatar_color
+            "role": "pm",
+            "avatar_color": avatar_color,
+            "is_full_access": True,
+            "is_progress_only": False
         }
 
         bootstrap = get_bootstrap_payload(conn, user_id)
@@ -360,13 +379,18 @@ def auth_me():
 
     return json_response({
         "authenticated": True,
+        "role": user["role"],
+        "is_full_access": is_full_access(user),
+        "is_progress_only": is_progress_only(user),
         "user": {
             "id": user["user_id"],
             "username": user["username"],
             "email": user["email"],
             "full_name": user["full_name"],
             "role": user["role"],
-            "avatar_color": user["avatar_color"]
+            "avatar_color": user["avatar_color"],
+            "is_full_access": is_full_access(user),
+            "is_progress_only": is_progress_only(user)
         },
         "projects": bootstrap["projects"],
         "current_project": bootstrap["current_project"],
@@ -408,6 +432,10 @@ def get_projects():
 
 @app.post("/api/projects")
 def create_project():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create projects. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     name = data.get("name", "").strip()
     if not name:
@@ -490,6 +518,10 @@ def get_project(project_id):
 
 @app.put("/api/projects/<project_id:int>")
 def update_project(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot edit projects. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     with get_db() as conn:
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
@@ -512,6 +544,10 @@ def update_project(project_id):
 
 @app.delete("/api/projects/<project_id:int>")
 def delete_project(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot delete projects. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
@@ -534,6 +570,10 @@ def get_members(project_id):
 
 @app.post("/api/projects/<project_id:int>/members")
 def add_member(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot add members. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     name = " ".join(data.get("name", "").strip().split())
     if not name:
@@ -563,6 +603,10 @@ def add_member(project_id):
 
 @app.delete("/api/projects/<project_id:int>/members/<member_id:int>")
 def delete_member(project_id, member_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot remove members. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         member = conn.execute("SELECT name FROM members WHERE id = ? AND project_id = ?", (member_id, project_id)).fetchone()
         if member:
@@ -586,6 +630,10 @@ def delete_member(project_id, member_id):
 
 @app.delete("/api/members/<member_id:int>")
 def delete_member_direct(member_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot remove members. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         member = conn.execute("SELECT project_id, name FROM members WHERE id = ?", (member_id,)).fetchone()
         if not member:
@@ -623,6 +671,10 @@ def get_sprints(project_id):
 
 @app.post("/api/projects/<project_id:int>/sprints")
 def create_sprint(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create sprints. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     name = data.get("name", "").strip()
     if not name:
@@ -646,6 +698,10 @@ def create_sprint(project_id):
 
 @app.put("/api/projects/<project_id:int>/sprints/<sprint_id:int>")
 def update_sprint(project_id, sprint_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot update sprints. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     with get_db() as conn:
         sprint = conn.execute("SELECT * FROM sprints WHERE id = ? AND project_id = ?", (sprint_id, project_id)).fetchone()
@@ -672,6 +728,10 @@ def update_sprint(project_id, sprint_id):
 
 @app.delete("/api/projects/<project_id:int>/sprints/<sprint_id:int>")
 def delete_sprint(project_id, sprint_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot delete sprints. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         conn.execute("DELETE FROM sprints WHERE id = ? AND project_id = ?", (sprint_id, project_id))
         return json_response({"success": True})
@@ -686,6 +746,10 @@ def get_milestones(project_id):
 
 @app.post("/api/projects/<project_id:int>/milestones")
 def create_milestone(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create milestones. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     title = data.get("title", "").strip()
     due_date = data.get("due_date", "").strip()
@@ -706,6 +770,10 @@ def create_milestone(project_id):
 
 @app.put("/api/projects/<project_id:int>/milestones/<milestone_id:int>")
 def update_milestone(project_id, milestone_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot update milestones. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     with get_db() as conn:
         m = conn.execute("SELECT * FROM milestones WHERE id = ? AND project_id = ?", (milestone_id, project_id)).fetchone()
@@ -825,12 +893,31 @@ def get_tasks(project_id):
             t_dict["subtask_completed_count"] = sum(1 for s in t_subtasks if s.get("completed"))
             t_dict["logged_hours_sum"] = safe_float(logged_hours_by_task.get(t["id"], 0.0))
             t_dict["resources"] = resources_by_task.get(t["id"], [])
+
+            if t_dict.get("progress_pct") is None:
+                if t_dict.get("status") == "done":
+                    t_dict["progress_pct"] = 100
+                elif t_dict.get("status") == "in_review":
+                    t_dict["progress_pct"] = 85
+                elif t_dict.get("status") == "in_progress":
+                    st_cnt = t_dict["subtask_count"]
+                    st_done = t_dict["subtask_completed_count"]
+                    t_dict["progress_pct"] = max(10, int((st_done / st_cnt) * 100)) if st_cnt > 0 else 50
+                else:
+                    t_dict["progress_pct"] = 0
+
             result.append(t_dict)
 
         return json_response(result)
 
 @app.post("/api/projects/<project_id:int>/tasks")
 def create_task(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({
+            "error": f"Permission Denied: User role '{user.get('role')}' cannot create new activities. Only PM and Admin have full access control."
+        }, status=403)
+
     try:
         data = request.json or {}
     except Exception:
@@ -960,17 +1047,23 @@ def create_task(project_id):
             ).fetchone()["max_idx"]
             target_order = max_order + 1
 
+        progress_pct = safe_int(data.get("progress_pct"), 0)
+        if progress_pct is not None:
+            progress_pct = max(0, min(100, progress_pct))
+        else:
+            progress_pct = 0
+
         cursor.execute("""
             INSERT INTO tasks (
                 project_id, sprint_id, title, description, status, priority,
                 order_index, start_date, due_date, estimated_hours, actual_hours,
-                assignee_id, tags, created_at, updated_at
+                progress_pct, assignee_id, tags, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id, sprint_id, title, desc, status, priority,
             target_order, start_date, due_date, est_hours, act_hours,
-            assignee_id, tags_json, now_str, now_str
+            progress_pct, assignee_id, tags_json, now_str, now_str
         ))
         t_id = cursor.lastrowid
 
@@ -1056,6 +1149,18 @@ def get_task_dict(conn, task_id: int):
     t_dict["resources"] = task_resources_list
     t_dict["activities"] = [dict(a) for a in conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()]
 
+    if t_dict.get("progress_pct") is None:
+        if t_dict.get("status") == "done":
+            t_dict["progress_pct"] = 100
+        elif t_dict.get("status") == "in_review":
+            t_dict["progress_pct"] = 85
+        elif t_dict.get("status") == "in_progress":
+            st_cnt = t_dict["subtask_count"]
+            st_done = t_dict["subtask_completed_count"]
+            t_dict["progress_pct"] = max(10, int((st_done / st_cnt) * 100)) if st_cnt > 0 else 50
+        else:
+            t_dict["progress_pct"] = 0
+
     return t_dict
 
 @app.get("/api/tasks/<task_id:int>")
@@ -1068,6 +1173,7 @@ def get_task(task_id):
 
 @app.put("/api/tasks/<task_id:int>")
 def update_task(task_id):
+    user = get_current_user()
     try:
         data = request.json or {}
     except Exception:
@@ -1080,6 +1186,81 @@ def update_task(task_id):
 
         project_id = task["project_id"]
         cursor = conn.cursor()
+        now_str = get_now_iso()
+
+        # Check for restricted role (Lead / Assignee / Member)
+        if user and not is_full_access(user):
+            # Lead and Assignee can ONLY update progress (% and actual_hours)
+            # Check if any forbidden field is being changed
+            forbidden_attempted = False
+            
+            # Check status change
+            if "status" in data and data["status"] and str(data["status"]).strip() != str(task["status"]).strip():
+                forbidden_attempted = True
+            # Check title change
+            if "title" in data and clean_text(data["title"]) and clean_text(data["title"]) != task["title"]:
+                forbidden_attempted = True
+            # Check description change
+            if "description" in data and data["description"] is not None and str(data["description"]).strip() != str(task["description"] or "").strip():
+                forbidden_attempted = True
+            # Check priority change
+            if "priority" in data and data["priority"] and str(data["priority"]).strip() != str(task["priority"]).strip():
+                forbidden_attempted = True
+            # Check start_date change
+            if "start_date" in data:
+                sd = str(data["start_date"]).strip() if data["start_date"] and str(data["start_date"]).strip() not in ("", "null", "undefined", "None") else None
+                if sd != task["start_date"]:
+                    forbidden_attempted = True
+            # Check due_date change
+            if "due_date" in data:
+                dd = str(data["due_date"]).strip() if data["due_date"] and str(data["due_date"]).strip() not in ("", "null", "undefined", "None") else None
+                if dd != task["due_date"]:
+                    forbidden_attempted = True
+            # Check sprint_id change
+            if "sprint_id" in data:
+                sp = safe_int(data["sprint_id"])
+                sp = sp if (sp and sp > 0) else None
+                if sp != task["sprint_id"]:
+                    forbidden_attempted = True
+            # Check assignee change
+            if "assignee_id" in data:
+                aid = safe_int(data["assignee_id"])
+                aid = aid if (aid and aid > 0) else None
+                if aid != task["assignee_id"]:
+                    forbidden_attempted = True
+            if data.get("assignee_name") or data.get("new_assignee_name"):
+                forbidden_attempted = True
+            # Check resource_ids change
+            if "resource_ids" in data and isinstance(data["resource_ids"], list):
+                curr_res = [r["resource_id"] for r in conn.execute("SELECT resource_id FROM task_resources WHERE task_id = ?", (task_id,)).fetchall()]
+                new_res = [int(r) for r in data["resource_ids"] if str(r).isdigit()]
+                if sorted(curr_res) != sorted(new_res):
+                    forbidden_attempted = True
+
+            if forbidden_attempted:
+                return json_response({
+                    "error": f"Permission Denied: User role '{user.get('role')}' can only update activity progress (% and hours). Activity status, title, dates, assignees, and resources can only be modified by PM or Admin."
+                }, status=403)
+
+            # Proceed to update only progress_pct and actual_hours
+            progress_pct = safe_int(data.get("progress_pct"), task["progress_pct"] if "progress_pct" in task.keys() else 0)
+            if progress_pct is not None:
+                progress_pct = max(0, min(100, progress_pct))
+            else:
+                progress_pct = task["progress_pct"] if "progress_pct" in task.keys() else 0
+
+            act_hours = safe_float(data["actual_hours"], safe_float(task["actual_hours"], 0.0)) if "actual_hours" in data else safe_float(task["actual_hours"], 0.0)
+
+            conn.execute("""
+                UPDATE tasks SET progress_pct = ?, actual_hours = ?, updated_at = ?
+                WHERE id = ?
+            """, (progress_pct, act_hours, now_str, task_id))
+
+            actor_name = user.get("full_name") or user.get("username") or user.get("role", "User")
+            record_activity(conn, project_id, actor_name, "Progress Updated", f'Updated activity "{task["title"]}" progress to {progress_pct}%', task_id=task_id)
+
+            task_res = get_task_dict(conn, task_id)
+            return json_response(task_res)
         
         # 1. Text & Enum fields
         title = clean_text(data["title"]) if "title" in data and clean_text(data["title"]) else task["title"]
@@ -1157,6 +1338,13 @@ def update_task(task_id):
         else:
             act_hours = safe_float(task["actual_hours"], 0.0)
 
+        # Progress %
+        progress_pct = safe_int(data.get("progress_pct"), task["progress_pct"] if "progress_pct" in task.keys() else 0)
+        if progress_pct is not None:
+            progress_pct = max(0, min(100, progress_pct))
+        else:
+            progress_pct = task["progress_pct"] if "progress_pct" in task.keys() else 0
+
         # 6. Tags
         if "tags" in data:
             raw_tags = data["tags"]
@@ -1169,19 +1357,17 @@ def update_task(task_id):
             tags_json = json.dumps(tags_list)
         else:
             tags_json = task["tags"] or "[]"
-            
-        now_str = get_now_iso()
 
         conn.execute("""
             UPDATE tasks SET
                 title = ?, description = ?, status = ?, priority = ?, sprint_id = ?,
                 assignee_id = ?, order_index = ?, start_date = ?, due_date = ?,
-                estimated_hours = ?, actual_hours = ?, tags = ?, updated_at = ?
+                estimated_hours = ?, actual_hours = ?, progress_pct = ?, tags = ?, updated_at = ?
             WHERE id = ?
         """, (
             title, desc, status, priority, sprint_id,
             assignee_id, order_index, start_date, due_date,
-            est_hours, act_hours, tags_json, now_str, task_id
+            est_hours, act_hours, progress_pct, tags_json, now_str, task_id
         ))
 
         # 7. Subtasks if provided
@@ -1242,6 +1428,10 @@ def update_task(task_id):
 
 @app.post("/api/tasks/reorder")
 def reorder_tasks():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities or change status. Only PM and Admin have full access control."}, status=403)
+
     items = request.json or []
     if not isinstance(items, list):
         return json_response({"error": "Expected array of items"}, status=400)
@@ -1266,6 +1456,10 @@ def reorder_tasks():
 
 @app.post("/api/tasks/<task_id:int>/move")
 def move_task(task_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot move activities. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     direction = data.get("direction", "down")  # "up" or "down"
     
@@ -1301,6 +1495,10 @@ def move_task(task_id):
 
 @app.delete("/api/tasks/<task_id:int>")
 def delete_task(task_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot delete activities. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
@@ -2474,6 +2672,10 @@ def export_project(project_id):
 
 @app.post("/api/projects/import")
 def import_project():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot import projects. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     p_data = data.get("project", {})
     if not p_data or "name" not in p_data:
@@ -2574,6 +2776,9 @@ def get_sample_gantt_xlsx():
 
 @app.post("/api/projects/<project_id:int>/upload_gantt")
 def upload_gantt_file(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot upload Gantt files. Only PM and Admin have full access control."}, status=403)
     upload = request.files.get("file")
     if not upload:
         return json_response({"error": "No file uploaded"}, status=400)
@@ -2698,6 +2903,10 @@ def upload_gantt_file(project_id):
 
 @app.post("/api/seed/reset")
 def reset_database():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reset database. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("DROP TABLE IF EXISTS activity_logs")
@@ -2731,6 +2940,10 @@ def get_notification_settings():
 
 @app.put("/api/notifications/settings")
 def update_notification_settings():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot modify notification settings. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     with get_db() as conn:
         current = get_settings(conn)
@@ -2995,6 +3208,10 @@ def get_resources():
 
 @app.post("/api/resources")
 def create_resource():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create resources. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     name = clean_text(data.get("name"))
     res_type = clean_text(data.get("type") or "Employee")
@@ -3144,6 +3361,10 @@ def get_resource_detail(resource_id):
 
 @app.put("/api/resources/<resource_id:int>")
 def update_resource(resource_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot edit resources. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     with get_db() as conn:
         existing = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
@@ -3198,6 +3419,10 @@ def update_resource(resource_id):
 
 @app.delete("/api/resources/<resource_id:int>")
 def delete_resource(resource_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot delete resources. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         conn.execute("DELETE FROM task_resources WHERE resource_id = ?", (resource_id,))
         conn.execute("DELETE FROM project_resources WHERE resource_id = ?", (resource_id,))
@@ -3264,6 +3489,10 @@ def get_project_resources(project_id):
 
 @app.post("/api/projects/<project_id:int>/resources")
 def map_project_resource(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot map project resources. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     resource_id = safe_int(data.get("resource_id"))
     if not resource_id:
@@ -3329,6 +3558,10 @@ def map_project_resource(project_id):
 
 @app.put("/api/projects/<project_id:int>/resources/<mapping_id:int>")
 def update_project_resource_mapping(project_id, mapping_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot edit project resource mappings. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     with get_db() as conn:
         existing = conn.execute("SELECT * FROM project_resources WHERE id = ? AND project_id = ?", (mapping_id, project_id)).fetchone()
@@ -3368,6 +3601,10 @@ def update_project_resource_mapping(project_id, mapping_id):
 
 @app.delete("/api/projects/<project_id:int>/resources/<resource_or_mapping_id:int>")
 def unmap_project_resource(project_id, resource_or_mapping_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot unmap project resources. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         mapping = conn.execute(
             "SELECT * FROM project_resources WHERE (id = ? OR resource_id = ?) AND project_id = ?",
@@ -3407,6 +3644,10 @@ def get_task_resources(task_id):
 
 @app.post("/api/tasks/<task_id:int>/resources")
 def map_task_resource(task_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot map activity resources. Only PM and Admin have full access control."}, status=403)
+
     data = request.json or {}
     resource_id = safe_int(data.get("resource_id"))
     if not resource_id:
@@ -3431,6 +3672,10 @@ def map_task_resource(task_id):
 
 @app.delete("/api/tasks/<task_id:int>/resources/<resource_id:int>")
 def unmap_task_resource(task_id, resource_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot unmap activity resources. Only PM and Admin have full access control."}, status=403)
+
     with get_db() as conn:
         conn.execute("DELETE FROM task_resources WHERE task_id = ? AND resource_id = ?", (task_id, resource_id))
         return json_response({"success": True})

@@ -109,6 +109,81 @@ const app = {
     });
   },
 
+  getUserRole() {
+    return (this.state.user?.role || '').toLowerCase();
+  },
+
+  isFullAccess() {
+    const role = this.getUserRole();
+    return role === 'admin' || role === 'pm' || role === 'project manager' || role === 'manager' || !this.state.authToken;
+  },
+
+  isProgressOnly() {
+    const role = this.getUserRole();
+    return role === 'lead' || role === 'team lead' || role === 'assignee' || role === 'member' || role === 'developer';
+  },
+
+  syncTaskProgressSlider(val) {
+    let num = parseInt(val, 10);
+    if (isNaN(num)) num = 0;
+    num = Math.max(0, Math.min(100, num));
+    const slider = document.getElementById('task-input-progress-slider');
+    const input = document.getElementById('task-input-progress');
+    if (slider) slider.value = num;
+    if (input && document.activeElement !== input) input.value = num;
+  },
+
+  syncTaskProgressInput(val) {
+    const num = parseInt(val, 10) || 0;
+    const input = document.getElementById('task-input-progress');
+    if (input) input.value = num;
+  },
+
+  setTaskProgressPreset(val) {
+    const input = document.getElementById('task-input-progress');
+    const slider = document.getElementById('task-input-progress-slider');
+    if (input) input.value = val;
+    if (slider) slider.value = val;
+  },
+
+  applyRolePermissionsUI() {
+    const isProgress = this.isProgressOnly();
+
+    // Header buttons
+    const headerNewTaskBtn = document.getElementById('header-new-task-btn');
+    const headerUploadGanttBtn = document.getElementById('header-upload-gantt-btn');
+    if (headerNewTaskBtn) headerNewTaskBtn.style.display = isProgress ? 'none' : '';
+    if (headerUploadGanttBtn) headerUploadGanttBtn.style.display = isProgress ? 'none' : '';
+
+    // Sidebar project administration & backup buttons
+    const sbManageProject = document.getElementById('sidebar-manage-project-btn');
+    const sbNewProject = document.getElementById('sidebar-new-project-btn');
+    const sbAddProjIcon = document.getElementById('sidebar-add-project-icon-btn');
+    const sbImportExport = document.getElementById('sidebar-import-export-btn');
+    const sbResetDemo = document.getElementById('sidebar-reset-demo-btn');
+
+    if (sbManageProject) sbManageProject.style.display = isProgress ? 'none' : '';
+    if (sbNewProject) sbNewProject.style.display = isProgress ? 'none' : '';
+    if (sbAddProjIcon) sbAddProjIcon.style.display = isProgress ? 'none' : '';
+    if (sbImportExport) sbImportExport.style.display = isProgress ? 'none' : '';
+    if (sbResetDemo) sbResetDemo.style.display = isProgress ? 'none' : '';
+
+    // View specific buttons
+    const kanbanAddBtn = document.getElementById('kanban-add-task-btn');
+    const tableAddBtn = document.getElementById('table-add-task-btn');
+    const calendarAddBtn = document.getElementById('calendar-add-task-btn');
+    const ganttImportBtn = document.getElementById('gantt-import-excel-btn');
+    const resAddBtn = document.getElementById('res-add-library-btn');
+    const resMapBtn = document.getElementById('res-map-project-btn');
+
+    if (kanbanAddBtn) kanbanAddBtn.style.display = isProgress ? 'none' : '';
+    if (tableAddBtn) tableAddBtn.style.display = isProgress ? 'none' : '';
+    if (calendarAddBtn) calendarAddBtn.style.display = isProgress ? 'none' : '';
+    if (ganttImportBtn) ganttImportBtn.style.display = isProgress ? 'none' : '';
+    if (resAddBtn) resAddBtn.style.display = isProgress ? 'none' : '';
+    if (resMapBtn) resMapBtn.style.display = isProgress ? 'none' : '';
+  },
+
   initClickOutside() {
     document.addEventListener('click', (e) => {
       const userBtn = document.getElementById('user-profile-btn');
@@ -428,6 +503,7 @@ const app = {
   },
 
   renderCurrentView() {
+    this.applyRolePermissionsUI();
     switch (this.state.activeView) {
       case 'kanban':
         this.renderKanban();
@@ -503,6 +579,10 @@ const app = {
   },
 
   async advanceTaskStatus(taskId) {
+    if (this.isProgressOnly()) {
+      this.showToast('Activity status changes are restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
     const task = this.state.tasks.find(t => t.id === taskId);
     if (!task) return;
     const flow = ['backlog', 'todo', 'in_progress', 'in_review', 'done'];
@@ -512,6 +592,10 @@ const app = {
   },
 
   async quickToggleTaskDone(taskId, currentStatus) {
+    if (this.isProgressOnly()) {
+      this.showToast('Activity status changes are restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
     const nextStatus = currentStatus === 'done' ? 'in_progress' : 'done';
     await this.inlineUpdateTask(taskId, 'status', nextStatus);
   },
@@ -676,9 +760,11 @@ const app = {
               
               <div class="flex items-center space-x-1">
                 <span class="text-[10px] font-mono text-slate-400 font-semibold mr-1">${colHours.toFixed(0)}h</span>
+                ${!this.isProgressOnly() ? `
                 <button onclick="app.openTaskModal({status: '${col.id}'})" title="Add task to ${col.title}" class="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-white dark:hover:bg-slate-700 transition">
                   <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                 </button>
+                ` : ''}
               </div>
             </div>
 
@@ -713,29 +799,31 @@ const app = {
     }
     this.state.sortableInstances = [];
 
-    const containers = boardContainer.querySelectorAll('.kanban-col-body');
-    containers.forEach(container => {
-      try {
-        const sortable = new Sortable(container, {
-          group: 'kanban-cards',
-          animation: 150,
-          ghostClass: 'opacity-40',
-          chosenClass: 'scale-[1.02]',
-          dragClass: 'rotate-1',
-          onEnd: async (evt) => {
-            const itemEl = evt.item;
-            const taskId = parseInt(itemEl.getAttribute('data-task-id'), 10);
-            const newStatus = evt.to.getAttribute('data-status');
-            if (taskId && newStatus) {
-              await this.handleTaskMove(taskId, newStatus);
+    if (!this.isProgressOnly()) {
+      const containers = boardContainer.querySelectorAll('.kanban-col-body');
+      containers.forEach(container => {
+        try {
+          const sortable = new Sortable(container, {
+            group: 'kanban-cards',
+            animation: 150,
+            ghostClass: 'opacity-40',
+            chosenClass: 'scale-[1.02]',
+            dragClass: 'rotate-1',
+            onEnd: async (evt) => {
+              const itemEl = evt.item;
+              const taskId = parseInt(itemEl.getAttribute('data-task-id'), 10);
+              const newStatus = evt.to.getAttribute('data-status');
+              if (taskId && newStatus) {
+                await this.handleTaskMove(taskId, newStatus);
+              }
             }
-          }
-        });
-        this.state.sortableInstances.push(sortable);
-      } catch (err) {
-        console.error('Error initializing sortable on column:', err);
-      }
-    });
+          });
+          this.state.sortableInstances.push(sortable);
+        } catch (err) {
+          console.error('Error initializing sortable on column:', err);
+        }
+      });
+    }
 
     this.initLucide();
   },
@@ -811,6 +899,17 @@ const app = {
           </div>
         ` : ''}
 
+        <!-- Activity Progress (%) -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-[10px] text-slate-400 font-semibold">
+            <span class="flex items-center gap-1"><i data-lucide="trending-up" class="w-3 h-3 text-blue-500"></i> Progress</span>
+            <span class="font-mono text-blue-600 dark:text-blue-400 font-bold">${task.progress_pct || 0}%</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div class="h-full ${(task.progress_pct || 0) === 100 ? 'bg-emerald-500' : 'bg-blue-600'} rounded-full transition-all duration-300" style="width: ${task.progress_pct || 0}%"></div>
+          </div>
+        </div>
+
         <!-- Subtasks Progress (if any) -->
         ${subtaskTotal > 0 ? `
           <div class="space-y-1">
@@ -880,6 +979,10 @@ const app = {
   },
 
   async handleTaskMove(taskId, newStatus) {
+    if (this.isProgressOnly()) {
+      this.showToast('Activity status changes are restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
     const numId = Number(taskId);
     const task = this.state.tasks.find(t => t.id === numId || t.id === taskId);
     if (!task) return;
@@ -1493,6 +1596,7 @@ const app = {
 
     // 5. Render Sequential Activity Rows
     let html = '';
+    const isProgress = this.isProgressOnly();
     filtered.forEach((t, idx) => {
       const isDone = t.status === 'done';
       const isOverdue = !isDone && t.due_date && t.due_date < todayStr;
@@ -1527,14 +1631,15 @@ const app = {
           <!-- 1. Activity Name & Sequence -->
           <td class="px-3.5 py-2.5">
             <div class="flex items-center space-x-2.5">
-              <button onclick="app.inlineUpdateTask(${t.id}, 'status', '${isDone ? 'in_progress' : 'done'}')"
-                class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition ${isDone ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'}"
-                title="${isDone ? 'Mark as in progress' : 'Mark as completed'}">
+              <button ${isProgress ? '' : `onclick="app.inlineUpdateTask(${t.id}, 'status', '${isDone ? 'in_progress' : 'done'}')"`}
+                class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition ${isDone ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'} ${isProgress ? 'cursor-not-allowed opacity-75' : 'hover:border-blue-500'}"
+                title="${isProgress ? 'Status modification restricted to PM/Admin' : (isDone ? 'Mark as in progress' : 'Mark as completed')}">
                 ${isDone ? '<i data-lucide="check" class="w-3 h-3"></i>' : ''}
               </button>
               
               <div class="flex items-center space-x-1 flex-shrink-0">
                 <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 font-bold">#${(idx + 1).toString().padStart(2, '0')}</span>
+                ${!isProgress ? `
                 <div class="opacity-0 group-hover:opacity-100 flex flex-col -space-y-1 transition">
                   <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'up')" title="Move Up" class="p-0.5 hover:text-blue-600 text-slate-400 ${idx === 0 ? 'invisible pointer-events-none' : ''}">
                     <i data-lucide="chevron-up" class="w-3 h-3"></i>
@@ -1543,6 +1648,7 @@ const app = {
                     <i data-lucide="chevron-down" class="w-3 h-3"></i>
                   </button>
                 </div>
+                ` : ''}
               </div>
 
               <div class="min-w-0 flex-1">
@@ -1560,8 +1666,8 @@ const app = {
           <!-- 2. Status Dropdown -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[120px]">
-              <select onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"
-                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${statusConfig.color}">
+              <select ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"`}
+                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${statusConfig.color} ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
                 <option value="backlog" ${t.status === 'backlog' ? 'selected' : ''}>Backlog</option>
                 <option value="todo" ${t.status === 'todo' ? 'selected' : ''}>To Do</option>
                 <option value="in_progress" ${t.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
@@ -1574,8 +1680,8 @@ const app = {
           <!-- 3. Priority Dropdown -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[100px]">
-              <select onchange="app.inlineUpdateTask(${t.id}, 'priority', this.value)"
-                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${priorityConfig.color}">
+              <select ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'priority', this.value)"`}
+                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${priorityConfig.color} ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
                 <option value="low" ${t.priority === 'low' ? 'selected' : ''}>Low</option>
                 <option value="medium" ${t.priority === 'medium' ? 'selected' : ''}>Medium</option>
                 <option value="high" ${t.priority === 'high' ? 'selected' : ''}>High</option>
@@ -1587,8 +1693,8 @@ const app = {
           <!-- 4. Assignee / Role -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[170px]">
-              <select onchange="app.handleTableAssigneeChange(${t.id}, this.value)"
-                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate">
+              <select ${isProgress ? 'disabled' : `onchange="app.handleTableAssigneeChange(${t.id}, this.value)"`}
+                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
                 <option value="">Unassigned</option>
                 ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
                 ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(t.assignee_name)} (Custom)</option>` : ''}
@@ -1598,78 +1704,98 @@ const app = {
             </div>
           </td>
 
-          <!-- 5. Start Date -->
+          <!-- 5. Progress (%) -->
+          <td class="px-3.5 py-2.5">
+            <div class="flex items-center space-x-2">
+              <input type="number" min="0" max="100" value="${t.progress_pct || 0}"
+                onchange="app.inlineUpdateTask(${t.id}, 'progress_pct', Math.max(0, Math.min(100, parseInt(this.value, 10) || 0)))"
+                class="w-14 px-1.5 py-1 text-xs text-center font-bold font-mono bg-slate-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+              <div class="w-16 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex-shrink-0 hidden xl:block">
+                <div class="h-full ${(t.progress_pct || 0) === 100 ? 'bg-emerald-500' : 'bg-blue-600'} rounded-full transition-all duration-300" style="width: ${t.progress_pct || 0}%"></div>
+              </div>
+            </div>
+          </td>
+
+          <!-- 6. Start Date -->
           <td class="px-3.5 py-2.5">
             ${t.start_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
                 <input type="date" value="${t.start_date}"
-                  onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)"
-                  class="w-full bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+                  ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)"`}
+                  class="w-full bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
+                ${!isProgress ? `
                 <button onclick="app.inlineUpdateTask(${t.id}, 'start_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
                   <i data-lucide="x" class="w-3 h-3"></i>
                 </button>
+                ` : ''}
               </div>
             ` : `
               <div class="relative group/date inline-flex items-center">
-                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40'} transition">
                   <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
                   <span>Not Declared</span>
                 </div>
-                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)" title="Click to declare start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                ${!isProgress ? `<input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)" title="Click to declare start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">` : ''}
               </div>
             `}
           </td>
 
-          <!-- 6. Due Date -->
+          <!-- 7. Due Date -->
           <td class="px-3.5 py-2.5">
             ${t.due_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
                 <input type="date" value="${t.due_date}"
-                  onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)"
-                  class="w-full text-xs rounded-lg px-2 py-1 border focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'}">
+                  ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)"`}
+                  class="w-full text-xs rounded-lg px-2 py-1 border focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'} ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
+                ${!isProgress ? `
                 <button onclick="app.inlineUpdateTask(${t.id}, 'due_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
                   <i data-lucide="x" class="w-3 h-3"></i>
                 </button>
+                ` : ''}
               </div>
             ` : `
               <div class="relative group/date inline-flex items-center">
-                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40'} transition">
                   <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
                   <span>Not Declared</span>
                 </div>
-                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                ${!isProgress ? `<input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">` : ''}
               </div>
             `}
           </td>
 
-          <!-- 7. Hours (Est & Act) -->
+          <!-- 8. Hours (Est & Act) -->
           <td class="px-3.5 py-2.5">
             <div class="flex items-center space-x-1">
               <input type="number" step="0.5" min="0" value="${estH}"
-                onchange="app.inlineUpdateTask(${t.id}, 'estimated_hours', parseFloat(this.value) || 0)"
-                title="Estimated Hours"
-                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
+                ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'estimated_hours', parseFloat(this.value) || 0)"`}
+                title="${isProgress ? 'Estimated hours locked to PM/Admin' : 'Estimated Hours'}"
+                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
               <span class="text-slate-400">/</span>
               <input type="number" step="0.5" min="0" value="${actH}"
                 onchange="app.inlineUpdateTask(${t.id}, 'actual_hours', parseFloat(this.value) || 0)"
-                title="Actual Logged Hours"
-                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
+                title="Actual Logged Hours (Editable by all)"
+                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center cursor-pointer">
             </div>
           </td>
 
-          <!-- 8. Actions -->
+          <!-- 9. Actions -->
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
             <div class="flex items-center justify-end space-x-1">
+              ${!isProgress ? `
               <button onclick="app.openTaskModal({ insert_after_id: ${t.id} })" class="p-1 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition flex items-center space-x-1" title="Insert New Activity Below This">
                 <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
                 <span class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hidden xl:inline">Insert Below</span>
               </button>
-              <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details">
+              ` : ''}
+              <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details / Update Progress">
                 <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
               </button>
+              ${!isProgress ? `
               <button onclick="app.inlineDeleteTask(${t.id})" class="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Delete Activity">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
               </button>
+              ` : ''}
             </div>
           </td>
 
@@ -1689,6 +1815,10 @@ const app = {
   },
 
   async inlineUpdateTask(taskId, field, value, extraPayload = {}) {
+    if (this.isProgressOnly() && field !== 'actual_hours' && field !== 'progress_pct') {
+      this.showToast('You only have permission to update activity progress and hours.', 'warning');
+      return;
+    }
     const numId = Number(taskId);
     const t = this.state.tasks.find(x => x.id === numId || x.id === taskId);
     if (!t) return;
@@ -3006,6 +3136,10 @@ const app = {
 
   // ==================== TASK MODAL CRUD & SEQUENCING ====================
   async moveTaskOrder(taskId, direction) {
+    if (this.isProgressOnly()) {
+      this.showToast('Task reordering is restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
     const allTasks = [...(this.state.tasks || [])].sort((a, b) => {
       const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
       const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
@@ -3044,6 +3178,10 @@ const app = {
   },
 
   async openTaskModal(params = {}) {
+    if (this.isProgressOnly() && !params.id) {
+      this.showToast('Activity creation is restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
     const modal = document.getElementById('task-modal');
     if (!modal) return;
 
@@ -3064,6 +3202,11 @@ const app = {
     const delBtn = document.getElementById('task-delete-btn');
     const posWrapper = document.getElementById('task-position-wrapper');
     const posSelect = document.getElementById('task-input-position');
+    const roleBanner = document.getElementById('task-modal-role-banner');
+    const userRoleSpan = document.getElementById('task-modal-user-role');
+    const progressNum = document.getElementById('task-input-progress');
+    const progressSlider = document.getElementById('task-input-progress-slider');
+    const saveBtn = document.getElementById('task-save-btn');
 
     document.getElementById('subtasks-container').innerHTML = '';
     document.getElementById('new-subtask-input').value = '';
@@ -3089,10 +3232,48 @@ const app = {
       `;
     }
 
+    const isProgress = this.isProgressOnly();
+    if (isProgress) {
+      if (roleBanner) {
+        roleBanner.classList.remove('hidden');
+        if (userRoleSpan) {
+          userRoleSpan.textContent = this.state.user?.role || 'Lead';
+        }
+      }
+      [titleInput, descInput, statusSelect, prioritySelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, tagsInput, posSelect].forEach(el => {
+        if (el) {
+          el.disabled = true;
+          el.classList.add('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
+        }
+      });
+      if (delBtn) delBtn.classList.add('hidden');
+      if (posWrapper) posWrapper.classList.add('hidden');
+      if (saveBtn) saveBtn.textContent = 'Update Activity Progress';
+
+      if (progressNum) progressNum.disabled = false;
+      if (progressSlider) progressSlider.disabled = false;
+      if (actInput) {
+        actInput.disabled = false;
+        actInput.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
+      }
+    } else {
+      if (roleBanner) roleBanner.classList.add('hidden');
+      [titleInput, descInput, statusSelect, prioritySelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, tagsInput, posSelect, progressNum, progressSlider].forEach(el => {
+        if (el) {
+          el.disabled = false;
+          el.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
+        }
+      });
+      if (saveBtn) saveBtn.textContent = params.id ? 'Save Task' : 'Create Task';
+    }
+
     if (params.id) {
-      document.getElementById('task-modal-title').textContent = 'Edit Task Details';
+      document.getElementById('task-modal-title').textContent = isProgress ? 'Update Activity Progress' : 'Edit Task Details';
       document.getElementById('task-modal-type-badge').textContent = 'Task #' + params.id;
-      if (delBtn) delBtn.classList.remove('hidden');
+      if (delBtn) {
+        if (isProgress) delBtn.classList.add('hidden');
+        else delBtn.classList.remove('hidden');
+      }
       if (posWrapper) posWrapper.classList.add('hidden');
 
       // 1. Instantly populate modal from local state cache (0ms latency!)
@@ -3104,6 +3285,10 @@ const app = {
         statusSelect.value = localTask.status || 'todo';
         prioritySelect.value = localTask.priority || 'medium';
         
+        const progressVal = (localTask.progress_pct !== undefined && localTask.progress_pct !== null) ? Number(localTask.progress_pct) : 0;
+        if (progressNum) progressNum.value = progressVal;
+        if (progressSlider) progressSlider.value = progressVal;
+
         // Handle Assignee matching
         const matchedMember = localTask.assignee_id 
           ? this.state.currentProject?.members?.find(m => m.id === localTask.assignee_id) 
@@ -3132,7 +3317,8 @@ const app = {
       this.updateTaskAssigneeDeleteBtnVisibility();
       this.updateTaskModalDateBadges();
       modal.classList.remove('hidden');
-      titleInput.focus();
+      if (isProgress && actInput) actInput.focus();
+      else titleInput.focus();
       this.initLucide();
 
       // 2. Fetch fresh subtasks & timelogs in background without blocking UI
@@ -3145,6 +3331,10 @@ const app = {
           statusSelect.value = task.status || 'todo';
           prioritySelect.value = task.priority || 'medium';
           
+          const fetchedProgress = (task.progress_pct !== undefined && task.progress_pct !== null) ? Number(task.progress_pct) : 0;
+          if (progressNum) progressNum.value = fetchedProgress;
+          if (progressSlider) progressSlider.value = fetchedProgress;
+
           const matchedMember = task.assignee_id 
             ? this.state.currentProject?.members?.find(m => m.id === task.assignee_id) 
             : (task.assignee_name ? this.state.currentProject?.members?.find(m => (m.name || '').trim().toLowerCase() === task.assignee_name.trim().toLowerCase()) : null);
@@ -3186,6 +3376,9 @@ const app = {
       statusSelect.value = params.status || 'todo';
       prioritySelect.value = 'medium';
       
+      if (progressNum) progressNum.value = 0;
+      if (progressSlider) progressSlider.value = 0;
+
       if (params.assignee_name) {
         if (manualAssigneeInput) manualAssigneeInput.value = params.assignee_name;
         this.toggleTaskAssigneeManualMode(true);
@@ -3633,13 +3826,63 @@ const app = {
   },
 
   async handleSaveTask() {
+    const taskId = document.getElementById('task-input-id')?.value;
+    const numTaskId = taskId ? Number(taskId) : null;
+    const isExistingTask = numTaskId && numTaskId > 0;
+
+    const progressPct = Math.min(100, Math.max(0, parseInt(document.getElementById('task-input-progress')?.value || 0, 10)));
+    const actHours = parseFloat(document.getElementById('task-input-acthours')?.value || 0);
+
+    if (this.isProgressOnly()) {
+      if (!isExistingTask) {
+        this.showToast('You do not have permission to create activities', 'error');
+        return;
+      }
+      this.closeTaskModal();
+      const localTask = this.state.tasks.find(t => t.id === numTaskId);
+      const prevProgress = localTask ? localTask.progress_pct : 0;
+      const prevAct = localTask ? localTask.actual_hours : 0;
+
+      if (localTask) {
+        localTask.progress_pct = progressPct;
+        localTask.actual_hours = isNaN(actHours) ? 0.0 : actHours;
+        this.renderCurrentView();
+        this.syncCurrentProjectCache();
+      }
+      this.showToast('Activity progress updated', 'success');
+
+      try {
+        const updated = await this.api(`/api/tasks/${numTaskId}`, {
+          method: 'PUT',
+          body: {
+            progress_pct: progressPct,
+            actual_hours: isNaN(actHours) ? 0.0 : actHours
+          }
+        });
+        if (localTask && updated) {
+          Object.assign(localTask, updated);
+          this.syncCurrentProjectCache();
+          this.renderCurrentView();
+        }
+      } catch (e) {
+        console.error('Failed to update task progress:', e);
+        if (localTask) {
+          localTask.progress_pct = prevProgress;
+          localTask.actual_hours = prevAct;
+          this.syncCurrentProjectCache();
+          this.renderCurrentView();
+        }
+        this.showToast(e.message || 'Failed to update activity progress', 'error');
+      }
+      return;
+    }
+
     const title = document.getElementById('task-input-title')?.value.trim();
     if (!title) {
       this.showToast('Please enter a task title', 'error');
       return;
     }
 
-    const taskId = document.getElementById('task-input-id')?.value;
     const desc = document.getElementById('task-input-description')?.value || '';
     const status = document.getElementById('task-input-status')?.value || 'todo';
     const priority = document.getElementById('task-input-priority')?.value || 'medium';
@@ -3674,7 +3917,6 @@ const app = {
     const startDate = document.getElementById('task-input-startdate')?.value || null;
     const dueDate = document.getElementById('task-input-duedate')?.value || null;
     const estHours = parseFloat(document.getElementById('task-input-esthours')?.value || 0);
-    const actHours = parseFloat(document.getElementById('task-input-acthours')?.value || 0);
     const tagsRaw = document.getElementById('task-input-tags')?.value || '';
     const tags = tagsRaw.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean);
 
@@ -3690,6 +3932,7 @@ const app = {
       status,
       priority,
       position,
+      progress_pct: progressPct,
       assignee_id: assigneeId,
       assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : (assigneeName || undefined),
       start_date: startDate,
@@ -3704,9 +3947,6 @@ const app = {
     // Close modal immediately (instant 0ms UX)
     this.closeTaskModal();
 
-    const numTaskId = taskId ? Number(taskId) : null;
-    const isExistingTask = numTaskId && numTaskId > 0;
-
     if (isExistingTask) {
       // EDIT EXISTING TASK (Optimistic)
       const localTask = this.state.tasks.find(t => t.id === numTaskId);
@@ -3717,6 +3957,7 @@ const app = {
           description: desc,
           status,
           priority,
+          progress_pct: progressPct,
           assignee_id: assigneeId,
           assignee_name: assigneeName,
           assignee_avatar: assigneeAvatar,
@@ -3790,6 +4031,7 @@ const app = {
         description: desc,
         status: status,
         priority: priority,
+        progress_pct: progressPct,
         assignee_id: assigneeId,
         assignee_name: assigneeName,
         assignee_avatar: assigneeAvatar,
@@ -3886,6 +4128,10 @@ const app = {
   },
 
   async handleDeleteTask() {
+    if (this.isProgressOnly()) {
+      this.showToast('Task deletion is restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
     const taskId = document.getElementById('task-input-id')?.value;
     if (!taskId) return;
     if (!confirm('Are you sure you want to delete this task?')) return;
@@ -3923,6 +4169,10 @@ const app = {
 
   // ==================== PROJECT MODAL ====================
   openProjectModal(editProjectId = null) {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can create or modify projects', 'warning');
+      return;
+    }
     const modal = document.getElementById('project-modal');
     if (!modal) return;
 
@@ -4095,6 +4345,10 @@ const app = {
 
   // ==================== GANTT EXCEL / CSV UPLOAD ====================
   openGanttUploadModal() {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can import Gantt schedules', 'warning');
+      return;
+    }
     const modal = document.getElementById('gantt-upload-modal');
     if (!modal) return;
 
@@ -4236,6 +4490,10 @@ const app = {
 
   // ==================== IMPORT / EXPORT MODAL ====================
   openImportExportModal() {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can access project backup tools', 'warning');
+      return;
+    }
     document.getElementById('import-export-modal')?.classList.remove('hidden');
   },
 
@@ -4308,6 +4566,10 @@ const app = {
   },
 
   async resetDemoData() {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can reset database demo data', 'warning');
+      return;
+    }
     if (!confirm('Reset database and restore demo projects? All custom edits will be reverted.')) return;
     try {
       await this.api('/api/seed/reset', { method: 'POST' });
@@ -5921,12 +6183,14 @@ const app = {
               <button onclick="app.openResourceDetailsModal(${r.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="View Full Resource Dossier">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </button>
-              <button onclick="app.openResourceModal(${r.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Resource">
-                <i data-lucide="edit-3" class="w-4 h-4"></i>
-              </button>
-              <button onclick="app.deleteResource(${r.id}, '${this.escapeHtml(r.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Delete Resource">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-              </button>
+              ${!this.isProgressOnly() ? `
+                <button onclick="app.openResourceModal(${r.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Resource">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                </button>
+                <button onclick="app.deleteResource(${r.id}, '${this.escapeHtml(r.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Delete Resource">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
             </div>
           </td>
         </tr>
@@ -6019,15 +6283,19 @@ const app = {
           <!-- Actions -->
           <td class="px-3.5 py-3 text-right">
             <div class="flex items-center justify-end space-x-1">
-              <button onclick="app.openMapProjectResourceModal(${JSON.stringify(mapping).replace(/"/g, '&quot;')})" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Allocation & Role">
-                <i data-lucide="edit-3" class="w-4 h-4"></i>
-              </button>
+              ${!this.isProgressOnly() ? `
+                <button onclick="app.openMapProjectResourceModal(${JSON.stringify(mapping).replace(/"/g, '&quot;')})" class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Allocation & Role">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
               <button onclick="app.openResourceDetailsModal(${mapping.id})" class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Resource Dossier">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </button>
-              <button onclick="app.unmapProjectResource(${mapping.id}, '${this.escapeHtml(mapping.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Unmap from Project">
-                <i data-lucide="unlink" class="w-4 h-4"></i>
-              </button>
+              ${!this.isProgressOnly() ? `
+                <button onclick="app.unmapProjectResource(${mapping.id}, '${this.escapeHtml(mapping.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Unmap from Project">
+                  <i data-lucide="unlink" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
             </div>
           </td>
         </tr>
@@ -6095,6 +6363,10 @@ const app = {
   },
 
   async openResourceModal(resourceId = null) {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can create or edit resources', 'warning');
+      return;
+    }
     const modal = document.getElementById('resource-modal');
     if (!modal) return;
 
@@ -6247,6 +6519,10 @@ const app = {
   },
 
   async deleteResource(id, name = 'this resource') {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can delete resources', 'warning');
+      return;
+    }
     if (!confirm(`Are you sure you want to delete "${name}" from the Central Resource Library? This will remove all associated project mappings.`)) {
       return;
     }
@@ -6263,6 +6539,10 @@ const app = {
   },
 
   async openMapProjectResourceModal(mapping = null) {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can map resources to projects', 'warning');
+      return;
+    }
     const modal = document.getElementById('project-resource-map-modal');
     if (!modal) return;
 
@@ -6376,6 +6656,10 @@ const app = {
   },
 
   async unmapProjectResource(resourceId, resourceName = 'Resource') {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can unmap resources', 'warning');
+      return;
+    }
     const projectId = this.state.currentProjectId;
     if (!projectId) return;
 
@@ -6456,10 +6740,15 @@ const app = {
       // Edit Button
       const editBtn = document.getElementById('dossier-edit-btn');
       if (editBtn) {
-        editBtn.onclick = () => {
-          this.closeResourceDetailsModal();
-          this.openResourceModal(dossier.id);
-        };
+        if (this.isProgressOnly()) {
+          editBtn.classList.add('hidden');
+        } else {
+          editBtn.classList.remove('hidden');
+          editBtn.onclick = () => {
+            this.closeResourceDetailsModal();
+            this.openResourceModal(dossier.id);
+          };
+        }
       }
 
       // Mapped projects table
