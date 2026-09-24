@@ -1037,6 +1037,68 @@ const app = {
     this.renderGantt();
   },
 
+  getGanttStatusStyle(status) {
+    const s = String(status || '').toLowerCase().trim();
+    switch (s) {
+      case 'backlog':
+        return {
+          key: 'backlog',
+          name: 'Backlog',
+          barClass: 'bg-slate-500 hover:bg-slate-600 shadow-slate-500/25 text-white',
+          badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-600',
+          dotColor: 'bg-slate-500',
+          defaultProgress: 0
+        };
+      case 'todo':
+        return {
+          key: 'todo',
+          name: 'To Do',
+          barClass: 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/25 text-white',
+          badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700',
+          dotColor: 'bg-amber-500',
+          defaultProgress: 0
+        };
+      case 'in_progress':
+        return {
+          key: 'in_progress',
+          name: 'In Progress',
+          barClass: 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/25 text-white',
+          badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-700',
+          dotColor: 'bg-blue-600',
+          defaultProgress: 50
+        };
+      case 'in_review':
+      case 'review':
+        return {
+          key: 'in_review',
+          name: 'In Review',
+          barClass: 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/25 text-white',
+          badgeClass: 'bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300 dark:border-purple-700',
+          dotColor: 'bg-purple-600',
+          defaultProgress: 85
+        };
+      case 'done':
+      case 'completed':
+        return {
+          key: 'done',
+          name: 'Done',
+          barClass: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/25 text-white',
+          badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700',
+          dotColor: 'bg-emerald-600',
+          defaultProgress: 100
+        };
+      default:
+        return {
+          key: s,
+          name: s.replace(/_/g, ' ') || 'To Do',
+          barClass: 'bg-slate-500 hover:bg-slate-600 shadow-slate-500/25 text-white',
+          badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-600',
+          dotColor: 'bg-slate-500',
+          defaultProgress: 0
+        };
+    }
+  },
+
   renderGantt() {
     const container = document.getElementById('gantt-timeline-render');
     const tasksCount = document.getElementById('gantt-tasks-count');
@@ -1100,10 +1162,12 @@ const app = {
     let topHeaders = [];
     let bottomHeaders = [];
     let totalCols = 0;
+    let colMinWidth = 110;
 
-    // 2. Build timescale columns based on mode
+    // 2. Build timescale columns based on mode with 100% pixel-perfect top/bottom alignment
     if (scale === 'day') {
       // DAILY SCALE
+      colMinWidth = 38;
       const baseStart = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate());
       timelineMin = new Date(baseStart.getTime() + (offset * 86400000));
       const daysCount = Math.max(Math.ceil((taskMax.getTime() - baseStart.getTime()) / 86400000) + 1, 7);
@@ -1117,7 +1181,7 @@ const app = {
       }
 
       // Group days by month for top header
-      let curMonth = -1;
+      let curMonthKey = null;
       let curMonthSpan = 0;
       let curMonthName = '';
 
@@ -1127,17 +1191,18 @@ const app = {
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[36px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isToday ? 'bg-blue-100/70 dark:bg-blue-900/50 font-bold text-blue-600 dark:text-blue-400' : (isWeekend ? 'bg-slate-100/50 dark:bg-slate-900/40 text-slate-400' : 'text-slate-600 dark:text-slate-300')}">
+          <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isToday ? 'bg-blue-100/70 dark:bg-blue-900/50 font-bold text-blue-600 dark:text-blue-400' : (isWeekend ? 'bg-slate-100/50 dark:bg-slate-900/40 text-slate-400' : 'text-slate-600 dark:text-slate-300')}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
             <div class="text-[9px] uppercase font-semibold">${d.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
             <div class="text-[11px] font-bold">${d.getDate()}</div>
           </div>
         `);
 
-        if (d.getMonth() !== curMonth) {
-          if (curMonth !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+        const mKey = `${d.getFullYear()}-${d.getMonth()}`;
+        if (mKey !== curMonthKey) {
+          if (curMonthKey !== null && curMonthSpan > 0) {
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
           }
-          curMonth = d.getMonth();
+          curMonthKey = mKey;
           curMonthName = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
           curMonthSpan = 1;
         } else {
@@ -1145,13 +1210,14 @@ const app = {
         }
       }
       if (curMonthSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
       }
 
     } else if (scale === 'week') {
-      // WEEKLY SCALE (Project-Relative: Starts at Week 1 from first activity start date through project end date)
+      // WEEKLY SCALE (Synchronized with exact Monday start & midpoint Thursday month grouping)
+      colMinWidth = 110;
       const dayOfWeek = taskMin.getDay();
-      const mondayOffset = (dayOfWeek + 6) % 7; // Align to Monday of first activity's week
+      const mondayOffset = (dayOfWeek + 6) % 7; // 0 for Mon, 1 for Tue, ..., 6 for Sun
       const projectStartMonday = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate() - mondayOffset);
       
       // Total weeks needed to span from projectStartMonday through taskMax
@@ -1170,40 +1236,44 @@ const app = {
         rangeLabel.textContent = `Project Timeline • ${totalProjectWeeks} Week${totalProjectWeeks > 1 ? 's' : ''} (Week 1 to Week ${totalProjectWeeks}) • ${startFormatted} to ${endFormatted}`;
       }
 
-      let curMonth = -1;
+      // Group weeks by their midpoint Thursday month for 100% calendar accuracy
+      let curMonthKey = null;
       let curMonthSpan = 0;
       let curMonthName = '';
 
       for (let w = 0; w < weeksCount; w++) {
         const wStart = new Date(timelineMin.getTime() + (w * 7 * 86400000));
         const wEnd = new Date(wStart.getTime() + (6 * 86400000)); // Sunday
+        const midThursday = new Date(wStart.getTime() + (3 * 86400000)); // Thursday defines majority month
         const isCurrentWeek = now >= wStart && now < new Date(wStart.getTime() + (7 * 86400000));
         const projectWeekNum = w + 1 + offset;
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[100px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}">
+          <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
             <div class="text-[10px] font-bold ${isCurrentWeek ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}">Week ${projectWeekNum}</div>
             <div class="text-[9px] text-slate-400 dark:text-slate-400 font-medium">${wStart.getDate()} ${wStart.toLocaleDateString('en-US', { month: 'short' })} - ${wEnd.getDate()} ${wEnd.toLocaleDateString('en-US', { month: 'short' })}</div>
           </div>
         `);
 
-        if (wStart.getMonth() !== curMonth) {
-          if (curMonth !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+        const mKey = `${midThursday.getFullYear()}-${midThursday.getMonth()}`;
+        if (mKey !== curMonthKey) {
+          if (curMonthKey !== null && curMonthSpan > 0) {
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
           }
-          curMonth = wStart.getMonth();
-          curMonthName = wStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          curMonthKey = mKey;
+          curMonthName = midThursday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
           curMonthSpan = 1;
         } else {
           curMonthSpan++;
         }
       }
       if (curMonthSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan}">${curMonthName}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
       }
 
     } else if (scale === 'month') {
       // MONTHLY SCALE
+      colMinWidth = 110;
       const baseMonth = new Date(taskMin.getFullYear(), taskMin.getMonth() + offset, 1);
       timelineMin = baseMonth;
       
@@ -1226,7 +1296,7 @@ const app = {
         const isCurrentMonth = now.getFullYear() === mDate.getFullYear() && now.getMonth() === mDate.getMonth();
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[110px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentMonth ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}">
+          <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentMonth ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
             <div class="text-xs font-bold">${mDate.toLocaleDateString('en-US', { month: 'short' })}</div>
             <div class="text-[9px] text-slate-400 font-normal">Month ${mDate.getMonth() + 1}</div>
           </div>
@@ -1234,7 +1304,7 @@ const app = {
 
         if (mDate.getFullYear() !== curYear) {
           if (curYear !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan}">${curYear}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan} ${curYearSpan} 0%; min-width: ${curYearSpan * colMinWidth}px;">${curYear}</div>`);
           }
           curYear = mDate.getFullYear();
           curYearSpan = 1;
@@ -1243,30 +1313,32 @@ const app = {
         }
       }
       if (curYearSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan}">${curYear}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan} ${curYearSpan} 0%; min-width: ${curYearSpan * colMinWidth}px;">${curYear}</div>`);
       }
 
     } else if (scale === 'year') {
       // YEARLY / MULTI-YEAR SCALE (Quarters)
+      colMinWidth = 90;
       const startYear = taskMin.getFullYear() + offset;
       const endYear = Math.max(taskMax.getFullYear(), startYear);
       timelineMin = new Date(startYear, 0, 1);
       timelineMax = new Date(endYear, 11, 31, 23, 59, 59);
       const totalYears = endYear - startYear + 1;
+      totalCols = totalYears * 4;
 
       if (rangeLabel) {
         rangeLabel.textContent = `Yearly Roadmap • ${startYear} to ${endYear}`;
       }
 
       for (let y = startYear; y <= endYear; y++) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: 4">${y}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: 4 4 0%; min-width: ${4 * colMinWidth}px;">${y}</div>`);
         
         for (let q = 1; q <= 4; q++) {
           const qStart = new Date(y, (q - 1) * 3, 1);
           const isCurQuarter = now >= qStart && now < new Date(y, q * 3, 1);
 
           bottomHeaders.push(`
-            <div class="flex-1 min-w-[90px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurQuarter ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}">
+            <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurQuarter ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
               <div class="text-xs font-bold">Q${q}</div>
               <div class="text-[9px] text-slate-400 font-normal">${qStart.toLocaleDateString('en-US', { month: 'short' })}</div>
             </div>
@@ -1295,15 +1367,12 @@ const app = {
       const leftPct = Math.min(100, Math.max(0, (startOffsetMs / totalSpanMs) * 100));
       const widthPct = Math.max(1.5, Math.min(100 - leftPct, (durationMs / totalSpanMs) * 100));
 
-      const isCompleted = t.status === 'done';
-      const isUrgent = t.priority === 'urgent';
-      
-      const barColor = isCompleted ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' :
-        (t.status === 'in_progress' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' :
-        (isUrgent ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20' :
-        (t.status === 'in_review' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20' : 'bg-slate-400 hover:bg-slate-500')));
+      const statusStyle = this.getGanttStatusStyle(t.status);
+      const barColor = statusStyle.barClass;
+      const statusBadge = statusStyle.badgeClass;
 
-      const progressWidth = isCompleted ? 100 : (t.status === 'in_progress' ? 60 : 0);
+      const pct = (t.progress_pct !== undefined && t.progress_pct !== null) ? Number(t.progress_pct) : statusStyle.defaultProgress;
+      const progressWidth = Math.min(100, Math.max(0, pct));
 
       return `
         <div class="flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
@@ -1322,11 +1391,7 @@ const app = {
                 </button>
               </div>
               <div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
-                <span class="capitalize px-1.5 py-0.2 rounded text-[9px] font-semibold flex-shrink-0 ${
-                  isCompleted ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
-                  (t.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
-                  (t.status === 'in_review' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'))
-                }">${t.status.replace('_', ' ')}</span>
+                <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
                 <span class="text-slate-300 dark:text-slate-600">•</span>
                 <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
               </div>
@@ -1384,11 +1449,11 @@ const app = {
           </div>
 
           <!-- Column 4: Right Timeline Bar Area (flex-1) with Background Grid Lines Overlay -->
-          <div class="flex-1 relative h-9 px-2 flex items-center bg-slate-50/30 dark:bg-slate-900/20 overflow-hidden">
+          <div class="flex-1 relative h-9 px-0 flex items-center bg-slate-50/30 dark:bg-slate-900/20 overflow-hidden">
             <!-- Subtle Column Grid Lines Overlay for alignment with header columns -->
             <div class="absolute inset-0 flex pointer-events-none">
               ${Array.from({ length: totalCols }).map((_, cIdx) => `
-                <div class="flex-1 border-r border-slate-100 dark:border-slate-800/60 ${cIdx === totalCols - 1 ? 'border-r-0' : ''}"></div>
+                <div class="flex-1 min-w-[${colMinWidth}px] border-r border-slate-100 dark:border-slate-800/60 ${cIdx === totalCols - 1 ? 'border-r-0' : ''}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;"></div>
               `).join('')}
             </div>
 
@@ -1403,13 +1468,14 @@ const app = {
               <div class="gantt-bar absolute z-10 h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
                 style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%;"
                 onclick="app.openTaskModal({id: ${t.id}})"
-                title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${t.status}&#10;Est: ${t.estimated_hours}h&#10;Click to open task details">
+                title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h&#10;Click to open task details">
                 
-                <!-- Progress Fill -->
+                <!-- Progress Fill Overlay -->
                 <div class="absolute inset-0 bg-white/20 rounded-md pointer-events-none" style="width: ${progressWidth}%"></div>
                 
                 <span class="relative z-10 truncate font-semibold">${this.escapeHtml(t.title)}</span>
-                ${t.subtask_count > 0 ? `<span class="relative z-10 ml-1.5 text-[9px] bg-black/20 px-1 py-0.2 rounded font-mono flex-shrink-0">${t.subtask_completed_count}/${t.subtask_count}</span>` : ''}
+                ${progressWidth > 0 ? `<span class="relative z-10 ml-1.5 text-[9px] bg-black/25 px-1 py-0.2 rounded font-mono flex-shrink-0">${progressWidth}%</span>` : ''}
+                ${t.subtask_count > 0 ? `<span class="relative z-10 ml-1 text-[9px] bg-black/20 px-1 py-0.2 rounded font-mono flex-shrink-0">${t.subtask_completed_count}/${t.subtask_count}</span>` : ''}
               </div>
             `}
           </div>
@@ -1427,7 +1493,7 @@ const app = {
             <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
-          <div class="flex-1 relative h-7 px-2 flex items-center">
+          <div class="flex-1 relative h-7 px-0 flex items-center">
             ${milestones.map(m => {
               if (!m.due_date) return '';
               const mDate = new Date(m.due_date + 'T12:00:00');
@@ -1447,8 +1513,10 @@ const app = {
       `;
     }
 
+    const minTimelineWidth = 540 + (totalCols * colMinWidth);
+
     container.innerHTML = `
-      <div class="min-w-[1150px]">
+      <div class="min-w-[${Math.max(1150, minTimelineWidth)}px]">
         <!-- Sticky Two-Tier Header -->
         <div class="sticky top-0 z-20 shadow-xs select-none">
           <!-- Top Tier Header (Months/Years) -->

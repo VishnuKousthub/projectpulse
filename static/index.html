@@ -514,12 +514,33 @@
                 <span>Import Excel</span>
               </button>
 
-              <!-- Template Download Button -->
-              <button onclick="app.downloadSampleGantt('xlsx')" class="h-9 bg-slate-100 dark:bg-slate-750 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold px-2.5 rounded-lg flex items-center gap-1.5 transition" title="Download Excel Template">
-                <i data-lucide="download" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
-                <span>Template</span>
-              </button>
-
+          <!-- Gantt Status Color Legend Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+            <div class="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+              <i data-lucide="palette" class="w-3.5 h-3.5 text-blue-500"></i>
+              <span>Status Colors:</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-[11px] font-semibold">
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-sm bg-slate-500 shadow-2xs"></span>
+                <span class="text-slate-600 dark:text-slate-400">Backlog</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-sm bg-amber-500 shadow-2xs"></span>
+                <span class="text-slate-600 dark:text-slate-400">To Do</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-sm bg-blue-600 shadow-2xs"></span>
+                <span class="text-slate-600 dark:text-slate-400">In Progress</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-sm bg-purple-600 shadow-2xs"></span>
+                <span class="text-slate-600 dark:text-slate-400">In Review</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-sm bg-emerald-600 shadow-2xs"></span>
+                <span class="text-slate-600 dark:text-slate-400">Done</span>
+              </div>
             </div>
           </div>
 
@@ -2288,21 +2309,17 @@
           <span>⚡ 1-Click Quick Demo Sign-In:</span>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <button type="button" onclick="app.quickDemoLogin('admin')" class="p-2 rounded-xl bg-blue-950/60 hover:bg-blue-900/80 border border-blue-800/70 text-blue-300 text-center transition flex flex-col items-center group">
-            <span class="text-xs font-black text-white group-hover:text-blue-300">Admin</span>
-            <span class="text-[9px] font-semibold text-blue-400 mt-0.5">Full Access</span>
+          <button type="button" onclick="app.quickDemoLogin('admin')" class="py-2.5 px-3 rounded-xl bg-blue-950/60 hover:bg-blue-900/80 border border-blue-800/70 text-blue-300 text-center transition flex items-center justify-center group shadow-xs">
+            <span class="text-xs font-bold text-white group-hover:text-blue-300">Admin</span>
           </button>
-          <button type="button" onclick="app.quickDemoLogin('pm')" class="p-2 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-800/70 text-indigo-300 text-center transition flex flex-col items-center group">
-            <span class="text-xs font-black text-white group-hover:text-indigo-300">PM</span>
-            <span class="text-[9px] font-semibold text-indigo-400 mt-0.5">Full Access</span>
+          <button type="button" onclick="app.quickDemoLogin('pm')" class="py-2.5 px-3 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-800/70 text-indigo-300 text-center transition flex items-center justify-center group shadow-xs">
+            <span class="text-xs font-bold text-white group-hover:text-indigo-300">PM</span>
           </button>
-          <button type="button" onclick="app.quickDemoLogin('lead')" class="p-2 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-800/70 text-purple-300 text-center transition flex flex-col items-center group">
-            <span class="text-xs font-black text-white group-hover:text-purple-300">Lead</span>
-            <span class="text-[9px] font-semibold text-purple-400 mt-0.5">Progress Only</span>
+          <button type="button" onclick="app.quickDemoLogin('lead')" class="py-2.5 px-3 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-800/70 text-purple-300 text-center transition flex items-center justify-center group shadow-xs">
+            <span class="text-xs font-bold text-white group-hover:text-purple-300">Lead</span>
           </button>
-          <button type="button" onclick="app.quickDemoLogin('assignee')" class="p-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/70 text-emerald-300 text-center transition flex flex-col items-center group">
-            <span class="text-xs font-black text-white group-hover:text-emerald-300">Assignee</span>
-            <span class="text-[9px] font-semibold text-emerald-400 mt-0.5">Progress Only</span>
+          <button type="button" onclick="app.quickDemoLogin('assignee')" class="py-2.5 px-3 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/70 text-emerald-300 text-center transition flex items-center justify-center group shadow-xs">
+            <span class="text-xs font-bold text-white group-hover:text-emerald-300">Assignee</span>
           </button>
         </div>
       </div>
