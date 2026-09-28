@@ -749,3 +749,26 @@ body.sidebar-mode-hover .sidebar-hover-placeholder {
   background: #334155;
 }
 
+/* ==================== SELECT & DROPDOWN ENHANCEMENTS ==================== */
+#project-select {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+#project-select option,
+select.bg-slate-800 option,
+select.bg-slate-900 option,
+.dark select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  padding: 8px 12px !important;
+}
+
+#project-select option:hover,
+#project-select option:focus,
+#project-select option:checked {
+  background-color: #1e293b !important;
+  color: #38bdf8 !important;
+}
+
+

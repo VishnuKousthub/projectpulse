@@ -322,7 +322,7 @@ const app = {
     const select = document.getElementById('project-select');
     if (!select) return;
     select.innerHTML = this.state.projects.map(p => `
-      <option value="${p.id}" ${Number(p.id) === Number(this.state.currentProjectId) ? 'selected' : ''}>
+      <option value="${p.id}" ${Number(p.id) === Number(this.state.currentProjectId) ? 'selected' : ''} style="background-color: #0f172a; color: #f8fafc;">
         ${this.escapeHtml(p.name)}
       </option>
     `).join('');
