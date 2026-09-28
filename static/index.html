@@ -26,7 +26,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=2.5.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.6.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -390,7 +390,7 @@
     </header>
 
     <!-- VIEW CONTAINERS AREA (SCROLLS INDEPENDENTLY) -->
-    <main class="app-main flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">
+    <main class="app-main flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 bg-slate-50 dark:bg-slate-900 min-w-0 max-w-full">
       
       <!-- 1. KANBAN BOARD VIEW -->
       <section id="view-kanban-container" class="view-panel space-y-4">
@@ -533,6 +533,8 @@
                 <i data-lucide="upload-cloud" class="w-4 h-4"></i>
                 <span>Import Excel</span>
               </button>
+            </div>
+          </div>
 
           <!-- Gantt Status Color Legend Bar -->
           <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
@@ -2989,6 +2991,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.5.0"></script>
+  <script src="/static/js/app.js?v=2.6.0"></script>
 </body>
 </html>

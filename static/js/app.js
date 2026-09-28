@@ -745,7 +745,7 @@ const app = {
                 ${sgDone}/${sgTotal} Completed (${sgTotal > 0 ? Math.round((sgDone / sgTotal) * 100) : 0}%)
               </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-start overflow-x-auto pb-1">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-start overflow-x-auto pb-1 w-full max-w-full min-w-0">
               ${colsHtml}
             </div>
           </div>
@@ -797,7 +797,7 @@ const app = {
       }).join('');
 
       boardContainer.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-start overflow-x-auto pb-2">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-start overflow-x-auto pb-2 w-full max-w-full min-w-0">
           ${colsHtml}
         </div>
       `;
@@ -2431,7 +2431,7 @@ const app = {
     }).join('');
 
     container.innerHTML = `
-      <div class="flex space-x-3 overflow-x-auto pb-2">
+      <div class="flex space-x-3 overflow-x-auto pb-2 w-full max-w-full min-w-0">
         ${columnsHtml}
       </div>
     `;
