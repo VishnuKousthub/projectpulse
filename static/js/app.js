@@ -4306,18 +4306,29 @@ const app = {
   },
 
   // ==================== PROJECT CLONER & TEMPLATE DUPLICATION ====================
-  openCloneProjectModal(sourceProjectId = null) {
+  async openCloneProjectModal(sourceProjectId = null) {
     if (this.isProgressOnly()) {
-      this.showToast('Only Project Managers and Admins can duplicate or create project templates', 'warning');
+      this.showToast('Access Restricted: Please login as Project Manager or Admin to duplicate or create project templates', 'warning');
       return;
     }
     const modal = document.getElementById('clone-project-modal');
     if (!modal) return;
 
+    if (!this.state.projects || this.state.projects.length === 0) {
+      try {
+        const projs = await this.api('/api/projects');
+        if (projs && Array.isArray(projs)) {
+          this.state.projects = projs;
+        }
+      } catch (e) {
+        console.warn('Could not fetch projects for cloner:', e);
+      }
+    }
+
     const sourceSelect = document.getElementById('clone-source-project-id');
     if (sourceSelect) {
       sourceSelect.innerHTML = (this.state.projects || []).map(p => `
-        <option value="${p.id}">${this.escapeHtml(p.name)} (${p.total_tasks || 0} activities)</option>
+        <option value="${p.id}" class="bg-slate-900 text-slate-100">${this.escapeHtml(p.name)} (${p.total_tasks || 0} activities)</option>
       `).join('');
       
       const targetSourceId = sourceProjectId || this.state.currentProjectId || (this.state.projects && this.state.projects[0]?.id);
@@ -4402,14 +4413,17 @@ const app = {
 
   async handleCloneProjectSubmit() {
     if (this.isProgressOnly()) {
-      this.showToast('Only Project Managers and Admins can duplicate or create project templates', 'warning');
+      this.showToast('Access Restricted: Please login as Project Manager or Admin to duplicate or create project templates', 'warning');
       return;
     }
 
     const sourceSelect = document.getElementById('clone-source-project-id');
-    const sourceId = Number(sourceSelect?.value || this.state.currentProjectId);
-    if (!sourceId) {
-      this.showToast('Please select a source project to duplicate', 'error');
+    let sourceId = Number(sourceSelect?.value);
+    if (!sourceId || isNaN(sourceId)) {
+      sourceId = Number(this.state.currentProjectId);
+    }
+    if (!sourceId || isNaN(sourceId)) {
+      this.showToast('Please select a valid source project to duplicate', 'error');
       return;
     }
 
@@ -4441,7 +4455,7 @@ const app = {
     try {
       const res = await this.api(`/api/projects/${sourceId}/clone`, {
         method: 'POST',
-        body: JSON.stringify({
+        body: {
           name,
           description,
           color,
@@ -4451,7 +4465,7 @@ const app = {
           copy_milestones: copyMilestones,
           copy_resources: copyResources,
           new_start_date: newStartDate
-        })
+        }
       });
 
       this.closeCloneProjectModal();
@@ -4464,7 +4478,7 @@ const app = {
         // 2. Seamlessly switch to new project
         this.state.currentProjectId = res.project.id;
         this.state.currentProject = res.project;
-        this.state.tasks = (res.bootstrap && res.bootstrap.tasks) ? res.bootstrap.tasks : [];
+        this.state.tasks = (res.bootstrap && res.bootstrap.tasks) ? res.bootstrap.tasks : (res.tasks || []);
         localStorage.setItem('projectpulse_active_project', res.project.id);
         this.syncCurrentProjectCache();
 
@@ -4481,7 +4495,8 @@ const app = {
       }
     } catch (err) {
       console.error('Failed to clone project template:', err);
-      this.showToast(err.message || 'Failed to clone project template', 'error');
+      const errMsg = err?.message || (typeof err === 'string' ? err : 'Failed to clone project template');
+      this.showToast(errMsg, 'error');
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
