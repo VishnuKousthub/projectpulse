@@ -328,6 +328,17 @@ const app = {
     `).join('');
 
     select.onchange = (e) => this.selectProject(Number(e.target.value));
+
+    // Update active project color dot indicator
+    const current = (this.state.projects || []).find(p => Number(p.id) === Number(this.state.currentProjectId)) || this.state.currentProject;
+    const dot = document.getElementById('project-select-color-dot');
+    if (dot) {
+      dot.style.backgroundColor = current?.color || '#3B82F6';
+    }
+    const countBadge = document.getElementById('sidebar-active-project-count');
+    if (countBadge) {
+      countBadge.textContent = `${this.state.projects.length} Total`;
+    }
   },
 
   renderProjectsSidebar() {
@@ -365,6 +376,9 @@ const app = {
     if (select) select.value = String(projectId);
     const analyticsSelect = document.getElementById('analytics-project-select');
     if (analyticsSelect) analyticsSelect.value = String(projectId);
+    const current = (this.state.projects || []).find(p => Number(p.id) === projectId);
+    const dot = document.getElementById('project-select-color-dot');
+    if (dot) dot.style.backgroundColor = current?.color || '#3B82F6';
     this.renderProjectsSidebar();
 
     // Reset project-dependent view state to avoid distortion across projects

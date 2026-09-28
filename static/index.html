@@ -97,30 +97,46 @@
     </div>
 
     <!-- Active Project Switcher -->
-    <div id="project-select-container" class="px-4 pt-3.5 pb-2.5 flex-shrink-0 border-b border-slate-800/60 bg-slate-900/50">
-      <div class="flex items-center justify-between mb-1.5">
-        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Project</label>
-        <div class="flex items-center space-x-2">
-          <button id="sidebar-clone-project-btn" onclick="app.openCloneProjectModal(app.state.currentProjectId)" title="Duplicate / Copy as Project Template" class="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition">
-            <i data-lucide="copy" class="w-3 h-3"></i>
-            <span>Clone</span>
-          </button>
-          <button id="sidebar-manage-project-btn" onclick="app.openProjectModal(app.state.currentProjectId)" title="Manage / Edit / Delete Active Project" class="text-[11px] font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
-            <i data-lucide="settings" class="w-3 h-3"></i>
-            <span>Manage</span>
-          </button>
-          <button id="sidebar-new-project-btn" onclick="app.openProjectModal()" title="Create New Project" class="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition">
-            <i data-lucide="plus" class="w-3 h-3"></i>
-            <span>New</span>
-          </button>
+    <div id="project-select-container" class="px-3.5 pt-3 pb-3 flex-shrink-0 border-b border-slate-800/80 bg-slate-900/60">
+      
+      <!-- Header Row -->
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center space-x-1.5">
+          <i data-lucide="layers" class="w-3.5 h-3.5 text-blue-400"></i>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Project</span>
         </div>
+        <span id="sidebar-active-project-count" class="text-[10px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700/60">
+          <!-- Dynamically populated -->
+        </span>
       </div>
-      <div class="relative">
-        <select id="project-select" class="w-full bg-slate-800 text-slate-100 text-xs font-medium rounded-lg pl-3 pr-8 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer">
+
+      <!-- Select Box with Project Color Dot -->
+      <div class="relative flex items-center bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-slate-600 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 rounded-xl transition shadow-sm overflow-hidden">
+        <span id="project-select-color-dot" class="w-2.5 h-2.5 rounded-full ml-3 mr-0 flex-shrink-0 bg-blue-500 transition-colors duration-200"></span>
+        <select id="project-select" class="w-full bg-transparent text-slate-100 text-xs font-semibold py-2 pl-2.5 pr-8 focus:outline-none appearance-none cursor-pointer truncate">
           <!-- Populated dynamically -->
         </select>
-        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none"></i>
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none"></i>
       </div>
+
+      <!-- Balanced 3-Column Action Toolbar -->
+      <div class="grid grid-cols-3 gap-1.5 mt-2">
+        <button id="sidebar-new-project-btn" onclick="app.openProjectModal()" title="Create New Project" class="flex items-center justify-center gap-1 py-1.5 px-1 bg-slate-800/80 hover:bg-blue-600/20 hover:text-blue-300 hover:border-blue-500/40 text-slate-300 text-[11px] font-semibold rounded-lg border border-slate-700/60 transition shadow-sm group">
+          <i data-lucide="plus" class="w-3 h-3 text-blue-400 group-hover:scale-110 transition-transform"></i>
+          <span>New</span>
+        </button>
+
+        <button id="sidebar-clone-project-btn" onclick="app.openCloneProjectModal(app.state.currentProjectId)" title="Duplicate / Copy as Project Template" class="flex items-center justify-center gap-1 py-1.5 px-1 bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 hover:border-indigo-500/40 text-slate-300 text-[11px] font-semibold rounded-lg border border-slate-700/60 transition shadow-sm group">
+          <i data-lucide="copy" class="w-3 h-3 text-indigo-400 group-hover:scale-110 transition-transform"></i>
+          <span>Clone</span>
+        </button>
+
+        <button id="sidebar-manage-project-btn" onclick="app.openProjectModal(app.state.currentProjectId)" title="Manage / Edit / Delete Active Project" class="flex items-center justify-center gap-1 py-1.5 px-1 bg-slate-800/80 hover:bg-slate-700 hover:text-white hover:border-slate-500 text-slate-300 text-[11px] font-semibold rounded-lg border border-slate-700/60 transition shadow-sm group">
+          <i data-lucide="settings" class="w-3 h-3 text-slate-400 group-hover:scale-110 transition-transform"></i>
+          <span>Manage</span>
+        </button>
+      </div>
+
     </div>
 
     <!-- Navigation Views & Categories -->
