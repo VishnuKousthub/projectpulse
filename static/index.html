@@ -101,6 +101,10 @@
       <div class="flex items-center justify-between mb-1.5">
         <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Project</label>
         <div class="flex items-center space-x-2">
+          <button id="sidebar-clone-project-btn" onclick="app.openCloneProjectModal(app.state.currentProjectId)" title="Duplicate / Copy as Project Template" class="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition">
+            <i data-lucide="copy" class="w-3 h-3"></i>
+            <span>Clone</span>
+          </button>
           <button id="sidebar-manage-project-btn" onclick="app.openProjectModal(app.state.currentProjectId)" title="Manage / Edit / Delete Active Project" class="text-[11px] font-semibold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
             <i data-lucide="settings" class="w-3 h-3"></i>
             <span>Manage</span>
@@ -1743,15 +1747,205 @@
         </div>
       </div>
       <div class="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
-        <button id="project-delete-btn" type="button" onclick="app.handleDeleteProjectFromModal()" class="hidden text-rose-600 hover:text-rose-700 text-xs font-semibold flex items-center space-x-1.5 transition px-2 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40">
-          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-          <span>Delete Project</span>
-        </button>
+        <div class="flex items-center space-x-2">
+          <button id="project-delete-btn" type="button" onclick="app.handleDeleteProjectFromModal()" class="hidden text-rose-600 hover:text-rose-700 text-xs font-semibold flex items-center space-x-1.5 transition px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Delete</span>
+          </button>
+          <button id="project-duplicate-btn" type="button" onclick="app.handleDuplicateFromProjectModal()" class="hidden text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 text-xs font-semibold flex items-center space-x-1.5 transition px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>Duplicate / Template</span>
+          </button>
+        </div>
         <div class="flex space-x-2 ml-auto">
           <button onclick="app.closeProjectModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
           <button id="project-submit-btn" onclick="app.handleSaveProject()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm">Save Project</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- PROJECT CLONER & TEMPLATE DUPLICATION MODAL -->
+  <div id="clone-project-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/50 flex-shrink-0">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+            <i data-lucide="copy" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <span>Duplicate Project & Template</span>
+              <span class="text-[10px] uppercase font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">Template Engine</span>
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Copy all activities, milestones, sprints, and mapped resources into a new project template.</p>
+          </div>
+        </div>
+        <button onclick="app.closeCloneProjectModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-6 space-y-5 overflow-y-auto custom-scroll text-xs">
+        
+        <!-- Step 1: Source Project Selection -->
+        <div class="space-y-2">
+          <label class="block font-bold text-slate-700 dark:text-slate-300">
+            1. Source Project / Template <span class="text-indigo-600 dark:text-indigo-400">*</span>
+          </label>
+          <div class="relative">
+            <select id="clone-source-project-id" onchange="app.handleCloneSourceChange(this.value)" class="w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold rounded-lg pl-3 pr-8 py-2.5 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer">
+              <!-- Dynamically populated -->
+            </select>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none"></i>
+          </div>
+
+          <!-- Source Project Summary Metrics -->
+          <div id="clone-source-stats" class="grid grid-cols-5 gap-2 p-3 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-xl">
+            <div class="text-center">
+              <span class="block text-[10px] font-bold uppercase tracking-wider text-indigo-600/80 dark:text-indigo-400">Activities</span>
+              <span id="clone-stat-tasks" class="text-sm font-extrabold text-slate-800 dark:text-white">--</span>
+            </div>
+            <div class="text-center border-l border-indigo-200/60 dark:border-indigo-900/60">
+              <span class="block text-[10px] font-bold uppercase tracking-wider text-indigo-600/80 dark:text-indigo-400">Sprints</span>
+              <span id="clone-stat-sprints" class="text-sm font-extrabold text-slate-800 dark:text-white">--</span>
+            </div>
+            <div class="text-center border-l border-indigo-200/60 dark:border-indigo-900/60">
+              <span class="block text-[10px] font-bold uppercase tracking-wider text-indigo-600/80 dark:text-indigo-400">Milestones</span>
+              <span id="clone-stat-milestones" class="text-sm font-extrabold text-slate-800 dark:text-white">--</span>
+            </div>
+            <div class="text-center border-l border-indigo-200/60 dark:border-indigo-900/60">
+              <span class="block text-[10px] font-bold uppercase tracking-wider text-indigo-600/80 dark:text-indigo-400">Team</span>
+              <span id="clone-stat-members" class="text-sm font-extrabold text-slate-800 dark:text-white">--</span>
+            </div>
+            <div class="text-center border-l border-indigo-200/60 dark:border-indigo-900/60">
+              <span class="block text-[10px] font-bold uppercase tracking-wider text-indigo-600/80 dark:text-indigo-400">Resources</span>
+              <span id="clone-stat-resources" class="text-sm font-extrabold text-slate-800 dark:text-white">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Target Project Details -->
+        <div class="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <label class="block font-bold text-slate-700 dark:text-slate-300">2. New Project Template Details</label>
+          
+          <div>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">New Project Name *</label>
+            <input type="text" id="clone-project-name" placeholder="e.g. Chemical Formulation v2 (Template)" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">Description</label>
+            <textarea id="clone-project-description" rows="2" placeholder="Project goals, guidelines, and execution context..." class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <div>
+              <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">Theme Accent Color</label>
+              <div class="flex items-center space-x-2">
+                <input type="color" id="clone-project-color" value="#6366F1" class="w-9 h-9 rounded-lg cursor-pointer border-0 bg-transparent">
+                <span class="text-slate-500 text-[11px]">Select brand theme</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Template Progress & Execution State -->
+        <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <label class="block font-bold text-slate-700 dark:text-slate-300">3. Execution Mode</label>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <!-- Mode A: Clean Template (Reset Progress) -->
+            <label class="relative flex flex-col p-3 rounded-xl border-2 border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20 cursor-pointer transition hover:border-indigo-600 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/80 dark:has-[:checked]:bg-indigo-950/40">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400"></i>
+                  <span>Clean Template (Reset)</span>
+                </span>
+                <input type="radio" name="clone-progress-mode" id="clone-mode-reset" value="reset" checked class="text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+              </div>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                Recommended: Resets all activities to <strong>To Do (0% progress)</strong>, 0h logged, unchecks subtasks, and sets sprints to planning. Ready for fresh execution.
+              </p>
+            </label>
+
+            <!-- Mode B: Exact Clone (Preserve Progress) -->
+            <label class="relative flex flex-col p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 cursor-pointer transition hover:border-slate-300 dark:hover:border-slate-600 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/80 dark:has-[:checked]:bg-indigo-950/40">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <i data-lucide="layers" class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400"></i>
+                  <span>Exact Clone (Preserve)</span>
+                </span>
+                <input type="radio" name="clone-progress-mode" id="clone-mode-preserve" value="preserve" class="text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+              </div>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                Preserves exact current progress %, actual hours, task statuses (Done, In Review), and completed subtasks. Ideal for branching or snapshots.
+              </p>
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 4: Component Inclusions -->
+        <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <label class="block font-bold text-slate-700 dark:text-slate-300">4. Data Elements to Include</label>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800">
+              <input type="checkbox" id="clone-copy-members" checked class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+              <span class="text-slate-700 dark:text-slate-300 font-medium text-[11px]">Team Members & Assignees</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800">
+              <input type="checkbox" id="clone-copy-sprints" checked class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+              <span class="text-slate-700 dark:text-slate-300 font-medium text-[11px]">Sprints & Iterations</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800">
+              <input type="checkbox" id="clone-copy-milestones" checked class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+              <span class="text-slate-700 dark:text-slate-300 font-medium text-[11px]">Project Milestones</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800">
+              <input type="checkbox" id="clone-copy-resources" checked class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+              <span class="text-slate-700 dark:text-slate-300 font-medium text-[11px]">Mapped Resources & Equipment</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 5: Kickoff Date Shift (Optional) -->
+        <div class="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+            <label class="block font-bold text-slate-700 dark:text-slate-300">5. Project Kickoff Date (Optional Date Shift)</label>
+            <span class="text-[10px] text-slate-400">Recalculates entire timeline</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <input type="date" id="clone-new-start-date" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-medium text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <button type="button" onclick="document.getElementById('clone-new-start-date').value = new Date().toISOString().split('T')[0]" class="px-2.5 py-2 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 rounded-lg transition">
+              Today
+            </button>
+            <button type="button" onclick="document.getElementById('clone-new-start-date').value = ''" class="px-2 py-2 text-[11px] text-slate-400 hover:text-slate-600 transition">
+              Clear
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-500 dark:text-slate-400">
+            If set, all task dates, sprints, and milestones will automatically shift proportionally to align with this new start date. Leave empty to preserve original relative dates.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-4 bg-slate-50/80 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
+        <span class="text-[11px] text-slate-500">Fast 0ms template generation</span>
+        <div class="flex items-center space-x-2">
+          <button onclick="app.closeCloneProjectModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition">Cancel</button>
+          <button id="clone-project-submit-btn" onclick="app.handleCloneProjectSubmit()" class="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 transition">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>Create Cloned Project Template</span>
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 

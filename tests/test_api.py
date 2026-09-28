@@ -1129,6 +1129,84 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.request(f"/api/tasks/{task_id}", method="DELETE")
         self.request(f"/api/resources/{res_id}", method="DELETE")
 
+    def test_35_clone_project_as_template(self):
+        # 1. Clone Project 1 as a clean template (reset progress)
+        clone_payload = {
+            "name": "Cloned Project Template Alpha",
+            "description": "Standardised Workflow Template",
+            "color": "#8B5CF6",
+            "reset_progress": True,
+            "copy_members": True,
+            "copy_sprints": True,
+            "copy_milestones": True,
+            "copy_resources": True
+        }
+        status, res = self.request("/api/projects/1/clone", method="POST", body=clone_payload)
+        self.assertEqual(status, 201)
+        self.assertTrue(res["success"])
+        self.assertIn("Cloned Project Template Alpha", res["message"])
+        
+        cloned_project = res["project"]
+        cloned_p_id = cloned_project["id"]
+        self.assertNotEqual(cloned_p_id, 1)
+        self.assertEqual(cloned_project["name"], "Cloned Project Template Alpha")
+        self.assertEqual(cloned_project["color"], "#8B5CF6")
+        self.assertGreater(cloned_project["total_tasks"], 0)
+        self.assertEqual(cloned_project["completed_tasks"], 0) # Reset progress verified!
+
+        # 2. Verify all tasks in new project are 'todo' with 0% progress
+        status_t, tasks = self.request(f"/api/projects/{cloned_p_id}/tasks")
+        self.assertEqual(status_t, 200)
+        self.assertGreater(len(tasks), 0)
+        for t in tasks:
+            self.assertEqual(t["status"], "todo")
+            self.assertEqual(t["progress_pct"], 0)
+            self.assertEqual(t["actual_hours"], 0.0)
+            for sub in t.get("subtasks_list", []):
+                self.assertEqual(sub["completed"], 0)
+
+        # 3. Verify members and resources mapped
+        status_m, members = self.request(f"/api/projects/{cloned_p_id}/members")
+        self.assertEqual(status_m, 200)
+        self.assertGreater(len(members), 0)
+
+        status_r, resources = self.request(f"/api/projects/{cloned_p_id}/resources")
+        self.assertEqual(status_r, 200)
+
+        # Clean up
+        self.request(f"/api/projects/{cloned_p_id}", method="DELETE")
+
+    def test_36_clone_project_with_date_shift_and_preserve_state(self):
+        # 1. Clone Project 1 with generic endpoint, shifted start date and preserved state
+        clone_payload = {
+            "source_project_id": 1,
+            "name": "Phase 2 Production Pipeline",
+            "description": "Next quarter operational pipeline",
+            "color": "#10B981",
+            "reset_progress": False,
+            "copy_members": True,
+            "copy_sprints": True,
+            "copy_milestones": True,
+            "copy_resources": True,
+            "new_start_date": "2027-01-01"
+        }
+        status, res = self.request("/api/projects/clone", method="POST", body=clone_payload)
+        self.assertEqual(status, 201)
+        self.assertTrue(res["success"])
+
+        cloned_p_id = res["project"]["id"]
+        status_t, tasks = self.request(f"/api/projects/{cloned_p_id}/tasks")
+        self.assertEqual(status_t, 200)
+        
+        # Verify date shifting occurred
+        tasks_with_start = [t for t in tasks if t.get("start_date")]
+        if tasks_with_start:
+            min_date = min(t["start_date"] for t in tasks_with_start)
+            self.assertTrue(min_date.startswith("2027-01-01"))
+
+        # Clean up
+        self.request(f"/api/projects/{cloned_p_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 

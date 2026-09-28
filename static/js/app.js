@@ -4249,6 +4249,7 @@ const app = {
     const descInput = document.getElementById('project-input-description');
     const colorInput = document.getElementById('project-input-color');
     const delBtn = document.getElementById('project-delete-btn');
+    const dupBtn = document.getElementById('project-duplicate-btn');
     const titleEl = document.getElementById('project-modal-title');
     const submitBtn = document.getElementById('project-submit-btn');
 
@@ -4261,6 +4262,7 @@ const app = {
       if (titleEl) titleEl.textContent = 'Project Settings';
       if (submitBtn) submitBtn.textContent = 'Save Changes';
       if (delBtn) delBtn.classList.remove('hidden');
+      if (dupBtn) dupBtn.classList.remove('hidden');
     } else {
       if (idInput) idInput.value = '';
       if (nameInput) nameInput.value = '';
@@ -4269,6 +4271,7 @@ const app = {
       if (titleEl) titleEl.textContent = 'Create New Project';
       if (submitBtn) submitBtn.textContent = 'Create Project';
       if (delBtn) delBtn.classList.add('hidden');
+      if (dupBtn) dupBtn.classList.add('hidden');
     }
 
     modal.classList.remove('hidden');
@@ -4278,6 +4281,200 @@ const app = {
 
   closeProjectModal() {
     document.getElementById('project-modal')?.classList.add('hidden');
+  },
+
+  handleDuplicateFromProjectModal() {
+    const id = Number(document.getElementById('project-input-id')?.value) || this.state.currentProjectId;
+    this.closeProjectModal();
+    if (id) {
+      this.openCloneProjectModal(id);
+    }
+  },
+
+  // ==================== PROJECT CLONER & TEMPLATE DUPLICATION ====================
+  openCloneProjectModal(sourceProjectId = null) {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can duplicate or create project templates', 'warning');
+      return;
+    }
+    const modal = document.getElementById('clone-project-modal');
+    if (!modal) return;
+
+    const sourceSelect = document.getElementById('clone-source-project-id');
+    if (sourceSelect) {
+      sourceSelect.innerHTML = (this.state.projects || []).map(p => `
+        <option value="${p.id}">${this.escapeHtml(p.name)} (${p.total_tasks || 0} activities)</option>
+      `).join('');
+      
+      const targetSourceId = sourceProjectId || this.state.currentProjectId || (this.state.projects && this.state.projects[0]?.id);
+      if (targetSourceId) {
+        sourceSelect.value = targetSourceId;
+      }
+    }
+
+    const selectedSourceId = Number(sourceSelect?.value || sourceProjectId || this.state.currentProjectId);
+    this.handleCloneSourceChange(selectedSourceId);
+
+    // Reset controls to clean template defaults
+    const resetRadio = document.getElementById('clone-mode-reset');
+    if (resetRadio) resetRadio.checked = true;
+
+    const copyMembers = document.getElementById('clone-copy-members');
+    if (copyMembers) copyMembers.checked = true;
+
+    const copySprints = document.getElementById('clone-copy-sprints');
+    if (copySprints) copySprints.checked = true;
+
+    const copyMilestones = document.getElementById('clone-copy-milestones');
+    if (copyMilestones) copyMilestones.checked = true;
+
+    const copyResources = document.getElementById('clone-copy-resources');
+    if (copyResources) copyResources.checked = true;
+
+    const dateInput = document.getElementById('clone-new-start-date');
+    if (dateInput) dateInput.value = '';
+
+    modal.classList.remove('hidden');
+    document.getElementById('clone-project-name')?.focus();
+    this.initLucide();
+  },
+
+  closeCloneProjectModal() {
+    document.getElementById('clone-project-modal')?.classList.add('hidden');
+  },
+
+  handleCloneSourceChange(sourceId) {
+    const numId = Number(sourceId);
+    const proj = (this.state.projects || []).find(p => p.id === numId) || this.state.currentProject;
+    if (!proj) return;
+
+    // 1. Update source project metrics
+    const statTasks = document.getElementById('clone-stat-tasks');
+    const statSprints = document.getElementById('clone-stat-sprints');
+    const statMilestones = document.getElementById('clone-stat-milestones');
+    const statMembers = document.getElementById('clone-stat-members');
+    const statResources = document.getElementById('clone-stat-resources');
+
+    if (numId === this.state.currentProjectId && this.state.currentProject) {
+      if (statTasks) statTasks.textContent = (this.state.tasks || []).length;
+      if (statSprints) statSprints.textContent = (this.state.currentProject.sprints || []).length;
+      if (statMilestones) statMilestones.textContent = (this.state.currentProject.milestones || []).length;
+      if (statMembers) statMembers.textContent = (this.state.currentProject.members || []).length;
+      if (statResources) statResources.textContent = (this.state.projectResources || []).length || '--';
+    } else {
+      if (statTasks) statTasks.textContent = proj.total_tasks || 0;
+      if (statSprints) statSprints.textContent = proj.sprints?.length || '--';
+      if (statMilestones) statMilestones.textContent = proj.milestones?.length || '--';
+      if (statMembers) statMembers.textContent = proj.members?.length || '--';
+      if (statResources) statResources.textContent = '--';
+    }
+
+    // 2. Pre-fill target name and description
+    const nameInput = document.getElementById('clone-project-name');
+    if (nameInput) {
+      nameInput.value = `${proj.name} (Template)`;
+    }
+
+    const descInput = document.getElementById('clone-project-description');
+    if (descInput) {
+      descInput.value = proj.description || '';
+    }
+
+    const colorInput = document.getElementById('clone-project-color');
+    if (colorInput) {
+      colorInput.value = proj.color || '#6366F1';
+    }
+  },
+
+  async handleCloneProjectSubmit() {
+    if (this.isProgressOnly()) {
+      this.showToast('Only Project Managers and Admins can duplicate or create project templates', 'warning');
+      return;
+    }
+
+    const sourceSelect = document.getElementById('clone-source-project-id');
+    const sourceId = Number(sourceSelect?.value || this.state.currentProjectId);
+    if (!sourceId) {
+      this.showToast('Please select a source project to duplicate', 'error');
+      return;
+    }
+
+    const nameInput = document.getElementById('clone-project-name');
+    const name = nameInput?.value.trim();
+    if (!name) {
+      this.showToast('Please enter a name for the new project template', 'error');
+      nameInput?.focus();
+      return;
+    }
+
+    const description = document.getElementById('clone-project-description')?.value || '';
+    const color = document.getElementById('clone-project-color')?.value || '#6366F1';
+    const isReset = document.getElementById('clone-mode-reset')?.checked !== false;
+    const copyMembers = document.getElementById('clone-copy-members')?.checked !== false;
+    const copySprints = document.getElementById('clone-copy-sprints')?.checked !== false;
+    const copyMilestones = document.getElementById('clone-copy-milestones')?.checked !== false;
+    const copyResources = document.getElementById('clone-copy-resources')?.checked !== false;
+    const newStartDate = document.getElementById('clone-new-start-date')?.value || null;
+
+    const submitBtn = document.getElementById('clone-project-submit-btn');
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Generating Template...</span>';
+      this.initLucide();
+    }
+
+    try {
+      const res = await this.api(`/api/projects/${sourceId}/clone`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description,
+          color,
+          reset_progress: isReset,
+          copy_members: copyMembers,
+          copy_sprints: copySprints,
+          copy_milestones: copyMilestones,
+          copy_resources: copyResources,
+          new_start_date: newStartDate
+        })
+      });
+
+      this.closeCloneProjectModal();
+
+      if (res && res.project) {
+        // 1. Insert new cloned project to state
+        this.state.projects.unshift(res.project);
+        localStorage.setItem('projectpulse_cached_projects', JSON.stringify(this.state.projects));
+
+        // 2. Seamlessly switch to new project
+        this.state.currentProjectId = res.project.id;
+        this.state.currentProject = res.project;
+        this.state.tasks = (res.bootstrap && res.bootstrap.tasks) ? res.bootstrap.tasks : [];
+        localStorage.setItem('projectpulse_active_project', res.project.id);
+        this.syncCurrentProjectCache();
+
+        // 3. Render all UI views
+        this.renderProjectsDropdown();
+        this.renderProjectsSidebar();
+        this.populateFilterDropdowns();
+        this.renderCurrentView();
+
+        const countText = res.cloned_counts?.activities ? ` with ${res.cloned_counts.activities} activities` : '';
+        this.showToast(`Template "${res.project.name}" created successfully${countText}!`, 'success');
+      } else {
+        this.showToast(res.message || 'Project template created successfully!', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to clone project template:', err);
+      this.showToast(err.message || 'Failed to clone project template', 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHtml;
+        this.initLucide();
+      }
+    }
   },
 
   async handleSaveProject() {

@@ -559,6 +559,261 @@ def delete_project(project_id):
             "deleted_id": project_id
         })
 
+# ==================== PROJECT CLONING / TEMPLATE COPY ====================
+
+def shift_iso_date(date_str, delta_days):
+    if not date_str or delta_days is None:
+        return date_str
+    try:
+        clean_d = str(date_str).strip()[:10]
+        dt = datetime.strptime(clean_d, "%Y-%m-%d")
+        new_dt = dt + timedelta(days=delta_days)
+        return new_dt.strftime("%Y-%m-%d")
+    except Exception:
+        return date_str
+
+def execute_clone_project(conn, source_id, data, user):
+    source_project = conn.execute("SELECT * FROM projects WHERE id = ?", (source_id,)).fetchone()
+    if not source_project:
+        return None, "Source project not found", 404
+
+    target_name = clean_text(data.get("name"))
+    if not target_name:
+        target_name = f"{source_project['name']} (Template Copy)"
+
+    description = data.get("description")
+    if description is None:
+        description = source_project.get("description", "")
+    
+    color = data.get("color") or source_project.get("color") or "#3B82F6"
+    
+    reset_progress = bool(data.get("reset_progress", True))
+    copy_members = bool(data.get("copy_members", True))
+    copy_sprints = bool(data.get("copy_sprints", True))
+    copy_milestones = bool(data.get("copy_milestones", True))
+    copy_resources = bool(data.get("copy_resources", True))
+    
+    new_start_date = data.get("new_start_date")
+    new_start_date = str(new_start_date).strip() if new_start_date and str(new_start_date).strip() not in ("", "null", "undefined", "None") else None
+    
+    delta_days = None
+    if new_start_date:
+        try:
+            target_start_dt = datetime.strptime(new_start_date[:10], "%Y-%m-%d")
+            # Find earliest date in source tasks or sprints
+            min_row = conn.execute("""
+                SELECT MIN(start_date) as min_start FROM tasks 
+                WHERE project_id = ? AND start_date IS NOT NULL AND start_date != ''
+            """, (source_id,)).fetchone()
+            earliest_str = min_row["min_start"] if (min_row and min_row["min_start"]) else None
+            
+            if not earliest_str:
+                sprint_min = conn.execute("""
+                    SELECT MIN(start_date) as min_start FROM sprints 
+                    WHERE project_id = ? AND start_date IS NOT NULL AND start_date != ''
+                """, (source_id,)).fetchone()
+                earliest_str = sprint_min["min_start"] if (sprint_min and sprint_min["min_start"]) else None
+            
+            if earliest_str:
+                source_start_dt = datetime.strptime(str(earliest_str).strip()[:10], "%Y-%m-%d")
+                delta_days = (target_start_dt - source_start_dt).days
+        except Exception as ex:
+            print(f"[ProjectPulse Clone] Date shift calculation warning: {ex}")
+            delta_days = None
+
+    now_str = get_now_iso()
+    cursor = conn.cursor()
+    
+    # 1. Create target project
+    cursor.execute("""
+        INSERT INTO projects (name, description, color, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (target_name, description, color, now_str, now_str))
+    new_project_id = cursor.lastrowid
+
+    # 2. Members
+    member_map = {}
+    if copy_members:
+        source_members = conn.execute("SELECT * FROM members WHERE project_id = ?", (source_id,)).fetchall()
+        for m in source_members:
+            cursor.execute("""
+                INSERT INTO members (project_id, name, email, role, avatar_color)
+                VALUES (?, ?, ?, ?, ?)
+            """, (new_project_id, m["name"], m["email"], m["role"], m["avatar_color"]))
+            member_map[m["id"]] = cursor.lastrowid
+    
+    if not member_map:
+        cursor.execute("""
+            INSERT INTO members (project_id, name, email, role, avatar_color)
+            VALUES (?, ?, ?, ?, ?)
+        """, (new_project_id, "Project Lead", "lead@company.internal", "Owner", color))
+        default_lead_id = cursor.lastrowid
+        member_map[None] = default_lead_id
+
+    # 3. Sprints
+    sprint_map = {}
+    if copy_sprints:
+        source_sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date ASC, id ASC", (source_id,)).fetchall()
+        for s in source_sprints:
+            s_start = shift_iso_date(s["start_date"], delta_days)
+            s_end = shift_iso_date(s["end_date"], delta_days)
+            s_status = "planning" if reset_progress else s["status"]
+            cursor.execute("""
+                INSERT INTO sprints (project_id, name, goal, start_date, end_date, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (new_project_id, s["name"], s["goal"], s_start, s_end, s_status))
+            sprint_map[s["id"]] = cursor.lastrowid
+
+    # 4. Milestones
+    source_milestones = []
+    if copy_milestones:
+        source_milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC, id ASC", (source_id,)).fetchall()
+        for m in source_milestones:
+            m_due = shift_iso_date(m["due_date"], delta_days) or now_str[:10]
+            m_status = "pending" if reset_progress else m["status"]
+            cursor.execute("""
+                INSERT INTO milestones (project_id, title, due_date, status)
+                VALUES (?, ?, ?, ?)
+            """, (new_project_id, m["title"], m_due, m_status))
+
+    # 5. Tasks & Subtasks
+    task_map = {}
+    source_tasks = conn.execute("SELECT * FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC", (source_id,)).fetchall()
+    for t in source_tasks:
+        t_sprint_id = sprint_map.get(t["sprint_id"]) if (t["sprint_id"] and copy_sprints) else None
+        t_assignee_id = member_map.get(t["assignee_id"]) if (t["assignee_id"] and copy_members) else None
+        t_status = "todo" if reset_progress else (t["status"] or "todo")
+        t_progress = 0 if reset_progress else (t["progress_pct"] or 0)
+        t_actual_hours = 0.0 if reset_progress else (t["actual_hours"] or 0.0)
+        t_start = shift_iso_date(t["start_date"], delta_days)
+        t_due = shift_iso_date(t["due_date"], delta_days)
+        
+        cursor.execute("""
+            INSERT INTO tasks (
+                project_id, sprint_id, title, description, status, priority,
+                order_index, start_date, due_date, estimated_hours, actual_hours,
+                progress_pct, assignee_id, tags, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            new_project_id, t_sprint_id, t["title"], t["description"], t_status, t["priority"],
+            t["order_index"], t_start, t_due, t["estimated_hours"], t_actual_hours,
+            t_progress, t_assignee_id, t["tags"] or "[]", now_str, now_str
+        ))
+        new_task_id = cursor.lastrowid
+        task_map[t["id"]] = new_task_id
+
+        # Copy subtasks
+        source_subtasks = conn.execute("SELECT * FROM subtasks WHERE task_id = ? ORDER BY order_index ASC, id ASC", (t["id"],)).fetchall()
+        for sub in source_subtasks:
+            sub_comp = 0 if reset_progress else (sub["completed"] or 0)
+            cursor.execute("""
+                INSERT INTO subtasks (task_id, title, completed, order_index)
+                VALUES (?, ?, ?, ?)
+            """, (new_task_id, sub["title"], sub_comp, sub["order_index"]))
+
+    # 6. Project Resources & Task Resources
+    source_prs = []
+    if copy_resources:
+        source_prs = conn.execute("SELECT * FROM project_resources WHERE project_id = ?", (source_id,)).fetchall()
+        for pr in source_prs:
+            pr_start = shift_iso_date(pr["start_date"], delta_days)
+            pr_end = shift_iso_date(pr["end_date"], delta_days)
+            cursor.execute("""
+                INSERT OR IGNORE INTO project_resources (
+                    project_id, resource_id, role, allocation_pct,
+                    start_date, end_date, responsibility, status, notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                new_project_id, pr["resource_id"], pr["role"], pr["allocation_pct"],
+                pr_start, pr_end, pr["responsibility"], pr["status"], pr["notes"], now_str, now_str
+            ))
+
+        source_trs = conn.execute("SELECT * FROM task_resources WHERE project_id = ?", (source_id,)).fetchall()
+        for tr in source_trs:
+            mapped_t_id = task_map.get(tr["task_id"])
+            if mapped_t_id:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO task_resources (
+                        task_id, resource_id, project_id, role,
+                        responsibility, allocation_pct, notes, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    mapped_t_id, tr["resource_id"], new_project_id, tr["role"],
+                    tr["responsibility"], tr["allocation_pct"], tr["notes"], now_str
+                ))
+
+    # Activity log
+    user_name = user.get("full_name") if user else "Project Manager"
+    record_activity(
+        conn, new_project_id, user_name, "Project Template Cloned",
+        f'Cloned template from "{source_project["name"]}" with {len(source_tasks)} activities and {len(member_map)} members'
+    )
+
+    # Fetch created project
+    created_proj = conn.execute("SELECT * FROM projects WHERE id = ?", (new_project_id,)).fetchone()
+    members_list = conn.execute("SELECT * FROM members WHERE project_id = ?", (new_project_id,)).fetchall()
+    sprints_list = conn.execute("SELECT * FROM sprints WHERE project_id = ?", (new_project_id,)).fetchall()
+    milestones_list = conn.execute("SELECT * FROM milestones WHERE project_id = ?", (new_project_id,)).fetchall()
+    
+    proj_dict = dict(created_proj)
+    proj_dict["members"] = members_list
+    proj_dict["sprints"] = sprints_list
+    proj_dict["milestones"] = milestones_list
+    proj_dict["total_tasks"] = len(source_tasks)
+    proj_dict["completed_tasks"] = 0 if reset_progress else sum(1 for t in source_tasks if t.get("status") == "done")
+    proj_dict["overdue_tasks"] = 0
+    proj_dict["total_actual_hours"] = 0.0 if reset_progress else sum(t.get("actual_hours", 0) for t in source_tasks)
+    proj_dict["total_estimated_hours"] = sum(t.get("estimated_hours", 0) for t in source_tasks)
+
+    # Return full bootstrap for instant client hydration
+    bootstrap = get_bootstrap_payload(conn, user["user_id"] if user else None, new_project_id)
+
+    return {
+        "success": True,
+        "message": f"Successfully created template copy '{target_name}' with {len(source_tasks)} activities",
+        "project": proj_dict,
+        "source_project_id": source_id,
+        "source_project_name": source_project["name"],
+        "cloned_counts": {
+            "activities": len(source_tasks),
+            "members": len(member_map),
+            "sprints": len(sprint_map),
+            "milestones": len(source_milestones),
+            "project_resources": len(source_prs)
+        },
+        "bootstrap": bootstrap
+    }, None, 201
+
+@app.post("/api/projects/<project_id:int>/clone")
+def clone_project_by_id(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot clone projects or templates. Only PM and Admin have full access control."}, status=403)
+
+    data = request.json or {}
+    with get_db() as conn:
+        result, err_msg, status_code = execute_clone_project(conn, project_id, data, user)
+        if err_msg:
+            return json_response({"error": err_msg}, status=status_code)
+        return json_response(result, status=status_code)
+
+@app.post("/api/projects/clone")
+def clone_project_generic():
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot clone projects or templates. Only PM and Admin have full access control."}, status=403)
+
+    data = request.json or {}
+    source_id = safe_int(data.get("source_project_id") or data.get("project_id"))
+    if not source_id:
+        return json_response({"error": "source_project_id is required"}, status=400)
+
+    with get_db() as conn:
+        result, err_msg, status_code = execute_clone_project(conn, source_id, data, user)
+        if err_msg:
+            return json_response({"error": err_msg}, status=status_code)
+        return json_response(result, status=status_code)
+
 # ==================== MEMBERS ====================
 
 @app.get("/api/projects/<project_id:int>/members")
