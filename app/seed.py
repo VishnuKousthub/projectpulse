@@ -306,7 +306,7 @@ def seed_database():
             }
         ]
 
-        for task_data in tasks_p1:
+        for idx_task, task_data in enumerate(tasks_p1):
             cursor.execute("""
                 INSERT INTO tasks (
                     project_id, sprint_id, title, description, status, priority,
@@ -321,7 +321,7 @@ def seed_database():
                 task_data["desc"],
                 task_data["status"],
                 task_data["priority"],
-                task_data["order_index"],
+                idx_task,
                 task_data["start_date"],
                 task_data["due_date"],
                 task_data["est"],

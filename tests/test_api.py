@@ -1207,8 +1207,163 @@ class TestProjectPulseAPI(unittest.TestCase):
         # Clean up
         self.request(f"/api/projects/{cloned_p_id}", method="DELETE")
 
+    def test_37_activity_insertion_and_sequence_ordering(self):
+        # Create a dedicated clean project for sequence testing
+        status, project = self.request("/api/projects", method="POST", body={
+            "name": "Sequence Ordering Test Project",
+            "description": "Validates exact insertion and contiguous ordering",
+            "color": "#3B82F6"
+        })
+        self.assertEqual(status, 201)
+        p_id = project["id"]
+
+        # 1. Populate 20 initial sequential tasks: Task 1 through Task 20
+        task_ids = []
+        for i in range(1, 21):
+            s, t = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+                "title": f"Activity #{i:02d}",
+                "status": "todo",
+                "priority": "medium",
+                "position": "end"
+            })
+            self.assertEqual(s, 200)
+            task_ids.append(t["id"])
+
+        # Verify initial 20 tasks have contiguous order_index 0..19
+        s, tasks = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(s, 200)
+        self.assertEqual(len(tasks), 20)
+        for idx, t in enumerate(tasks):
+            self.assertEqual(t["order_index"], idx)
+            self.assertEqual(t["title"], f"Activity #{idx+1:02d}")
+
+        # 2. Test Case: Insert new activity between #12 and #13
+        # Predecessor is Activity #12 (at index 11)
+        pred_task_12_id = tasks[11]["id"]
+        succ_task_13_id = tasks[12]["id"]
+
+        s, new_task = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+            "title": "New Inserted Between 12 and 13",
+            "status": "todo",
+            "position": f"after_{pred_task_12_id}",
+            "insert_after_id": pred_task_12_id
+        })
+        self.assertEqual(s, 200)
+        new_id = new_task["id"]
+
+        # Fetch tasks and verify order
+        s, tasks_after = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(s, 200)
+        self.assertEqual(len(tasks_after), 21)
+        # Verify contiguous gapless order 0..20
+        for idx, t in enumerate(tasks_after):
+            self.assertEqual(t["order_index"], idx)
+
+        # The new task should be at position index 12 (1-based #13)
+        self.assertEqual(tasks_after[12]["id"], new_id)
+        self.assertEqual(tasks_after[12]["title"], "New Inserted Between 12 and 13")
+        # Predecessor #12 is at index 11
+        self.assertEqual(tasks_after[11]["id"], pred_task_12_id)
+        # Previous #13 is now shifted to index 13 (1-based #14)
+        self.assertEqual(tasks_after[13]["id"], succ_task_13_id)
+
+        # 3. Test Case: Insert between #1 and #2 (after index 0)
+        task_1_id = tasks_after[0]["id"]
+        task_2_id = tasks_after[1]["id"]
+
+        s, new_task_early = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+            "title": "New Inserted Between 1 and 2",
+            "status": "todo",
+            "position": f"after_{task_1_id}",
+            "insert_after_id": task_1_id
+        })
+        self.assertEqual(s, 200)
+
+        s, tasks_after2 = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(len(tasks_after2), 22)
+        for idx, t in enumerate(tasks_after2):
+            self.assertEqual(t["order_index"], idx)
+        self.assertEqual(tasks_after2[1]["id"], new_task_early["id"])
+        self.assertEqual(tasks_after2[2]["id"], task_2_id)
+
+        # 4. Test Case: Insert between last two activities
+        penultimate_id = tasks_after2[-2]["id"]
+        last_id = tasks_after2[-1]["id"]
+
+        s, new_penult = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+            "title": "New Inserted Between Last Two",
+            "status": "todo",
+            "position": f"after_{penultimate_id}",
+            "insert_after_id": penultimate_id
+        })
+        self.assertEqual(s, 200)
+
+        s, tasks_after3 = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(len(tasks_after3), 23)
+        for idx, t in enumerate(tasks_after3):
+            self.assertEqual(t["order_index"], idx)
+        self.assertEqual(tasks_after3[-2]["id"], new_penult["id"])
+        self.assertEqual(tasks_after3[-1]["id"], last_id)
+
+        # 5. Test Case: Insert multiple activities consecutively at the same position
+        target_ref_id = tasks_after3[5]["id"]
+        s, multi1 = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+            "title": "Multi Insert 1",
+            "status": "todo",
+            "position": f"after_{target_ref_id}",
+            "insert_after_id": target_ref_id
+        })
+        self.assertEqual(s, 200)
+        s, multi2 = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+            "title": "Multi Insert 2",
+            "status": "todo",
+            "position": f"after_{target_ref_id}",
+            "insert_after_id": target_ref_id
+        })
+        self.assertEqual(s, 200)
+
+        s, tasks_after_multi = self.request(f"/api/projects/{p_id}/tasks")
+        for idx, t in enumerate(tasks_after_multi):
+            self.assertEqual(t["order_index"], idx)
+
+        # 6. Test Case: Reorder activities via POST /api/projects/<id>/tasks/reorder
+        reverse_ids = [t["id"] for t in reversed(tasks_after_multi)]
+        s, reorder_res = self.request(f"/api/projects/{p_id}/tasks/reorder", method="POST", body={
+            "task_ids": reverse_ids
+        })
+        self.assertEqual(s, 200)
+        self.assertTrue(reorder_res["success"])
+
+        s, tasks_reversed = self.request(f"/api/projects/{p_id}/tasks")
+        for idx, t in enumerate(tasks_reversed):
+            self.assertEqual(t["order_index"], idx)
+            self.assertEqual(t["id"], reverse_ids[idx])
+
+        # 7. Test Case: Delete an activity and verify sequence stays strictly gapless
+        delete_target = tasks_reversed[10]["id"]
+        s, del_res = self.request(f"/api/tasks/{delete_target}", method="DELETE")
+        self.assertEqual(s, 200)
+
+        s, tasks_after_delete = self.request(f"/api/projects/{p_id}/tasks")
+        for idx, t in enumerate(tasks_after_delete):
+            self.assertEqual(t["order_index"], idx)
+        self.assertNotIn(delete_target, [t["id"] for t in tasks_after_delete])
+
+        # 8. Test Case: Move task up and down
+        moved_id = tasks_after_delete[5]["id"]
+        s, move_up_res = self.request(f"/api/tasks/{moved_id}/move", method="POST", body={"direction": "up"})
+        self.assertEqual(s, 200)
+        s, tasks_after_move = self.request(f"/api/projects/{p_id}/tasks")
+        for idx, t in enumerate(tasks_after_move):
+            self.assertEqual(t["order_index"], idx)
+        self.assertEqual(tasks_after_move[4]["id"], moved_id)
+
+        # Clean up test project
+        self.request(f"/api/projects/{p_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

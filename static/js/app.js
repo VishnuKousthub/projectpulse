@@ -581,6 +581,16 @@ const app = {
     this.fetchTasks();
   },
 
+  getSortedTasks(tasks) {
+    const list = [...(tasks || this.state.tasks || [])];
+    return list.sort((a, b) => {
+      const orderA = (a.order_index !== undefined && a.order_index !== null) ? Number(a.order_index) : 0;
+      const orderB = (b.order_index !== undefined && b.order_index !== null) ? Number(b.order_index) : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+  },
+
   // ==================== KANBAN BOARD RENDERER (TACTILE, SWIMLANES & ADVANCED CARDS) ====================
   setKanbanSwimlane(val) {
     this.state.kanbanSwimlane = val || 'status';
@@ -619,7 +629,7 @@ const app = {
     if (!boardContainer) return;
 
     if (!this.state.kanbanSwimlane) this.state.kanbanSwimlane = 'status';
-    const allTasks = this.state.tasks || [];
+    const allTasks = this.getSortedTasks();
     const members = this.state.currentProject?.members || [];
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1120,6 +1130,15 @@ const app = {
     if (tasksCount) tasksCount.textContent = `${this.state.tasks.length} tasks`;
     if (!container) return;
 
+    if (this.state.sortableInstances && this.state.sortableInstances.length > 0) {
+      this.state.sortableInstances.forEach(s => {
+        try {
+          if (s && typeof s.destroy === 'function') s.destroy();
+        } catch (e) {}
+      });
+    }
+    this.state.sortableInstances = [];
+
     if (this.state.tasks.length === 0) {
       container.innerHTML = `
         <div class="p-12 text-center text-slate-400 text-xs space-y-3">
@@ -1364,12 +1383,8 @@ const app = {
     const totalSpanMs = Math.max(timelineMax - timelineMin, 86400000);
 
     // 3. Render Task Rows (strictly sorted by sequential process order)
-    const sortedTasks = [...(this.state.tasks || [])].sort((a, b) => {
-      const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
-      const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.id - b.id;
-    });
+    const sortedTasks = this.getSortedTasks();
+    const isProgress = this.isProgressOnly();
 
     const rowsHtml = sortedTasks.map((t, idx) => {
       const taskStart = t.start_date ? new Date(t.start_date + 'T00:00:00') : new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1389,22 +1404,38 @@ const app = {
       const progressWidth = Math.min(100, Math.max(0, pct));
 
       return `
-        <div class="flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
+        <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
           
           <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px) -->
           <div class="w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80">
             
             <!-- Column 1: Title & Assignee info (270px) -->
-            <div class="w-[270px] flex-shrink-0 pl-3 pr-2.5 min-w-0 cursor-pointer flex flex-col justify-center" onclick="app.openTaskModal({id: ${t.id}})" title="Click to view/edit full task details">
-              <div class="flex items-center gap-1.5 min-w-0">
-                <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${idx + 1 < 10 ? '0' + (idx + 1) : (idx + 1)}</span>
+            <div class="w-[270px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
+              <div class="flex items-center gap-1 min-w-0">
+                ${!isProgress ? `
+                  <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
+                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                  </div>
+                ` : ''}
+                <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
                 ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
-                <span class="text-xs font-bold text-slate-800 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${this.escapeHtml(t.title)}</span>
-                <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-emerald-500 rounded transition ml-auto flex-shrink-0">
-                  <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
-                </button>
+                <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer group-hover:text-blue-600 dark:group-hover:text-blue-400 transition" title="Click to view/edit details">${this.escapeHtml(t.title)}</span>
+                
+                ${!isProgress ? `
+                  <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto flex-shrink-0 transition">
+                    <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'up')" title="Move Up" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === 0 ? 'invisible pointer-events-none' : ''}">
+                      <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'down')" title="Move Down" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === sortedTasks.length - 1 ? 'invisible pointer-events-none' : ''}">
+                      <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition">
+                      <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
+                    </button>
+                  </div>
+                ` : ''}
               </div>
-              <div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
+              <div class="flex items-center gap-1.5 mt-0.5 text-[10px] ${!isProgress ? 'pl-5' : 'pl-0'}">
                 <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
                 <span class="text-slate-300 dark:text-slate-600">•</span>
                 <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
@@ -1554,11 +1585,32 @@ const app = {
         </div>
 
         <!-- Task Rows -->
-        <div class="divide-y divide-slate-100 dark:divide-slate-700/40">${rowsHtml}</div>
+        <div id="gantt-tasks-rows" class="divide-y divide-slate-100 dark:divide-slate-700/40">${rowsHtml}</div>
         <!-- Milestone Row -->
         ${milestoneRowHtml}
       </div>
     `;
+
+    if (!this.isProgressOnly()) {
+      const ganttRowsEl = document.getElementById('gantt-tasks-rows');
+      if (ganttRowsEl && typeof Sortable !== 'undefined') {
+        const sortable = new Sortable(ganttRowsEl, {
+          animation: 150,
+          handle: '.gantt-drag-handle',
+          ghostClass: 'opacity-40',
+          chosenClass: 'bg-blue-50/60',
+          onEnd: async (evt) => {
+            const rows = Array.from(ganttRowsEl.querySelectorAll('.gantt-task-row'));
+            const newOrderedIds = rows.map(r => parseInt(r.getAttribute('data-task-id'), 10)).filter(Boolean);
+            if (newOrderedIds.length > 0) {
+              await this.handleActivitiesReordered(newOrderedIds);
+            }
+          }
+        });
+        if (!this.state.sortableInstances) this.state.sortableInstances = [];
+        this.state.sortableInstances.push(sortable);
+      }
+    }
 
     this.initLucide();
   },
@@ -1589,9 +1641,18 @@ const app = {
     const tbody = document.getElementById('tasks-table-body');
     if (!tbody) return;
 
+    if (this.state.sortableInstances && this.state.sortableInstances.length > 0) {
+      this.state.sortableInstances.forEach(s => {
+        try {
+          if (s && typeof s.destroy === 'function') s.destroy();
+        } catch (e) {}
+      });
+    }
+    this.state.sortableInstances = [];
+
     if (!this.state.tableSortBy) this.state.tableSortBy = 'order';
 
-    const allTasks = this.state.tasks || [];
+    const allTasks = this.getSortedTasks();
     const members = this.getUniqueProjectMembers();
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1654,10 +1715,10 @@ const app = {
           return (a.title || '').localeCompare(b.title || '');
         case 'order':
         default:
-          const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
-          const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
+          const orderA = (a.order_index !== undefined && a.order_index !== null) ? Number(a.order_index) : 0;
+          const orderB = (b.order_index !== undefined && b.order_index !== null) ? Number(b.order_index) : 0;
           if (orderA !== orderB) return orderA - orderB;
-          return a.id - b.id;
+          return (Number(a.id) || 0) - (Number(b.id) || 0);
       }
     });
 
@@ -1708,11 +1769,16 @@ const app = {
       `).join('');
 
       html += `
-        <tr class="hover:bg-blue-50/40 dark:hover:bg-slate-800/60 transition group border-b border-slate-100 dark:border-slate-800/80">
+        <tr data-task-id="${t.id}" class="hover:bg-blue-50/40 dark:hover:bg-slate-800/60 transition group border-b border-slate-100 dark:border-slate-800/80">
           
           <!-- 1. Activity Name & Sequence -->
           <td class="px-3.5 py-2.5">
-            <div class="flex items-center space-x-2.5">
+            <div class="flex items-center space-x-2">
+              ${!isProgress ? `
+                <div class="table-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
+                  <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                </div>
+              ` : ''}
               <button ${isProgress ? '' : `onclick="app.inlineUpdateTask(${t.id}, 'status', '${isDone ? 'in_progress' : 'done'}')"`}
                 class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition ${isDone ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'} ${isProgress ? 'cursor-not-allowed opacity-75' : 'hover:border-blue-500'}"
                 title="${isProgress ? 'Status modification restricted to PM/Admin' : (isDone ? 'Mark as in progress' : 'Mark as completed')}">
@@ -1887,6 +1953,26 @@ const app = {
 
     tbody.innerHTML = html;
 
+    if (!this.isProgressOnly() && (!this.state.tableSortBy || this.state.tableSortBy === 'order') && !this.state.tableFilterQuery && !this.state.tableStatusFilter) {
+      if (tbody && typeof Sortable !== 'undefined') {
+        const sortable = new Sortable(tbody, {
+          animation: 150,
+          handle: '.table-drag-handle',
+          ghostClass: 'opacity-40',
+          chosenClass: 'bg-blue-50/60',
+          onEnd: async (evt) => {
+            const rows = Array.from(tbody.querySelectorAll('tr[data-task-id]'));
+            const newOrderedIds = rows.map(r => parseInt(r.getAttribute('data-task-id'), 10)).filter(Boolean);
+            if (newOrderedIds.length > 0) {
+              await this.handleActivitiesReordered(newOrderedIds);
+            }
+          }
+        });
+        if (!this.state.sortableInstances) this.state.sortableInstances = [];
+        this.state.sortableInstances.push(sortable);
+      }
+    }
+
     // Update Footer Summary
     const footer = document.getElementById('table-summary-footer');
     if (footer) {
@@ -2044,6 +2130,7 @@ const app = {
 
     // 1. Optimistic UI update (0ms instant response)
     this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
+    this.state.tasks.forEach((t, i) => { t.order_index = i; });
     const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
     if (curProj && curProj.total_tasks > 0) {
       curProj.total_tasks--;
@@ -2057,6 +2144,7 @@ const app = {
     // 2. Background server deletion
     try {
       await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
+      await this.fetchTasks();
     } catch (e) {
       console.error('Failed to delete activity on server:', e);
       this.state.tasks = prevTasks;
@@ -3222,31 +3310,33 @@ const app = {
       this.showToast('Task reordering is restricted to Project Manager and Admin.', 'warning');
       return;
     }
-    const allTasks = [...(this.state.tasks || [])].sort((a, b) => {
-      const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
-      const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.id - b.id;
-    });
+    const pid = this.state.currentProjectId;
+    const sortedTasks = this.getSortedTasks();
 
-    const idx = allTasks.findIndex(t => t.id === taskId);
+    const idx = sortedTasks.findIndex(t => t.id === taskId);
     if (idx === -1) return;
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= allTasks.length) return;
+    if (targetIdx < 0 || targetIdx >= sortedTasks.length) return;
 
-    // Optimistic swap
-    const currentTask = allTasks[idx];
-    const targetTask = allTasks[targetIdx];
-    const tempOrder = currentTask.order_index;
-    currentTask.order_index = targetTask.order_index;
-    targetTask.order_index = tempOrder;
+    // Swap elements in sorted array
+    const temp = sortedTasks[idx];
+    sortedTasks[idx] = sortedTasks[targetIdx];
+    sortedTasks[targetIdx] = temp;
 
+    // Reassign strict sequential order_index 0, 1, 2, ...
+    sortedTasks.forEach((t, i) => {
+      t.order_index = i;
+    });
+
+    this.state.tasks = sortedTasks;
+    this.syncCurrentProjectCache();
     this.renderCurrentView();
 
+    const orderedIds = sortedTasks.map(t => t.id);
     try {
-      const res = await this.api(`/api/tasks/${taskId}/move`, {
+      const res = await this.api(`/api/projects/${pid}/tasks/reorder`, {
         method: 'POST',
-        body: JSON.stringify({ direction })
+        body: JSON.stringify({ task_ids: orderedIds })
       });
       if (res && res.tasks) {
         this.state.tasks = res.tasks;
@@ -3255,6 +3345,55 @@ const app = {
       }
     } catch (e) {
       console.error('Failed to move task order:', e);
+      this.fetchTasks();
+    }
+  },
+
+  async handleActivitiesReordered(newOrderedIds) {
+    if (this.isProgressOnly()) {
+      this.showToast('Activity reordering is restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
+    const pid = this.state.currentProjectId;
+    if (!pid || !Array.isArray(newOrderedIds) || newOrderedIds.length === 0) return;
+
+    // 1. Optimistic re-index of this.state.tasks
+    const taskMap = new Map();
+    (this.state.tasks || []).forEach(t => taskMap.set(t.id, t));
+
+    const reordered = [];
+    newOrderedIds.forEach((id, idx) => {
+      const t = taskMap.get(id);
+      if (t) {
+        t.order_index = idx;
+        reordered.push(t);
+        taskMap.delete(id);
+      }
+    });
+    // Any remaining tasks that weren't in newOrderedIds (e.g. filtered out)
+    let remainingIdx = reordered.length;
+    taskMap.forEach(t => {
+      t.order_index = remainingIdx++;
+      reordered.push(t);
+    });
+
+    this.state.tasks = reordered;
+    this.syncCurrentProjectCache();
+    this.renderCurrentView();
+
+    // 2. Persist to backend
+    try {
+      const res = await this.api(`/api/projects/${pid}/tasks/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ task_ids: newOrderedIds })
+      });
+      if (res && res.tasks) {
+        this.state.tasks = res.tasks;
+        this.syncCurrentProjectCache();
+        this.renderCurrentView();
+      }
+    } catch (e) {
+      console.error('Failed to save reordered tasks:', e);
       this.fetchTasks();
     }
   },
@@ -3297,12 +3436,7 @@ const app = {
     this.toggleTaskAssigneeManualMode(false);
     if (manualAssigneeInput) manualAssigneeInput.value = '';
 
-    const sortedTasks = [...(this.state.tasks || [])].sort((a, b) => {
-      const orderA = a.order_index !== undefined && a.order_index !== null ? Number(a.order_index) : a.id;
-      const orderB = b.order_index !== undefined && b.order_index !== null ? Number(b.order_index) : b.id;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.id - b.id;
-    });
+    const sortedTasks = this.getSortedTasks();
 
     if (posSelect) {
       posSelect.innerHTML = `
@@ -3483,6 +3617,8 @@ const app = {
             startInput.value = pred.due_date;
           }
         }
+      } else if (params.insert_before_id && posSelect) {
+        posSelect.value = `before_${params.insert_before_id}`;
       } else if (params.position && posSelect) {
         posSelect.value = params.position;
       }
@@ -4004,6 +4140,13 @@ const app = {
 
     const tempSubtasks = Array.from(document.querySelectorAll('.temporary-subtask')).map(el => el.textContent);
     const position = document.getElementById('task-input-position')?.value || 'end';
+    let insertAfterId = null;
+    let insertBeforeId = null;
+    if (position.startsWith('after_')) {
+      insertAfterId = Number(position.split('_')[1]);
+    } else if (position.startsWith('before_')) {
+      insertBeforeId = Number(position.split('_')[1]);
+    }
 
     const selectedChips = document.querySelectorAll('#task-modal-resources-container .task-resource-chip.selected-chip');
     const resourceIds = Array.from(selectedChips).map(c => Number(c.dataset.resourceId)).filter(Boolean);
@@ -4014,6 +4157,8 @@ const app = {
       status,
       priority,
       position,
+      insert_after_id: insertAfterId,
+      insert_before_id: insertBeforeId,
       progress_pct: progressPct,
       assignee_id: assigneeId,
       assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : (assigneeName || undefined),
@@ -4131,31 +4276,22 @@ const app = {
         updated_at: new Date().toISOString()
       };
 
-      // Position logic
+      // Position logic (using canonical sorted tasks)
+      const sorted = this.getSortedTasks();
+      let insertIndex = sorted.length;
       if (position === 'start') {
-        this.state.tasks.unshift(optimisticTask);
-      } else if (position.startsWith('after_')) {
-        const afterId = Number(position.split('_')[1]);
-        const idx = this.state.tasks.findIndex(t => t.id === afterId);
-        if (idx !== -1) {
-          this.state.tasks.splice(idx + 1, 0, optimisticTask);
-        } else {
-          this.state.tasks.push(optimisticTask);
-        }
-      } else if (position.startsWith('before_')) {
-        const beforeId = Number(position.split('_')[1]);
-        const idx = this.state.tasks.findIndex(t => t.id === beforeId);
-        if (idx !== -1) {
-          this.state.tasks.splice(idx, 0, optimisticTask);
-        } else {
-          this.state.tasks.push(optimisticTask);
-        }
-      } else {
-        this.state.tasks.push(optimisticTask);
+        insertIndex = 0;
+      } else if (insertAfterId) {
+        const predIdx = sorted.findIndex(t => t.id === insertAfterId);
+        insertIndex = predIdx !== -1 ? predIdx + 1 : sorted.length;
+      } else if (insertBeforeId) {
+        const succIdx = sorted.findIndex(t => t.id === insertBeforeId);
+        insertIndex = succIdx !== -1 ? succIdx : sorted.length;
       }
 
-      // Re-index order_index locally
-      this.state.tasks.forEach((t, i) => { t.order_index = i; });
+      sorted.splice(insertIndex, 0, optimisticTask);
+      sorted.forEach((t, i) => { t.order_index = i; });
+      this.state.tasks = sorted;
 
       // Update project counts
       const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
@@ -4176,6 +4312,7 @@ const app = {
           if (idx !== -1) {
             this.state.tasks[idx] = created;
           }
+          this.state.tasks.forEach((t, i) => { t.order_index = i; });
           if (this.state.currentProject && created.assignee_id && created.assignee_name) {
             if (!this.state.currentProject.members) this.state.currentProject.members = [];
             const cleanName = created.assignee_name.trim().toLowerCase();
@@ -4197,6 +4334,7 @@ const app = {
           }
           this.syncCurrentProjectCache();
           this.renderCurrentView();
+          await this.fetchTasks();
         }
       } catch (e) {
         console.error('Failed to create task on server:', e);
@@ -4225,6 +4363,7 @@ const app = {
     // Optimistic UI update (0ms instant response)
     this.closeTaskModal();
     this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
+    this.state.tasks.forEach((t, i) => { t.order_index = i; });
     const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
     if (curProj && curProj.total_tasks > 0) {
       curProj.total_tasks--;
@@ -4238,6 +4377,7 @@ const app = {
     if (numId > 0) {
       try {
         await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
+        await this.fetchTasks();
       } catch (e) {
         console.error('Failed to delete task on server:', e);
         this.state.tasks = prevTasks;

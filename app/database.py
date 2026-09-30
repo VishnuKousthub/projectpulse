@@ -481,6 +481,38 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_res_task ON task_resources(task_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_res_res ON task_resources(resource_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_res_proj ON task_resources(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_order ON tasks(project_id, order_index)")
+
+        # Normalize task sequence ordering across all existing projects to ensure clean 0, 1, ..., N-1 ordering
+        normalize_all_projects_task_order(conn)
     
     # Immediately flush initial database structure to persistent storage if needed
     _perform_storage_sync()
+
+def normalize_project_task_order(conn, project_id: int):
+    """
+    Guarantees that every task in the project has a strictly unique,
+    gapless sequence index: 0, 1, 2, ..., N-1.
+    Sorts by (order_index ASC, id ASC) to establish the canonical sequence,
+    then updates order_index = 0, 1, 2, ...
+    """
+    tasks = conn.execute(
+        "SELECT id, order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC",
+        (project_id,)
+    ).fetchall()
+    now_str = datetime.now().isoformat()
+    for idx, t in enumerate(tasks):
+        if t["order_index"] != idx:
+            conn.execute(
+                "UPDATE tasks SET order_index = ?, updated_at = ? WHERE id = ?",
+                (idx, now_str, t["id"])
+            )
+
+def normalize_all_projects_task_order(conn):
+    try:
+        projects = conn.execute("SELECT id FROM projects").fetchall()
+        for p in projects:
+            normalize_project_task_order(conn, p["id"])
+    except Exception as e:
+        print(f"[Database] Notice: skipped task order normalization: {e}")
+

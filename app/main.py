@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from bottle import Bottle, request, response, static_file, run
 
-from app.database import get_db, init_db, hash_password, verify_password
+from app.database import get_db, init_db, hash_password, verify_password, normalize_project_task_order
 from app.seed import seed_database
 from app.gantt_parser import (
     parse_gantt_file, generate_sample_gantt_csv, generate_sample_gantt_excel, AVATAR_COLORS
@@ -758,6 +758,9 @@ def execute_clone_project(conn, source_id, data, user):
             f'Cloned template from "{source_project["name"]}" with {len(source_tasks)} activities and {len(member_map)} members'
         )
 
+        # Normalize tasks order on cloned project
+        normalize_project_task_order(conn, new_project_id)
+
         # Fetch created project
         created_proj = conn.execute("SELECT * FROM projects WHERE id = ?", (new_project_id,)).fetchone()
         members_list = conn.execute("SELECT * FROM members WHERE project_id = ?", (new_project_id,)).fetchall()
@@ -1274,46 +1277,38 @@ def create_task(project_id):
                 if m_check:
                     assignee_id = m_check["id"]
         
+        # Ensure project has contiguous 0-indexed order before calculating insertion index
+        normalize_project_task_order(conn, project_id)
+
+        existing_tasks = conn.execute(
+            "SELECT id, order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC",
+            (project_id,)
+        ).fetchall()
+        existing_ids = [t["id"] for t in existing_tasks]
+        total_existing = len(existing_ids)
+
         target_order = None
-        if insert_after_id:
-            pred = conn.execute("SELECT order_index FROM tasks WHERE id = ? AND project_id = ?", (insert_after_id, project_id)).fetchone()
-            if pred:
-                target_order = pred["order_index"] + 1
-                conn.execute(
-                    "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
-                    (project_id, target_order)
-                )
-        elif insert_before_id:
-            succ = conn.execute("SELECT order_index FROM tasks WHERE id = ? AND project_id = ?", (insert_before_id, project_id)).fetchone()
-            if succ:
-                target_order = succ["order_index"]
-                conn.execute(
-                    "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
-                    (project_id, target_order)
-                )
+        if insert_after_id and insert_after_id in existing_ids:
+            idx = existing_ids.index(insert_after_id)
+            target_order = idx + 1
+        elif insert_before_id and insert_before_id in existing_ids:
+            idx = existing_ids.index(insert_before_id)
+            target_order = idx
         elif position == "start":
-            first_t = conn.execute("SELECT order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC LIMIT 1", (project_id,)).fetchone()
-            if first_t:
-                target_order = first_t["order_index"]
-                conn.execute(
-                    "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
-                    (project_id, target_order)
-                )
-            else:
-                target_order = 0
+            target_order = 0
+        elif position == "end":
+            target_order = total_existing
         elif custom_order_index is not None:
-            target_order = custom_order_index
-            conn.execute(
-                "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
-                (project_id, target_order)
-            )
+            target_order = max(0, min(total_existing, custom_order_index))
 
         if target_order is None:
-            max_order = conn.execute(
-                "SELECT COALESCE(MAX(order_index), -1) as max_idx FROM tasks WHERE project_id = ?",
-                (project_id,)
-            ).fetchone()["max_idx"]
-            target_order = max_order + 1
+            target_order = total_existing
+
+        # Shift all tasks at or after target_order up by 1
+        conn.execute(
+            "UPDATE tasks SET order_index = order_index + 1 WHERE project_id = ? AND order_index >= ?",
+            (project_id, target_order)
+        )
 
         progress_pct = safe_int(data.get("progress_pct"), 0)
         if progress_pct is not None:
@@ -1364,6 +1359,7 @@ def create_task(project_id):
             except Exception as e:
                 print(f"[Notifier] Error sending assignment notification: {e}")
 
+        normalize_project_task_order(conn, project_id)
         task_res = get_task_dict(conn, t_id)
         return json_response(task_res)
 
@@ -1701,26 +1697,73 @@ def reorder_tasks():
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities or change status. Only PM and Admin have full access control."}, status=403)
 
     items = request.json or []
+    if isinstance(items, dict) and "task_ids" in items:
+        p_id = items.get("project_id")
+        if p_id:
+            return reorder_project_tasks(int(p_id))
+
     if not isinstance(items, list):
         return json_response({"error": "Expected array of items"}, status=400)
     
     with get_db() as conn:
+        affected_projects = set()
         for item in items:
             t_id = item.get("task_id")
             status = item.get("status")
-            order_idx = item.get("new_order_index", 0)
-            if t_id and status:
-                prev_task = conn.execute("SELECT status FROM tasks WHERE id = ?", (t_id,)).fetchone()
-                conn.execute("""
-                    UPDATE tasks SET status = ?, order_index = ?, updated_at = ?
-                    WHERE id = ?
-                """, (status, order_idx, get_now_iso(), t_id))
-                if status == "done" and prev_task and prev_task["status"] != "done":
-                    try:
-                        notify_task_completed(conn, t_id, actor_name="User")
-                    except Exception as e:
-                        print(f"[Notifier] Error sending completion notification: {e}")
+            order_idx = safe_int(item.get("new_order_index", item.get("order_index", 0)))
+            if t_id:
+                prev_task = conn.execute("SELECT status, project_id FROM tasks WHERE id = ?", (t_id,)).fetchone()
+                if prev_task:
+                    affected_projects.add(prev_task["project_id"])
+                    if status:
+                        conn.execute("""
+                            UPDATE tasks SET status = ?, order_index = ?, updated_at = ?
+                            WHERE id = ?
+                        """, (status, order_idx, get_now_iso(), t_id))
+                        if status == "done" and prev_task["status"] != "done":
+                            try:
+                                notify_task_completed(conn, t_id, actor_name="User")
+                            except Exception as e:
+                                print(f"[Notifier] Error sending completion notification: {e}")
+                    else:
+                        conn.execute("""
+                            UPDATE tasks SET order_index = ?, updated_at = ?
+                            WHERE id = ?
+                        """, (order_idx, get_now_iso(), t_id))
+        for p_id in affected_projects:
+            normalize_project_task_order(conn, p_id)
         return json_response({"success": True})
+
+@app.post("/api/projects/<project_id:int>/tasks/reorder")
+def reorder_project_tasks(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities. Only PM and Admin have full access control."}, status=403)
+
+    data = request.json or {}
+    task_ids = data.get("task_ids")
+    if not task_ids and isinstance(data, list):
+        task_ids = [item.get("task_id") if isinstance(item, dict) else item for item in data]
+    
+    if not isinstance(task_ids, list):
+        return json_response({"error": "Expected task_ids array"}, status=400)
+
+    with get_db() as conn:
+        now_str = get_now_iso()
+        for idx, t_id in enumerate(task_ids):
+            try:
+                conn.execute(
+                    "UPDATE tasks SET order_index = ?, updated_at = ? WHERE id = ? AND project_id = ?",
+                    (idx, now_str, int(t_id), project_id)
+                )
+            except (ValueError, TypeError):
+                pass
+        normalize_project_task_order(conn, project_id)
+        bootstrap = get_bootstrap_payload(conn, active_project_id=project_id)
+        return json_response({
+            "success": True,
+            "tasks": bootstrap["tasks"]
+        })
 
 @app.post("/api/tasks/<task_id:int>/move")
 def move_task(task_id):
@@ -1737,6 +1780,7 @@ def move_task(task_id):
             return json_response({"error": "Task not found"}, status=404)
         
         project_id = task["project_id"]
+        normalize_project_task_order(conn, project_id)
         tasks = conn.execute(
             "SELECT id, order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC",
             (project_id,)
@@ -1754,6 +1798,7 @@ def move_task(task_id):
             for i, t in enumerate(task_list):
                 conn.execute("UPDATE tasks SET order_index = ?, updated_at = ? WHERE id = ?", (i, now_str, t["id"]))
         
+        normalize_project_task_order(conn, project_id)
         bootstrap = get_bootstrap_payload(conn, active_project_id=project_id)
         return json_response({
             "success": True,
@@ -1771,8 +1816,10 @@ def delete_task(task_id):
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
-        record_activity(conn, task["project_id"], "User", "Task Deleted", f'Deleted task "{task["title"]}"')
+        project_id = task["project_id"]
+        record_activity(conn, project_id, "User", "Task Deleted", f'Deleted task "{task["title"]}"')
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        normalize_project_task_order(conn, project_id)
         return json_response({"success": True})
 
 # ==================== SUBTASKS ====================
@@ -3149,6 +3196,8 @@ def upload_gantt_file(project_id):
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, task_rows)
+
+        normalize_project_task_order(conn, target_p_id)
 
         record_activity(
             conn, target_p_id, "User", "Gantt Upload",
