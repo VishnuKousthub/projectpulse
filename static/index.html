@@ -450,14 +450,14 @@
           <!-- Real-Time Segmented Workflow Progress Bar -->
           <div class="space-y-1.5 pt-1">
             <div class="flex h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60 p-0.5 space-x-0.5">
-              <div id="bar-backlog" class="bg-slate-400 h-full rounded-l-full transition-all duration-300" style="width: 20%;" title="Backlog"></div>
+              <div id="bar-backlog" class="bg-red-500 h-full rounded-l-full transition-all duration-300" style="width: 20%;" title="Backlog"></div>
               <div id="bar-todo" class="bg-blue-500 h-full transition-all duration-300" style="width: 20%;" title="To Do"></div>
               <div id="bar-in_progress" class="bg-amber-500 h-full transition-all duration-300" style="width: 20%;" title="In Progress"></div>
               <div id="bar-in_review" class="bg-purple-500 h-full transition-all duration-300" style="width: 20%;" title="In Review"></div>
               <div id="bar-done" class="bg-emerald-500 h-full rounded-r-full transition-all duration-300" style="width: 20%;" title="Done"></div>
             </div>
             <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold px-1">
-              <span id="label-backlog" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Backlog: 0</span>
+              <span id="label-backlog" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> Backlog: 0</span>
               <span id="label-todo" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> To Do: 0</span>
               <span id="label-in_progress" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> In Progress: 0</span>
               <span id="label-in_review" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span> In Review: 0</span>
@@ -544,7 +544,7 @@
             </div>
             <div class="flex flex-wrap items-center gap-3 text-[11px] font-semibold">
               <div class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-sm bg-slate-500 shadow-2xs"></span>
+                <span class="w-2.5 h-2.5 rounded-sm bg-red-600 shadow-2xs"></span>
                 <span class="text-slate-600 dark:text-slate-400">Backlog</span>
               </div>
               <div class="flex items-center gap-1.5">
@@ -2991,6 +2991,6 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.7.0"></script>
+  <script src="/static/js/app.js?v=2.8.0"></script>
 </body>
 </html>

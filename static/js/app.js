@@ -668,7 +668,7 @@ const app = {
     const totBadge = document.getElementById('kanban-total-badge');
 
     if (totBadge) totBadge.textContent = `${totalAll} Activities`;
-    if (lblB) lblB.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-400"></span> Backlog: ${countBacklog}`;
+    if (lblB) lblB.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> Backlog: ${countBacklog}`;
     if (lblT) lblT.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500"></span> To Do: ${countTodo}`;
     if (lblP) lblP.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> In Progress: ${countInProg}`;
     if (lblR) lblR.innerHTML = `<span class="w-2 h-2 rounded-full bg-purple-500"></span> In Review: ${countInRev}`;
@@ -692,7 +692,7 @@ const app = {
 
     // 4. Render Layout
     const columnsMeta = [
-      { id: 'backlog', title: 'Backlog', color: 'bg-slate-400', textColor: 'text-slate-700 dark:text-slate-300', headerBg: 'bg-slate-100 dark:bg-slate-800' },
+      { id: 'backlog', title: 'Backlog', color: 'bg-red-500', textColor: 'text-red-700 dark:text-red-300', headerBg: 'bg-red-50 dark:bg-red-950/40' },
       { id: 'todo', title: 'To Do', color: 'bg-blue-500', textColor: 'text-blue-700 dark:text-blue-300', headerBg: 'bg-blue-50 dark:bg-blue-950/40' },
       { id: 'in_progress', title: 'In Progress', color: 'bg-amber-500', textColor: 'text-amber-700 dark:text-amber-300', headerBg: 'bg-amber-50 dark:bg-amber-950/40' },
       { id: 'in_review', title: 'In Review', color: 'bg-purple-500', textColor: 'text-purple-700 dark:text-purple-300', headerBg: 'bg-purple-50 dark:bg-purple-950/40' },
@@ -1068,9 +1068,9 @@ const app = {
         return {
           key: 'backlog',
           name: 'Backlog',
-          barClass: 'bg-slate-500 hover:bg-slate-600 shadow-slate-500/25 text-white',
-          badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-600',
-          dotColor: 'bg-slate-500',
+          barClass: 'bg-red-600 hover:bg-red-700 shadow-red-500/25 text-white',
+          badgeClass: 'bg-red-50 text-red-700 dark:bg-red-950/80 dark:text-red-300 border border-red-300 dark:border-red-800/60',
+          dotColor: 'bg-red-500',
           defaultProgress: 0
         };
       case 'todo':
@@ -1753,7 +1753,7 @@ const app = {
         in_progress: { label: 'In Progress', color: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60', dot: 'bg-amber-500' },
         in_review: { label: 'In Review', color: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60', dot: 'bg-purple-500' },
         todo: { label: 'To Do', color: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/60', dot: 'bg-blue-500' },
-        backlog: { label: 'Backlog', color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700', dot: 'bg-slate-400' }
+        backlog: { label: 'Backlog', color: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800/60', dot: 'bg-red-500' }
       }[t.status] || { label: t.status, color: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-400' };
 
       // Priority Badges
@@ -5986,7 +5986,7 @@ const app = {
       'in_progress': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 inline-block text-center whitespace-nowrap">IN PROGRESS</span>',
       'in_review': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-block text-center whitespace-nowrap">IN REVIEW</span>',
       'todo': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 inline-block text-center whitespace-nowrap">TO DO</span>',
-      'backlog': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700 inline-block text-center whitespace-nowrap">BACKLOG</span>'
+      'backlog': '<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-300 dark:border-red-800 inline-block text-center whitespace-nowrap">BACKLOG</span>'
     };
     return map[status] || `<span class="report-badge px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">${this.escapeHtml(status?.toUpperCase() || 'UNKNOWN')}</span>`;
   },
