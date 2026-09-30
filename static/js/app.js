@@ -1407,10 +1407,10 @@ const app = {
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
           
           <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px) -->
-          <div class="w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80">
+          <div class="w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80 sticky left-0 z-[20] bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-750 transition-colors">
             
-            <!-- Column 1: Title & Assignee info (270px) -->
-            <div class="w-[270px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
+            <!-- Column 1: Title & Assignee info (260px) -->
+            <div class="w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
               <div class="flex items-center gap-1 min-w-0">
                 ${!isProgress ? `
                   <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
@@ -1432,6 +1432,9 @@ const app = {
                     <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition">
                       <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
                     </button>
+                    <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})" title="Delete Activity" class="p-0.5 text-slate-400 hover:text-rose-500 rounded transition">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                    </button>
                   </div>
                 ` : ''}
               </div>
@@ -1442,10 +1445,10 @@ const app = {
               </div>
             </div>
 
-            <!-- Column 2: Start Date Picker (120px) -->
-            <div class="w-[120px] flex-shrink-0 flex items-center justify-center">
+            <!-- Column 2: Start Date Picker (115px) -->
+            <div class="w-[115px] flex-shrink-0 flex items-center justify-center">
               ${t.start_date ? `
-                <div class="w-[110px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.start_date}"
                     onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)"
                     title="Edit Start Date"
@@ -1455,8 +1458,8 @@ const app = {
                   </button>
                 </div>
               ` : `
-                <div class="relative w-[110px] h-7 group/gstart">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-2 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                <div class="relative w-[105px] h-7 group/gstart">
+                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
                     <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
                     <span class="truncate">Not Declared</span>
                   </div>
@@ -1465,13 +1468,13 @@ const app = {
               `}
             </div>
 
-            <!-- Date Arrow Separator (30px) -->
-            <div class="w-[30px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
+            <!-- Date Arrow Separator (25px) -->
+            <div class="w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
 
-            <!-- Column 3: End Date Picker (120px) -->
-            <div class="w-[120px] flex-shrink-0 flex items-center justify-center">
+            <!-- Column 3: End Date Picker (110px) -->
+            <div class="w-[110px] flex-shrink-0 flex items-center justify-center">
               ${t.due_date ? `
-                <div class="w-[110px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.due_date}"
                     onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
                     title="Edit End / Due Date"
@@ -1481,14 +1484,25 @@ const app = {
                   </button>
                 </div>
               ` : `
-                <div class="relative w-[110px] h-7 group/gdue">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-2 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                <div class="relative w-[105px] h-7 group/gdue">
+                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
                     <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
                     <span class="truncate">Not Declared</span>
                   </div>
                   <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                 </div>
               `}
+            </div>
+
+            <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
+            <div class="w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
+              ${!isProgress ? `
+                <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
+                  title="Delete Activity"
+                  class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                </button>
+              ` : ''}
             </div>
 
           </div>
@@ -1534,7 +1548,7 @@ const app = {
     if (milestones.length > 0) {
       milestoneRowHtml = `
         <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2">
-          <div class="w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700">
+          <div class="w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700 sticky left-0 z-[20] bg-amber-50/95 dark:bg-slate-850">
             <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
@@ -1563,10 +1577,10 @@ const app = {
     container.innerHTML = `
       <div class="min-w-[${Math.max(1150, minTimelineWidth)}px]">
         <!-- Sticky Two-Tier Header -->
-        <div class="sticky top-0 z-20 shadow-xs select-none">
+        <div class="sticky top-0 z-[25] shadow-xs select-none bg-white dark:bg-slate-800">
           <!-- Top Tier Header (Months/Years) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-            <div class="w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+            <div class="w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 sticky left-0 z-[30]">
               <span>Process Activities & Schedule</span>
               <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
             </div>
@@ -1574,11 +1588,12 @@ const app = {
           </div>
           <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
-            <div class="w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
-              <div class="w-[270px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
-              <div class="w-[120px] flex-shrink-0 text-center">Start Date</div>
+            <div class="w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850 sticky left-0 z-[30]">
+              <div class="w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
+              <div class="w-[115px] flex-shrink-0 text-center">Start Date</div>
+              <div class="w-[25px] flex-shrink-0 text-center"></div>
+              <div class="w-[110px] flex-shrink-0 text-center">End Date</div>
               <div class="w-[30px] flex-shrink-0 text-center"></div>
-              <div class="w-[120px] flex-shrink-0 text-center">End Date</div>
             </div>
             <div class="flex-1 flex bg-slate-50 dark:bg-slate-850">${bottomHeaders.join('')}</div>
           </div>
@@ -2122,37 +2137,87 @@ const app = {
     }
   },
 
-  async inlineDeleteTask(taskId) {
-    if (!confirm('Are you sure you want to delete this activity?')) return;
+  confirmDeleteActivity(taskId) {
+    if (this.isProgressOnly()) {
+      this.showToast('Activity deletion is restricted to Project Manager and Admin.', 'warning');
+      return;
+    }
+    const numId = Number(taskId);
+    const task = this.state.tasks.find(t => t.id === numId);
+    if (!task) return;
+
+    this.state.pendingDeleteTaskId = numId;
+
+    const modal = document.getElementById('delete-activity-modal');
+    const titleEl = document.getElementById('delete-activity-title');
+    const confirmBtn = document.getElementById('confirm-delete-activity-btn');
+
+    if (titleEl) titleEl.textContent = `"${task.title}"`;
+    if (confirmBtn) {
+      confirmBtn.onclick = async () => {
+        this.closeDeleteActivityModal();
+        await this.executeDeleteActivity(numId);
+      };
+    }
+
+    if (modal) {
+      modal.classList.remove('hidden');
+      this.initLucide();
+    }
+  },
+
+  closeDeleteActivityModal() {
+    this.state.pendingDeleteTaskId = null;
+    const modal = document.getElementById('delete-activity-modal');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async executeDeleteActivity(taskId) {
     const numId = Number(taskId);
     const deletedTask = this.state.tasks.find(t => t.id === numId);
+    if (!deletedTask) return;
+
     const prevTasks = [...this.state.tasks];
-
-    // 1. Optimistic UI update (0ms instant response)
-    this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
-    this.state.tasks.forEach((t, i) => { t.order_index = i; });
     const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
-    if (curProj && curProj.total_tasks > 0) {
-      curProj.total_tasks--;
-      if (deletedTask?.status === 'done' && curProj.completed_tasks > 0) curProj.completed_tasks--;
-    }
-    this.renderProjectsSidebar();
-    this.renderCurrentView();
-    this.syncCurrentProjectCache();
-    this.showToast('Activity deleted', 'success');
 
-    // 2. Background server deletion
     try {
+      // 1. Delete from backend/database
       await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
-      await this.fetchTasks();
-    } catch (e) {
-      console.error('Failed to delete activity on server:', e);
-      this.state.tasks = prevTasks;
-      if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
+
+      // 2. Remove from UI after successful backend deletion
+      this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
+      // Renumber remaining activities sequentially without reordering by dates:
+      this.state.tasks.forEach((t, i) => { t.order_index = i; });
+
+      if (curProj && curProj.total_tasks > 0) {
+        curProj.total_tasks--;
+        if (deletedTask.status === 'done' && curProj.completed_tasks > 0) {
+          curProj.completed_tasks--;
+        }
+      }
+
+      // 3. Refresh/recalculate views and sidebar
       this.renderProjectsSidebar();
       this.renderCurrentView();
-      this.showToast('Failed to delete activity on server', 'error');
+      this.syncCurrentProjectCache();
+
+      // Ensure server sync
+      await this.fetchTasks();
+
+      // 4. Success toast
+      this.showToast('Activity deleted successfully.', 'success');
+    } catch (e) {
+      console.error('Failed to delete activity on server:', e);
+      // Keep activity visible in UI
+      this.state.tasks = prevTasks;
+      this.renderCurrentView();
+      // Error toast
+      this.showToast('Failed to delete activity. Please try again.', 'error');
     }
+  },
+
+  async inlineDeleteTask(taskId) {
+    this.confirmDeleteActivity(taskId);
   },
 
   // ==================== CALENDAR RENDERER (MULTI-MODE, RICH TIMELINE & DAY INSPECTOR) ====================
@@ -4349,44 +4414,13 @@ const app = {
 
   async handleDeleteTask() {
     if (this.isProgressOnly()) {
-      this.showToast('Task deletion is restricted to Project Manager and Admin.', 'warning');
+      this.showToast('Activity deletion is restricted to Project Manager and Admin.', 'warning');
       return;
     }
     const taskId = document.getElementById('task-input-id')?.value;
     if (!taskId) return;
-    if (!confirm('Are you sure you want to delete this task?')) return;
-
-    const numId = Number(taskId);
-    const deletedTask = this.state.tasks.find(t => t.id === numId);
-    const prevTasks = [...this.state.tasks];
-
-    // Optimistic UI update (0ms instant response)
     this.closeTaskModal();
-    this.state.tasks = this.state.tasks.filter(t => t.id !== numId);
-    this.state.tasks.forEach((t, i) => { t.order_index = i; });
-    const curProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
-    if (curProj && curProj.total_tasks > 0) {
-      curProj.total_tasks--;
-      if (deletedTask?.status === 'done' && curProj.completed_tasks > 0) curProj.completed_tasks--;
-    }
-    this.renderProjectsSidebar();
-    this.renderCurrentView();
-    this.syncCurrentProjectCache();
-    this.showToast('Task deleted', 'success');
-
-    if (numId > 0) {
-      try {
-        await this.api(`/api/tasks/${numId}`, { method: 'DELETE' });
-        await this.fetchTasks();
-      } catch (e) {
-        console.error('Failed to delete task on server:', e);
-        this.state.tasks = prevTasks;
-        if (curProj) curProj.total_tasks = (curProj.total_tasks || 0) + 1;
-        this.renderProjectsSidebar();
-        this.renderCurrentView();
-        this.showToast('Failed to delete task on server', 'error');
-      }
-    }
+    this.confirmDeleteActivity(Number(taskId));
   },
 
   // ==================== PROJECT MODAL ====================

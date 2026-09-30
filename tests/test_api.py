@@ -1361,6 +1361,84 @@ class TestProjectPulseAPI(unittest.TestCase):
         # Clean up test project
         self.request(f"/api/projects/{p_id}", method="DELETE")
 
+    def test_22_delete_middle_activity_reindexing_and_ordering(self):
+        """
+        Verify that deleting an activity from the middle preserves the relative sequence
+        of all remaining activities and renumbers them contiguously without date sorting.
+        """
+        s, proj = self.request("/api/projects", method="POST", body={
+            "name": "Delete Middle Activity Sequence Test",
+            "description": "Test sequence integrity on middle deletion",
+            "status": "active"
+        })
+        self.assertIn(s, (200, 201))
+        p_id = proj["id"]
+
+        # Insert 5 activities with non-chronological dates
+        dates = [
+            ("Activity A", "2026-11-01", "2026-11-10"),
+            ("Activity B", "2026-01-05", "2026-01-15"),
+            ("Activity C", "2026-06-01", "2026-06-20"),
+            ("Activity D", "2026-12-01", "2026-12-10"),
+            ("Activity E", "2026-03-01", "2026-03-15"),
+        ]
+        created_tasks = []
+        for title, start, due in dates:
+            s, t = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+                "title": title,
+                "start_date": start,
+                "due_date": due,
+                "status": "todo"
+            })
+            self.assertIn(s, (200, 201))
+            created_tasks.append(t)
+
+        # Verify initial sequence
+        s, tasks = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(len(tasks), 5)
+        for idx, t in enumerate(tasks):
+            self.assertEqual(t["order_index"], idx)
+            self.assertEqual(t["title"], dates[idx][0])
+
+        # Delete middle activity: Activity C (index 2)
+        target_c_id = created_tasks[2]["id"]
+        s, del_res = self.request(f"/api/tasks/{target_c_id}", method="DELETE")
+        self.assertEqual(s, 200)
+        self.assertTrue(del_res.get("success"))
+
+        # Verify remaining 4 activities: A, B, D, E with contiguous order_index 0, 1, 2, 3
+        s, remaining_tasks = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(len(remaining_tasks), 4)
+        expected_remaining = ["Activity A", "Activity B", "Activity D", "Activity E"]
+        for idx, t in enumerate(remaining_tasks):
+            self.assertEqual(t["order_index"], idx)
+            self.assertEqual(t["title"], expected_remaining[idx])
+
+        # Delete first activity: Activity A (index 0)
+        target_a_id = created_tasks[0]["id"]
+        s, del_res = self.request(f"/api/tasks/{target_a_id}", method="DELETE")
+        self.assertEqual(s, 200)
+        s, remaining_tasks_2 = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(len(remaining_tasks_2), 3)
+        expected_remaining_2 = ["Activity B", "Activity D", "Activity E"]
+        for idx, t in enumerate(remaining_tasks_2):
+            self.assertEqual(t["order_index"], idx)
+            self.assertEqual(t["title"], expected_remaining_2[idx])
+
+        # Delete last activity: Activity E (index 2)
+        target_e_id = created_tasks[4]["id"]
+        s, del_res = self.request(f"/api/tasks/{target_e_id}", method="DELETE")
+        self.assertEqual(s, 200)
+        s, remaining_tasks_3 = self.request(f"/api/projects/{p_id}/tasks")
+        self.assertEqual(len(remaining_tasks_3), 2)
+        expected_remaining_3 = ["Activity B", "Activity D"]
+        for idx, t in enumerate(remaining_tasks_3):
+            self.assertEqual(t["order_index"], idx)
+            self.assertEqual(t["title"], expected_remaining_3[idx])
+
+        # Clean up
+        self.request(f"/api/projects/{p_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 
