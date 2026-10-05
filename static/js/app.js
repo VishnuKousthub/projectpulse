@@ -12,7 +12,7 @@ const app = {
     currentProjectId: null,
     currentProject: null,
     tasks: [],
-    activeView: 'kanban',
+    activeView: 'overview',
     ganttScale: 'week', // 'day' | 'week' | 'month' | 'year'
     ganttOffset: 0,
     searchQuery: '',
@@ -215,6 +215,14 @@ const app = {
     this.closeResourceModal?.();
     this.closeMapProjectResourceModal?.();
     this.closeResourceDetailsModal?.();
+    this.closeObjectiveModal?.();
+    this.closeDeliverableModal?.();
+    this.closeMilestoneModal?.();
+    this.closeRiskModal?.();
+    this.closeBudgetModal?.();
+    this.closeDocumentModal?.();
+    this.closeSignoffModal?.();
+    this.closeProjectCharterModal?.();
     document.getElementById('sidebar-control-popover')?.classList.add('hidden');
     this.closeUserMenu();
   },
@@ -404,6 +412,7 @@ const app = {
         if (parsedProj && Number(parsedProj.id) === projectId && Array.isArray(parsedTasks)) {
           this.state.currentProject = parsedProj;
           this.state.tasks = parsedTasks;
+          this.updateProjectTabStrip();
           this.populateFilterDropdowns();
           this.renderCurrentView();
           hydratedFromCache = true;
@@ -417,6 +426,7 @@ const app = {
       const projInList = this.state.projects.find(p => Number(p.id) === projectId);
       this.state.currentProject = projInList ? { ...projInList, members: [], sprints: [], milestones: [] } : null;
       this.state.tasks = [];
+      this.updateProjectTabStrip();
       this.populateFilterDropdowns();
       this.renderCurrentView();
     }
@@ -438,6 +448,7 @@ const app = {
 
       this.state.currentProject = project;
       this.state.tasks = tasks;
+      this.updateProjectTabStrip();
 
       if (!this.state.searchQuery && !this.state.filterPriority) {
         this.syncCurrentProjectCache();
@@ -483,9 +494,50 @@ const app = {
     }
   },
 
+  updateProjectTabStrip() {
+    const p = this.state.currentProject;
+    if (!p) return;
+
+    const codeEl = document.getElementById('tab-strip-project-code');
+    if (codeEl) {
+      codeEl.textContent = p.project_code || ('PRJ-' + String(p.id).padStart(3, '0'));
+    }
+
+    const nameEl = document.getElementById('tab-strip-project-name');
+    if (nameEl) {
+      nameEl.textContent = p.name || 'Project Name';
+    }
+
+    const dotEl = document.getElementById('tab-strip-project-dot');
+    if (dotEl) {
+      dotEl.style.backgroundColor = p.color || '#3B82F6';
+    }
+
+    const deptEl = document.getElementById('tab-strip-project-dept');
+    if (deptEl) {
+      deptEl.textContent = p.department || 'Engineering';
+    }
+
+    const approvalEl = document.getElementById('tab-strip-approval-badge');
+    if (approvalEl) {
+      const status = (p.approval_status || 'DRAFT').toUpperCase();
+      approvalEl.textContent = status;
+      if (status === 'APPROVED') {
+        approvalEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60';
+      } else if (status === 'IN_REVIEW') {
+        approvalEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60';
+      } else if (status === 'REJECTED') {
+        approvalEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60';
+      } else {
+        approvalEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60';
+      }
+    }
+  },
+
   switchView(viewName) {
     this.state.activeView = viewName;
 
+    // Sidebar active item styling
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.classList.remove('bg-blue-600', 'text-white', 'font-semibold', 'shadow-xs');
       btn.classList.add('text-slate-300');
@@ -496,17 +548,35 @@ const app = {
       activeNav.classList.remove('text-slate-300');
     }
 
+    // Top Project Tab Strip active item styling
+    document.querySelectorAll('.project-tab').forEach(btn => {
+      btn.classList.remove('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
+      btn.classList.add('text-slate-600', 'dark:text-slate-300');
+    });
+    const activeTab = document.getElementById(`tab-${viewName}`);
+    if (activeTab) {
+      activeTab.classList.add('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
+      activeTab.classList.remove('text-slate-600', 'dark:text-slate-300');
+    }
+
     document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
     const targetPanel = document.getElementById(`view-${viewName}-container`);
     if (targetPanel) targetPanel.classList.remove('hidden');
 
     const titles = {
-      kanban: 'Kanban Board',
+      overview: 'Project Overview',
+      table: 'Activities / Tasks',
       gantt: 'Gantt & Timeline',
-      table: 'Table Grid',
-      calendar: 'Calendar Schedule',
+      deliverables: 'Project Deliverables',
+      milestones: 'Project Milestones',
       resources: 'Resource Management & Mapping',
-      analytics: 'Analytics Dashboard'
+      risks: 'Risks, Assumptions & Constraints',
+      budget: 'Budget & Cost Tracking',
+      documents: 'Project Documentation',
+      approvals: 'Approvals & Sign-off',
+      analytics: 'Analytics Dashboard',
+      kanban: 'Kanban Board',
+      calendar: 'Calendar Schedule'
     };
     const titleText = titles[viewName] || 'Project Management';
     const vTitle = document.getElementById('view-title');
@@ -519,6 +589,27 @@ const app = {
   renderCurrentView() {
     this.applyRolePermissionsUI();
     switch (this.state.activeView) {
+      case 'overview':
+        this.renderOverview();
+        break;
+      case 'deliverables':
+        this.renderDeliverables();
+        break;
+      case 'milestones':
+        this.renderMilestones();
+        break;
+      case 'risks':
+        this.renderRisks();
+        break;
+      case 'budget':
+        this.renderBudget();
+        break;
+      case 'documents':
+        this.renderDocuments();
+        break;
+      case 'approvals':
+        this.renderApprovals();
+        break;
       case 'kanban':
         this.renderKanban();
         break;
@@ -536,6 +627,9 @@ const app = {
         break;
       case 'analytics':
         this.renderAnalytics();
+        break;
+      default:
+        this.renderOverview();
         break;
     }
   },
@@ -622,6 +716,1406 @@ const app = {
     }
     const nextStatus = currentStatus === 'done' ? 'in_progress' : 'done';
     await this.inlineUpdateTask(taskId, 'status', nextStatus);
+  },
+
+  // ==================== PROJECT CHARTER & MANAGEMENT VIEWS ====================
+
+  renderOverview() {
+    const p = this.state.currentProject;
+    if (!p) return;
+
+    // Status & Priority Badges
+    const statusEl = document.getElementById('overview-status-badge');
+    if (statusEl) {
+      const st = (p.status || 'ACTIVE').toUpperCase();
+      statusEl.textContent = st;
+      statusEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ' +
+        (st === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
+         st === 'PAUSED' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200' :
+         st === 'CANCELLED' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
+         'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200');
+    }
+
+    const priorityEl = document.getElementById('overview-priority-badge');
+    if (priorityEl) {
+      const pr = (p.priority || 'MEDIUM').toUpperCase();
+      priorityEl.textContent = pr;
+      priorityEl.className = 'px-2 py-0.5 rounded text-[11px] font-bold uppercase ' +
+        (pr === 'URGENT' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' :
+         pr === 'HIGH' ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300' :
+         pr === 'LOW' ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' :
+         'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300');
+    }
+
+    // Overall Progress & Task counts
+    const totalTasks = this.state.tasks?.length || 0;
+    const completedTasks = this.state.tasks?.filter(t => t.status === 'done')?.length || 0;
+    const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    const pctEl = document.getElementById('overview-progress-pct');
+    if (pctEl) pctEl.textContent = `${pct}%`;
+    const barEl = document.getElementById('overview-progress-bar');
+    if (barEl) barEl.style.width = `${pct}%`;
+    const tasksCountEl = document.getElementById('overview-tasks-count');
+    if (tasksCountEl) tasksCountEl.textContent = `${completedTasks} of ${totalTasks} Activities`;
+    const delivCountEl = document.getElementById('overview-deliverables-count');
+    if (delivCountEl) delivCountEl.textContent = `${p.deliverables?.length || 0} Deliverables`;
+
+    // Schedule Horizon
+    const startEl = document.getElementById('overview-start-date');
+    if (startEl) startEl.textContent = p.start_date || '--';
+    const endEl = document.getElementById('overview-end-date');
+    if (endEl) endEl.textContent = p.target_end_date || '--';
+    const daysEl = document.getElementById('overview-duration-days');
+    if (daysEl) {
+      if (p.target_end_date) {
+        const diffMs = new Date(p.target_end_date) - new Date();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        daysEl.textContent = diffDays >= 0 ? `${diffDays} days remaining` : `${Math.abs(diffDays)} days overdue`;
+        daysEl.className = diffDays < 0 ? 'text-[11px] text-rose-500 font-bold mt-0.5' : 'text-[11px] text-slate-400 mt-0.5 font-medium';
+      } else {
+        daysEl.textContent = 'No target date set';
+      }
+    }
+
+    // Governance & Approval
+    const apprBadge = document.getElementById('overview-approval-badge');
+    const apprNote = document.getElementById('overview-governance-note');
+    if (apprBadge) {
+      const apprStatus = (p.approval_status || 'DRAFT').toUpperCase();
+      apprBadge.textContent = apprStatus;
+      apprBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ' +
+        (apprStatus === 'APPROVED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
+         apprStatus === 'REJECTED' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
+         'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200');
+      if (apprNote) {
+        apprNote.textContent = apprStatus === 'APPROVED' ? 'Sign-Off Complete' : apprStatus === 'REJECTED' ? 'Revision Requested' : 'Pending Sign-Off';
+      }
+    }
+
+    // Description & Business Objective
+    const descEl = document.getElementById('overview-description-text');
+    if (descEl) descEl.textContent = p.description || 'No description provided yet. Click edit to define project mission and business goals.';
+    const mgrEl = document.getElementById('overview-manager-text');
+    if (mgrEl) mgrEl.textContent = p.manager_name || '--';
+    const deptEl = document.getElementById('overview-department-text');
+    if (deptEl) deptEl.textContent = p.department || 'Engineering';
+    const sponsorEl = document.getElementById('overview-sponsor-text');
+    if (sponsorEl) sponsorEl.textContent = p.sponsor || 'Executive Committee';
+
+    // Objectives table
+    const objTbody = document.getElementById('overview-objectives-body');
+    if (objTbody) {
+      const objectives = p.objectives || [];
+      if (objectives.length === 0) {
+        objTbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-slate-400 italic">No objectives added yet. Click "+ Add Objective" to define measurable success targets.</td></tr>`;
+      } else {
+        objTbody.innerHTML = objectives.map(obj => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-750/50">
+            <td class="py-2.5 px-3 font-semibold text-slate-800 dark:text-white">${this.escapeHtml(obj.objective)}</td>
+            <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300 font-mono text-[11px]">${this.escapeHtml(obj.success_criteria || '--')}</td>
+            <td class="py-2.5 px-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                obj.status === 'Achieved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' :
+                obj.status === 'At Risk' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' :
+                'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+              }">${this.escapeHtml(obj.status || 'In Progress')}</span>
+            </td>
+            <td class="py-2.5 px-3 text-right">
+              <div class="inline-flex items-center space-x-1">
+                <button onclick="app.openObjectiveModal(${obj.id})" class="p-1 text-slate-400 hover:text-blue-600 cursor-pointer" title="Edit Objective"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                <button onclick="app.deleteObjective(${obj.id})" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Delete Objective"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    // In Scope / Out of Scope
+    const inScopeEl = document.getElementById('overview-in-scope-text');
+    if (inScopeEl) inScopeEl.textContent = p.in_scope || 'No in-scope items defined yet.';
+    const outScopeEl = document.getElementById('overview-out-of-scope-text');
+    if (outScopeEl) outScopeEl.textContent = p.out_of_scope || 'No out-of-scope items defined yet.';
+
+    // Deliverables snapshot list
+    const delivListEl = document.getElementById('overview-deliverables-list');
+    if (delivListEl) {
+      const deliverables = p.deliverables || [];
+      if (deliverables.length === 0) {
+        delivListEl.innerHTML = `<div class="p-3 text-center text-slate-400 italic text-xs">No deliverables defined. Click "View All" to create deliverables.</div>`;
+      } else {
+        delivListEl.innerHTML = deliverables.slice(0, 4).map(d => {
+          const dTasks = (this.state.tasks || []).filter(t => t.deliverable_id === d.id);
+          const dCompleted = dTasks.filter(t => t.status === 'done').length;
+          const dPct = dTasks.length > 0 ? Math.round((dCompleted / dTasks.length) * 100) : (d.status === 'completed' ? 100 : 0);
+          return `
+            <div class="p-2.5 rounded-lg border border-slate-100 dark:border-slate-700 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-750 transition">
+              <div class="min-w-0 flex-1 pr-3">
+                <div class="font-bold text-slate-800 dark:text-white truncate">${this.escapeHtml(d.title)}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">${dTasks.length} linked activities • Target: ${d.due_date || 'TBD'}</div>
+              </div>
+              <div class="flex items-center space-x-3 flex-shrink-0">
+                <div class="w-20 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                  <div class="bg-indigo-600 h-1.5 rounded-full" style="width: ${dPct}%"></div>
+                </div>
+                <span class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 w-8 text-right">${dPct}%</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Budget Snapshot
+    const budgets = p.budgets || [];
+    const totalEst = budgets.reduce((s, b) => s + (parseFloat(b.estimated_cost) || 0), 0);
+    const totalAct = budgets.reduce((s, b) => s + (parseFloat(b.actual_cost) || 0), 0);
+    const variance = totalEst - totalAct;
+
+    const bPlannedEl = document.getElementById('overview-budget-planned');
+    if (bPlannedEl) bPlannedEl.textContent = `$${totalEst.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const bActEl = document.getElementById('overview-budget-actual');
+    if (bActEl) bActEl.textContent = `$${totalAct.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const bVarEl = document.getElementById('overview-budget-variance');
+    if (bVarEl) {
+      bVarEl.textContent = `${variance >= 0 ? '+' : ''}$${variance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      bVarEl.className = variance >= 0 ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'font-bold text-rose-600 dark:text-rose-400';
+    }
+
+    // Risks Snapshot
+    const rListEl = document.getElementById('overview-risks-list');
+    if (rListEl) {
+      const risks = p.risks || [];
+      if (risks.length === 0) {
+        rListEl.innerHTML = `<div class="text-slate-400 italic">No risks recorded in the register.</div>`;
+      } else {
+        rListEl.innerHTML = risks.slice(0, 3).map(r => `
+          <div class="p-2 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+            <div class="flex items-center justify-between gap-1">
+              <span class="font-semibold text-slate-800 dark:text-white truncate">${this.escapeHtml(r.description)}</span>
+              <span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                r.impact === 'critical' ? 'bg-rose-100 text-rose-700' :
+                r.impact === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
+              }">${r.impact || 'med'}</span>
+            </div>
+            <div class="text-[10px] text-slate-400 truncate mt-0.5">Mitigation: ${this.escapeHtml(r.mitigation || 'Under review')}</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Assumptions & Constraints Snapshot
+    const assumpEl = document.getElementById('overview-assumptions-text');
+    if (assumpEl) assumpEl.textContent = p.assumptions || 'None recorded';
+    const constrEl = document.getElementById('overview-constraints-text');
+    if (constrEl) constrEl.textContent = p.constraints || 'None recorded';
+
+    this.initLucide();
+  },
+
+  renderDeliverables() {
+    const p = this.state.currentProject;
+    const container = document.getElementById('deliverables-container-list');
+    if (!container || !p) return;
+
+    const deliverables = p.deliverables || [];
+    if (deliverables.length === 0) {
+      container.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+            <i data-lucide="package" class="w-6 h-6"></i>
+          </div>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-white">No Deliverables Created Yet</h3>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">
+            Deliverables represent major project output packages. Activities and Gantt tasks link directly underneath them to roll up completion.
+          </p>
+          <button onclick="app.openDeliverableModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer">
+            + Add First Deliverable
+          </button>
+        </div>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    container.innerHTML = deliverables.map(d => {
+      const dTasks = (this.state.tasks || []).filter(t => t.deliverable_id === d.id);
+      const completedCount = dTasks.filter(t => t.status === 'done').length;
+      const pct = dTasks.length > 0 ? Math.round((completedCount / dTasks.length) * 100) : (d.status === 'completed' ? 100 : 0);
+
+      const statusBadge = `
+        <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+          d.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
+          d.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200' :
+          d.status === 'delayed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
+          'bg-slate-100 text-slate-600 dark:bg-slate-750 dark:text-slate-300 border border-slate-200'
+        }">${this.escapeHtml(d.status || 'pending')}</span>
+      `;
+
+      return `
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
+          <!-- Card Header -->
+          <div class="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700/60">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center space-x-2.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                <h3 class="text-sm sm:text-base font-bold text-slate-800 dark:text-white truncate">${this.escapeHtml(d.title)}</h3>
+                ${statusBadge}
+              </div>
+              ${d.description ? `<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">${this.escapeHtml(d.description)}</p>` : ''}
+              <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 mt-2">
+                <span>Target: <strong class="text-slate-600 dark:text-slate-300 font-semibold">${d.due_date || 'No Target Date'}</strong></span>
+                <span>•</span>
+                <span>${dTasks.length} Linked Activities (${completedCount} completed)</span>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center space-x-2 flex-shrink-0 self-end sm:self-center">
+              <button onclick="app.openTaskModal({ deliverable_id: ${d.id} })" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 text-xs font-semibold rounded-lg flex items-center space-x-1 cursor-pointer" title="Add activity under this deliverable">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Add Activity</span>
+              </button>
+              <button onclick="app.openDeliverableModal(${d.id})" class="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg cursor-pointer" title="Edit Deliverable">
+                <i data-lucide="edit-2" class="w-4 h-4"></i>
+              </button>
+              <button onclick="app.deleteDeliverable(${d.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer" title="Delete Deliverable">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+              <button onclick="app.toggleDeliverableAccordion(${d.id})" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg cursor-pointer" title="Toggle linked activities">
+                <i id="deliv-chevron-${d.id}" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Progress bar -->
+          <div class="px-4 sm:px-5 py-2.5 bg-slate-50/70 dark:bg-slate-900/40 flex items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700/60 text-xs">
+            <span class="font-semibold text-slate-600 dark:text-slate-300">Rollup Completion</span>
+            <div class="flex items-center space-x-3 flex-1 max-w-md">
+              <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+              </div>
+              <span class="font-extrabold text-indigo-600 dark:text-indigo-400 w-10 text-right">${pct}%</span>
+            </div>
+          </div>
+
+          <!-- Linked Activities Accordion -->
+          <div id="deliv-tasks-${d.id}" class="p-4 sm:p-5 space-y-2 bg-slate-50/40 dark:bg-slate-900/20">
+            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Activities Under This Deliverable</div>
+            ${dTasks.length === 0 ? `
+              <div class="text-xs text-slate-400 italic py-2">No activities linked yet. Click "+ Add Activity" above to attach an execution work item.</div>
+            ` : dTasks.map(t => `
+              <div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 hover:shadow-2xs transition">
+                <div class="flex items-center space-x-2.5 min-w-0 flex-1">
+                  <input type="checkbox" ${t.status === 'done' ? 'checked' : ''} onchange="app.quickToggleTaskDone(${t.id}, '${t.status}')" class="rounded text-blue-600 focus:ring-0 cursor-pointer">
+                  <span onclick="app.openTaskModal(${t.id})" class="text-xs font-semibold text-slate-800 dark:text-white hover:text-blue-600 truncate cursor-pointer ${t.status === 'done' ? 'line-through opacity-60' : ''}">
+                    ${this.escapeHtml(t.title)}
+                  </span>
+                </div>
+                <div class="flex items-center space-x-2 text-[10px] flex-shrink-0">
+                  <span class="px-2 py-0.5 rounded font-bold uppercase ${
+                    t.status === 'done' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' :
+                    t.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                    'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                  }">${this.escapeHtml(t.status)}</span>
+                  ${t.due_date ? `<span class="text-slate-400 font-medium">${t.due_date}</span>` : ''}
+                  ${t.assignee_name ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium truncate max-w-[80px]">${this.escapeHtml(t.assignee_name)}</span>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.initLucide();
+  },
+
+  toggleDeliverableAccordion(delivId) {
+    const el = document.getElementById(`deliv-tasks-${delivId}`);
+    const chevron = document.getElementById(`deliv-chevron-${delivId}`);
+    if (el) {
+      el.classList.toggle('hidden');
+      if (chevron) {
+        chevron.classList.toggle('rotate-180', el.classList.contains('hidden'));
+      }
+    }
+  },
+
+  renderMilestones() {
+    const p = this.state.currentProject;
+    const container = document.getElementById('milestones-container-list');
+    if (!container || !p) return;
+
+    const milestones = p.milestones || [];
+    if (milestones.length === 0) {
+      container.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-3">
+          <div class="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
+            <i data-lucide="flag" class="w-6 h-6"></i>
+          </div>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-white">No Milestones Recorded</h3>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">
+            Milestones designate major timeline checkpoints, gate reviews, and delivery milestones on the Gantt chart.
+          </p>
+          <button onclick="app.openMilestoneModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer">
+            + Add Milestone
+          </button>
+        </div>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    container.innerHTML = milestones.map(m => {
+      const isDone = m.status === 'completed';
+      return `
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between gap-4 hover:border-purple-300 dark:hover:border-purple-800 transition">
+          <div class="flex items-start space-x-3.5 min-w-0 flex-1">
+            <button onclick="app.toggleMilestoneStatus(${m.id})" class="mt-0.5 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition ${
+              isDone ? 'bg-emerald-500 text-white' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-purple-500 text-transparent'
+            }" title="Click to toggle completion status">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            </button>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center space-x-2">
+                <h4 class="text-sm font-bold text-slate-800 dark:text-white truncate ${isDone ? 'line-through opacity-70' : ''}">${this.escapeHtml(m.title)}</h4>
+                ${m.deliverable_title ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 truncate max-w-[150px]">${this.escapeHtml(m.deliverable_title)}</span>` : ''}
+              </div>
+              ${m.description ? `<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${this.escapeHtml(m.description)}</p>` : ''}
+              <div class="flex items-center space-x-2 text-[11px] text-slate-400 mt-1.5">
+                <i data-lucide="calendar" class="w-3 h-3 text-purple-500"></i>
+                <span class="font-semibold text-slate-600 dark:text-slate-300">Target Date: ${m.due_date || 'TBD'}</span>
+                <span>•</span>
+                <span class="uppercase font-bold ${isDone ? 'text-emerald-600' : 'text-amber-600'}">${m.status || 'pending'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-1 flex-shrink-0">
+            <button onclick="app.openMilestoneModal(${m.id})" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer" title="Edit Milestone">
+              <i data-lucide="edit-2" class="w-4 h-4"></i>
+            </button>
+            <button onclick="app.deleteMilestone(${m.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer" title="Delete Milestone">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.initLucide();
+  },
+
+  async toggleMilestoneStatus(milestoneId) {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+    const m = (this.state.currentProject?.milestones || []).find(item => item.id === milestoneId);
+    if (!m) return;
+    const newStatus = m.status === 'completed' ? 'pending' : 'completed';
+    m.status = newStatus;
+    this.renderMilestones();
+    try {
+      await this.api(`/api/projects/${pid}/milestones/${milestoneId}`, {
+        method: 'PUT',
+        body: { status: newStatus }
+      });
+      this.syncCurrentProjectCache();
+      this.showToast(`Milestone marked as ${newStatus}`, 'success');
+    } catch (e) {
+      console.error('Failed to toggle milestone:', e);
+      this.showToast('Failed to update milestone status', 'error');
+    }
+  },
+
+  renderRisks() {
+    const p = this.state.currentProject;
+    if (!p) return;
+
+    const tbody = document.getElementById('risks-table-body');
+    if (tbody) {
+      const risks = p.risks || [];
+      if (risks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-400 italic">No risks recorded in the register. Click "+ Add Risk" to log potential risks and mitigation plans.</td></tr>`;
+      } else {
+        tbody.innerHTML = risks.map(r => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-750/50">
+            <td class="py-2.5 px-3 font-semibold text-slate-800 dark:text-white max-w-xs break-words">${this.escapeHtml(r.description)}</td>
+            <td class="py-2.5 px-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                r.impact === 'critical' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' :
+                r.impact === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' :
+                r.impact === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
+                'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+              }">${this.escapeHtml(r.impact || 'medium')}</span>
+            </td>
+            <td class="py-2.5 px-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                r.probability === 'high' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' :
+                r.probability === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
+                'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+              }">${this.escapeHtml(r.probability || 'medium')}</span>
+            </td>
+            <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300 max-w-xs break-words text-[11px]">${this.escapeHtml(r.mitigation || '--')}</td>
+            <td class="py-2.5 px-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                r.status === 'closed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' :
+                r.status === 'mitigated' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
+                'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+              }">${this.escapeHtml(r.status || 'open')}</span>
+            </td>
+            <td class="py-2.5 px-3 text-right">
+              <div class="inline-flex items-center space-x-1">
+                <button onclick="app.openRiskModal(${r.id})" class="p-1 text-slate-400 hover:text-blue-600 cursor-pointer" title="Edit Risk"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                <button onclick="app.deleteRisk(${r.id})" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Delete Risk"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    const assumpInput = document.getElementById('risks-input-assumptions');
+    if (assumpInput) assumpInput.value = p.assumptions || '';
+    const constrInput = document.getElementById('risks-input-constraints');
+    if (constrInput) constrInput.value = p.constraints || '';
+
+    this.initLucide();
+  },
+
+  async saveAssumptionsConstraints() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const assumptions = document.getElementById('risks-input-assumptions')?.value || '';
+    const constraints = document.getElementById('risks-input-constraints')?.value || '';
+
+    try {
+      await this.api(`/api/projects/${pid}`, {
+        method: 'PUT',
+        body: { assumptions, constraints }
+      });
+      if (this.state.currentProject) {
+        this.state.currentProject.assumptions = assumptions;
+        this.state.currentProject.constraints = constraints;
+        this.syncCurrentProjectCache();
+      }
+      this.showToast('Assumptions & Constraints saved successfully', 'success');
+    } catch (e) {
+      console.error('Failed to save assumptions/constraints:', e);
+      this.showToast('Failed to save assumptions and constraints', 'error');
+    }
+  },
+
+  renderBudget() {
+    const p = this.state.currentProject;
+    if (!p) return;
+
+    const budgets = p.budgets || [];
+    const totalEst = budgets.reduce((s, b) => s + (parseFloat(b.estimated_cost) || 0), 0);
+    const totalAct = budgets.reduce((s, b) => s + (parseFloat(b.actual_cost) || 0), 0);
+    const variance = totalEst - totalAct;
+    const variancePct = totalEst > 0 ? ((variance / totalEst) * 100).toFixed(1) : '0.0';
+
+    const kpiPlanned = document.getElementById('budget-kpi-planned');
+    if (kpiPlanned) kpiPlanned.textContent = `$${totalEst.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const kpiActual = document.getElementById('budget-kpi-actual');
+    if (kpiActual) kpiActual.textContent = `$${totalAct.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const kpiVar = document.getElementById('budget-kpi-variance');
+    if (kpiVar) {
+      kpiVar.textContent = `${variance >= 0 ? '+' : ''}$${variance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      kpiVar.className = variance >= 0 ? 'text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-1' : 'text-lg font-extrabold text-rose-600 dark:text-rose-400 mt-1';
+    }
+    const kpiVarPct = document.getElementById('budget-kpi-variance-pct');
+    if (kpiVarPct) {
+      kpiVarPct.textContent = `${variance >= 0 ? '+' : ''}${variancePct}%`;
+      kpiVarPct.className = variance >= 0 ? 'text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-1' : 'text-lg font-extrabold text-rose-600 dark:text-rose-400 mt-1';
+    }
+
+    const tbody = document.getElementById('budget-table-body');
+    if (tbody) {
+      if (budgets.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400 italic">No budget lines recorded. Click "+ Add Cost Item" to track project expenditures.</td></tr>`;
+      } else {
+        tbody.innerHTML = budgets.map(b => {
+          const est = parseFloat(b.estimated_cost) || 0;
+          const act = parseFloat(b.actual_cost) || 0;
+          const lineVar = est - act;
+          const lineVarPct = est > 0 ? ((lineVar / est) * 100).toFixed(1) : '0.0';
+
+          return `
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-750/50">
+              <td class="py-2.5 px-3 font-semibold text-slate-800 dark:text-white">${this.escapeHtml(b.category)}</td>
+              <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300 text-[11px]">${this.escapeHtml(b.notes || '--')}</td>
+              <td class="py-2.5 px-3 font-mono text-[11px] text-slate-800 dark:text-white">$${est.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2.5 px-3 font-mono text-[11px] text-slate-800 dark:text-white">$${act.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td class="py-2.5 px-3 font-mono text-[11px] ${lineVar >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}">
+                ${lineVar >= 0 ? '+' : ''}$${lineVar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td class="py-2.5 px-3 font-mono text-[11px] ${lineVar >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}">
+                ${lineVar >= 0 ? '+' : ''}${lineVarPct}%
+              </td>
+              <td class="py-2.5 px-3 text-right">
+                <div class="inline-flex items-center space-x-1">
+                  <button onclick="app.openBudgetModal(${b.id})" class="p-1 text-slate-400 hover:text-blue-600 cursor-pointer" title="Edit Cost Item"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                  <button onclick="app.deleteBudget(${b.id})" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Delete Cost Item"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    this.initLucide();
+  },
+
+  renderDocuments() {
+    const p = this.state.currentProject;
+    if (!p) return;
+
+    const tbody = document.getElementById('documents-table-body');
+    if (tbody) {
+      const documents = p.documents || [];
+      if (documents.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-400 italic">No documents attached yet. Click "+ Add Document / Link" to register project references.</td></tr>`;
+      } else {
+        tbody.innerHTML = documents.map(doc => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-750/50">
+            <td class="py-2.5 px-3 font-semibold text-slate-800 dark:text-white">${this.escapeHtml(doc.title)}</td>
+            <td class="py-2.5 px-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                ${this.escapeHtml(doc.doc_type || 'Specification')}
+              </span>
+            </td>
+            <td class="py-2.5 px-3">
+              <a href="${this.escapeHtml(doc.url)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center space-x-1 max-w-[200px] truncate">
+                <span class="truncate">${this.escapeHtml(doc.url)}</span>
+                <i data-lucide="external-link" class="w-3 h-3 flex-shrink-0"></i>
+              </a>
+            </td>
+            <td class="py-2.5 px-3 text-slate-500 text-[11px] max-w-xs truncate">${this.escapeHtml(doc.description || '--')}</td>
+            <td class="py-2.5 px-3 text-slate-400 text-[11px] font-mono">${(doc.created_at || '').split('T')[0] || '--'}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="app.deleteDocument(${doc.id})" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Delete Document">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    this.initLucide();
+  },
+
+  renderApprovals() {
+    const p = this.state.currentProject;
+    if (!p) return;
+
+    const stBadge = document.getElementById('approvals-status-badge');
+    const stDesc = document.getElementById('approvals-status-desc');
+    if (stBadge) {
+      const apprStatus = (p.approval_status || 'DRAFT').toUpperCase();
+      stBadge.textContent = apprStatus;
+      stBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ' +
+        (apprStatus === 'APPROVED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
+         apprStatus === 'REJECTED' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
+         'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200');
+      if (stDesc) {
+        stDesc.textContent = apprStatus === 'APPROVED' ? 'Project Charter formally approved and authorized for execution.' :
+          apprStatus === 'REJECTED' ? 'Project Charter returned with change requests.' :
+          'Formal stakeholder authorization and project sign-off register.';
+      }
+    }
+
+    const container = document.getElementById('approvals-cards-container');
+    if (container) {
+      const approvals = p.approvals || [];
+      if (approvals.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-2">
+            <i data-lucide="award" class="w-8 h-8 text-amber-500 mx-auto"></i>
+            <div class="text-xs text-slate-500">No stakeholder approvers listed. Click "+ Add Approver" to create governance sign-off slots.</div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = approvals.map(appr => {
+          const isApproved = appr.status === 'approved';
+          const isRejected = appr.status === 'rejected';
+
+          return `
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700/60 pb-2.5">
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${this.escapeHtml(appr.role_title)}</span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                    isApproved ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-200' :
+                    isRejected ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400 border border-rose-200' :
+                    'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border border-amber-200'
+                  }">${this.escapeHtml(appr.status || 'pending')}</span>
+                </div>
+
+                <div class="pt-2">
+                  <h4 class="text-sm font-bold text-slate-800 dark:text-white">${this.escapeHtml(appr.approver_name)}</h4>
+                  <p class="text-xs text-slate-400 font-mono mt-0.5">${this.escapeHtml(appr.approver_email || '--')}</p>
+                </div>
+
+                ${appr.signed_at ? `
+                  <div class="text-[11px] text-slate-400 mt-2 font-mono">
+                    Signed: ${new Date(appr.signed_at).toLocaleDateString()}
+                  </div>
+                ` : ''}
+
+                ${appr.comments ? `
+                  <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 italic mt-3">
+                    "${this.escapeHtml(appr.comments)}"
+                  </div>
+                ` : ''}
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
+                <button onclick="app.openSignoffModal(${appr.id})" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition cursor-pointer">
+                  <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                  <span>Sign Off</span>
+                </button>
+                <button onclick="app.deleteApprover(${appr.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer" title="Remove approver">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    this.initLucide();
+  },
+
+  // ==================== PROJECT CHARTER MODAL & PRINT ====================
+
+  openProjectCharterModal() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+    const modal = document.getElementById('charter-modal');
+    const iframe = document.getElementById('charter-preview-iframe');
+    const codeBadge = document.getElementById('charter-modal-code');
+    if (codeBadge) {
+      codeBadge.textContent = this.state.currentProject?.project_code || ('PRJ-' + String(pid).padStart(3, '0'));
+    }
+    if (iframe) {
+      iframe.src = `/api/projects/${pid}/charter/print`;
+    }
+    if (modal) modal.classList.remove('hidden');
+    this.initLucide();
+  },
+
+  closeProjectCharterModal() {
+    const modal = document.getElementById('charter-modal');
+    const iframe = document.getElementById('charter-preview-iframe');
+    if (iframe) iframe.src = 'about:blank';
+    if (modal) modal.classList.add('hidden');
+  },
+
+  printProjectCharter() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+    const iframe = document.getElementById('charter-preview-iframe');
+    if (iframe && iframe.contentWindow && iframe.src.includes(`/api/projects/${pid}/charter/print`)) {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        return;
+      } catch (e) {
+        console.warn('iframe direct print fallback:', e);
+      }
+    }
+    window.open(`/api/projects/${pid}/charter/print?autoprint=1`, '_blank');
+  },
+
+  openCharterExternal() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+    window.open(`/api/projects/${pid}/charter/print`, '_blank');
+  },
+
+  // ==================== OBJECTIVES CRUD ====================
+
+  openObjectiveModal(id = null) {
+    const modal = document.getElementById('objective-modal');
+    if (!modal) return;
+    const idInput = document.getElementById('objective-input-id');
+    const titleInput = document.getElementById('objective-input-title');
+    const targetInput = document.getElementById('objective-input-target');
+    const statusSelect = document.getElementById('objective-input-status');
+    const titleEl = document.getElementById('objective-modal-title');
+
+    if (id) {
+      const obj = (this.state.currentProject?.objectives || []).find(o => o.id === id);
+      if (idInput) idInput.value = id;
+      if (titleInput) titleInput.value = obj?.objective || '';
+      if (targetInput) targetInput.value = obj?.success_criteria || '';
+      if (statusSelect) statusSelect.value = obj?.status || 'In Progress';
+      if (titleEl) titleEl.textContent = 'Edit Project Objective';
+    } else {
+      if (idInput) idInput.value = '';
+      if (titleInput) titleInput.value = '';
+      if (targetInput) targetInput.value = '';
+      if (statusSelect) statusSelect.value = 'In Progress';
+      if (titleEl) titleEl.textContent = 'Add Project Objective';
+    }
+
+    modal.classList.remove('hidden');
+    titleInput?.focus();
+    this.initLucide();
+  },
+
+  closeObjectiveModal() {
+    document.getElementById('objective-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveObjective() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const id = document.getElementById('objective-input-id')?.value;
+    const objective = document.getElementById('objective-input-title')?.value.trim();
+    if (!objective) {
+      this.showToast('Please enter an objective statement', 'error');
+      return;
+    }
+    const success_criteria = document.getElementById('objective-input-target')?.value.trim() || '';
+    const status = document.getElementById('objective-input-status')?.value || 'In Progress';
+
+    this.closeObjectiveModal();
+
+    try {
+      if (id) {
+        const res = await this.api(`/api/objectives/${id}`, {
+          method: 'PUT',
+          body: { objective, success_criteria, status }
+        });
+        if (this.state.currentProject?.objectives) {
+          const idx = this.state.currentProject.objectives.findIndex(o => o.id === Number(id));
+          if (idx !== -1) this.state.currentProject.objectives[idx] = res;
+        }
+        this.showToast('Objective updated', 'success');
+      } else {
+        const res = await this.api(`/api/projects/${pid}/objectives`, {
+          method: 'POST',
+          body: { objective, success_criteria, status }
+        });
+        if (!this.state.currentProject.objectives) this.state.currentProject.objectives = [];
+        this.state.currentProject.objectives.push(res);
+        this.showToast('Objective added', 'success');
+      }
+      this.syncCurrentProjectCache();
+      this.renderOverview();
+    } catch (err) {
+      this.showToast('Failed to save objective: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteObjective(id) {
+    if (!confirm('Are you sure you want to delete this objective?')) return;
+    try {
+      await this.api(`/api/objectives/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.objectives) {
+        this.state.currentProject.objectives = this.state.currentProject.objectives.filter(o => o.id !== id);
+      }
+      this.syncCurrentProjectCache();
+      this.renderOverview();
+      this.showToast('Objective removed', 'success');
+    } catch (err) {
+      this.showToast('Failed to delete objective: ' + (err.message || err), 'error');
+    }
+  },
+
+  // ==================== DELIVERABLES CRUD ====================
+
+  openDeliverableModal(id = null) {
+    const modal = document.getElementById('deliverable-modal');
+    if (!modal) return;
+    const idInput = document.getElementById('deliverable-input-id');
+    const titleInput = document.getElementById('deliverable-input-title');
+    const descInput = document.getElementById('deliverable-input-description');
+    const dateInput = document.getElementById('deliverable-input-date');
+    const statusSelect = document.getElementById('deliverable-input-status');
+    const titleEl = document.getElementById('deliverable-modal-title');
+
+    if (id) {
+      const d = (this.state.currentProject?.deliverables || []).find(item => item.id === id);
+      if (idInput) idInput.value = id;
+      if (titleInput) titleInput.value = d?.title || '';
+      if (descInput) descInput.value = d?.description || '';
+      if (dateInput) dateInput.value = d?.due_date || '';
+      if (statusSelect) statusSelect.value = d?.status || 'pending';
+      if (titleEl) titleEl.textContent = 'Edit Deliverable';
+    } else {
+      if (idInput) idInput.value = '';
+      if (titleInput) titleInput.value = '';
+      if (descInput) descInput.value = '';
+      const defaultDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+      if (dateInput) dateInput.value = defaultDate;
+      if (statusSelect) statusSelect.value = 'in_progress';
+      if (titleEl) titleEl.textContent = 'Add Project Deliverable';
+    }
+
+    modal.classList.remove('hidden');
+    titleInput?.focus();
+    this.initLucide();
+  },
+
+  closeDeliverableModal() {
+    document.getElementById('deliverable-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveDeliverable() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const id = document.getElementById('deliverable-input-id')?.value;
+    const title = document.getElementById('deliverable-input-title')?.value.trim();
+    if (!title) {
+      this.showToast('Please enter a deliverable title', 'error');
+      return;
+    }
+    const description = document.getElementById('deliverable-input-description')?.value.trim() || '';
+    const due_date = document.getElementById('deliverable-input-date')?.value || '';
+    const status = document.getElementById('deliverable-input-status')?.value || 'pending';
+
+    this.closeDeliverableModal();
+
+    try {
+      if (id) {
+        const res = await this.api(`/api/deliverables/${id}`, {
+          method: 'PUT',
+          body: { title, description, due_date, status }
+        });
+        if (this.state.currentProject?.deliverables) {
+          const idx = this.state.currentProject.deliverables.findIndex(d => d.id === Number(id));
+          if (idx !== -1) this.state.currentProject.deliverables[idx] = res;
+        }
+        this.showToast('Deliverable updated', 'success');
+      } else {
+        const res = await this.api(`/api/projects/${pid}/deliverables`, {
+          method: 'POST',
+          body: { title, description, due_date, status }
+        });
+        if (!this.state.currentProject.deliverables) this.state.currentProject.deliverables = [];
+        this.state.currentProject.deliverables.push(res);
+        this.showToast('Deliverable added', 'success');
+      }
+      this.populateTaskModalDropdowns();
+      this.syncCurrentProjectCache();
+      this.renderDeliverables();
+      this.renderOverview();
+    } catch (err) {
+      this.showToast('Failed to save deliverable: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteDeliverable(id) {
+    if (!confirm('Are you sure you want to delete this deliverable?\n\nTasks attached to this deliverable will remain active with unassigned deliverable.')) return;
+    try {
+      await this.api(`/api/deliverables/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.deliverables) {
+        this.state.currentProject.deliverables = this.state.currentProject.deliverables.filter(d => d.id !== id);
+      }
+      // Clear deliverable on local tasks
+      (this.state.tasks || []).forEach(t => {
+        if (t.deliverable_id === id) {
+          t.deliverable_id = null;
+          t.deliverable_title = null;
+        }
+      });
+      this.populateTaskModalDropdowns();
+      this.syncCurrentProjectCache();
+      this.renderDeliverables();
+      this.renderOverview();
+      this.showToast('Deliverable deleted', 'success');
+    } catch (err) {
+      this.showToast('Failed to delete deliverable: ' + (err.message || err), 'error');
+    }
+  },
+
+  // ==================== MILESTONES CRUD ====================
+
+  openMilestoneModal(id = null) {
+    const modal = document.getElementById('milestone-modal');
+    if (!modal) return;
+    const idInput = document.getElementById('milestone-input-id');
+    const titleInput = document.getElementById('milestone-input-title');
+    const dateInput = document.getElementById('milestone-input-date');
+    const delivSelect = document.getElementById('milestone-input-deliverable');
+    const descInput = document.getElementById('milestone-input-description');
+    const titleEl = document.getElementById('milestone-modal-title');
+
+    // Populate deliverable dropdown
+    if (delivSelect) {
+      const deliverables = this.state.currentProject?.deliverables || [];
+      delivSelect.innerHTML = `<option value="">-- No Deliverable Linked --</option>` +
+        deliverables.map(d => `<option value="${d.id}">${this.escapeHtml(d.title)}</option>`).join('');
+    }
+
+    if (id) {
+      const m = (this.state.currentProject?.milestones || []).find(item => item.id === id);
+      if (idInput) idInput.value = id;
+      if (titleInput) titleInput.value = m?.title || '';
+      if (dateInput) dateInput.value = m?.due_date || '';
+      if (delivSelect) delivSelect.value = m?.deliverable_id ? String(m.deliverable_id) : '';
+      if (descInput) descInput.value = m?.description || '';
+      if (titleEl) titleEl.textContent = 'Edit Milestone';
+    } else {
+      if (idInput) idInput.value = '';
+      if (titleInput) titleInput.value = '';
+      const defaultDate = new Date(Date.now() + 45 * 86400000).toISOString().split('T')[0];
+      if (dateInput) dateInput.value = defaultDate;
+      if (delivSelect) delivSelect.value = '';
+      if (descInput) descInput.value = '';
+      if (titleEl) titleEl.textContent = 'Add Project Milestone';
+    }
+
+    modal.classList.remove('hidden');
+    titleInput?.focus();
+    this.initLucide();
+  },
+
+  closeMilestoneModal() {
+    document.getElementById('milestone-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveMilestone() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const id = document.getElementById('milestone-input-id')?.value;
+    const title = document.getElementById('milestone-input-title')?.value.trim();
+    const due_date = document.getElementById('milestone-input-date')?.value;
+    if (!title || !due_date) {
+      this.showToast('Please provide milestone title and target date', 'error');
+      return;
+    }
+    const delivVal = document.getElementById('milestone-input-deliverable')?.value;
+    const deliverable_id = delivVal ? Number(delivVal) : null;
+    const description = document.getElementById('milestone-input-description')?.value.trim() || '';
+
+    this.closeMilestoneModal();
+
+    try {
+      if (id) {
+        const res = await this.api(`/api/projects/${pid}/milestones/${id}`, {
+          method: 'PUT',
+          body: { title, due_date, deliverable_id, description }
+        });
+        if (this.state.currentProject?.milestones) {
+          const idx = this.state.currentProject.milestones.findIndex(m => m.id === Number(id));
+          if (idx !== -1) this.state.currentProject.milestones[idx] = res;
+        }
+        this.showToast('Milestone updated', 'success');
+      } else {
+        const res = await this.api(`/api/projects/${pid}/milestones`, {
+          method: 'POST',
+          body: { title, due_date, deliverable_id, description, status: 'pending' }
+        });
+        if (!this.state.currentProject.milestones) this.state.currentProject.milestones = [];
+        this.state.currentProject.milestones.push(res);
+        this.showToast('Milestone added', 'success');
+      }
+      this.syncCurrentProjectCache();
+      this.renderMilestones();
+    } catch (err) {
+      this.showToast('Failed to save milestone: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteMilestone(id) {
+    const pid = this.state.currentProjectId;
+    if (!confirm('Are you sure you want to delete this milestone?')) return;
+    try {
+      await this.api(`/api/projects/${pid}/milestones/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.milestones) {
+        this.state.currentProject.milestones = this.state.currentProject.milestones.filter(m => m.id !== id);
+      }
+      this.syncCurrentProjectCache();
+      this.renderMilestones();
+      this.showToast('Milestone removed', 'success');
+    } catch (err) {
+      this.showToast('Failed to delete milestone: ' + (err.message || err), 'error');
+    }
+  },
+
+  // ==================== RISKS CRUD ====================
+
+  openRiskModal(id = null) {
+    const modal = document.getElementById('risk-modal');
+    if (!modal) return;
+    const idInput = document.getElementById('risk-input-id');
+    const descInput = document.getElementById('risk-input-description');
+    const impactSelect = document.getElementById('risk-input-impact');
+    const probSelect = document.getElementById('risk-input-probability');
+    const mitInput = document.getElementById('risk-input-mitigation');
+    const statusSelect = document.getElementById('risk-input-status');
+    const titleEl = document.getElementById('risk-modal-title');
+
+    if (id) {
+      const r = (this.state.currentProject?.risks || []).find(item => item.id === id);
+      if (idInput) idInput.value = id;
+      if (descInput) descInput.value = r?.description || '';
+      if (impactSelect) impactSelect.value = r?.impact || 'medium';
+      if (probSelect) probSelect.value = r?.probability || 'medium';
+      if (mitInput) mitInput.value = r?.mitigation || '';
+      if (statusSelect) statusSelect.value = r?.status || 'open';
+      if (titleEl) titleEl.textContent = 'Edit Project Risk';
+    } else {
+      if (idInput) idInput.value = '';
+      if (descInput) descInput.value = '';
+      if (impactSelect) impactSelect.value = 'medium';
+      if (probSelect) probSelect.value = 'medium';
+      if (mitInput) mitInput.value = '';
+      if (statusSelect) statusSelect.value = 'open';
+      if (titleEl) titleEl.textContent = 'Add Project Risk';
+    }
+
+    modal.classList.remove('hidden');
+    descInput?.focus();
+    this.initLucide();
+  },
+
+  closeRiskModal() {
+    document.getElementById('risk-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveRisk() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const id = document.getElementById('risk-input-id')?.value;
+    const description = document.getElementById('risk-input-description')?.value.trim();
+    if (!description) {
+      this.showToast('Please enter a risk description', 'error');
+      return;
+    }
+    const impact = document.getElementById('risk-input-impact')?.value || 'medium';
+    const probability = document.getElementById('risk-input-probability')?.value || 'medium';
+    const mitigation = document.getElementById('risk-input-mitigation')?.value.trim() || '';
+    const status = document.getElementById('risk-input-status')?.value || 'open';
+
+    this.closeRiskModal();
+
+    try {
+      if (id) {
+        const res = await this.api(`/api/risks/${id}`, {
+          method: 'PUT',
+          body: { description, impact, probability, mitigation, status }
+        });
+        if (this.state.currentProject?.risks) {
+          const idx = this.state.currentProject.risks.findIndex(r => r.id === Number(id));
+          if (idx !== -1) this.state.currentProject.risks[idx] = res;
+        }
+        this.showToast('Risk updated', 'success');
+      } else {
+        const res = await this.api(`/api/projects/${pid}/risks`, {
+          method: 'POST',
+          body: { description, impact, probability, mitigation, status }
+        });
+        if (!this.state.currentProject.risks) this.state.currentProject.risks = [];
+        this.state.currentProject.risks.push(res);
+        this.showToast('Risk registered', 'success');
+      }
+      this.syncCurrentProjectCache();
+      this.renderRisks();
+      this.renderOverview();
+    } catch (err) {
+      this.showToast('Failed to save risk: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteRisk(id) {
+    if (!confirm('Are you sure you want to delete this risk?')) return;
+    try {
+      await this.api(`/api/risks/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.risks) {
+        this.state.currentProject.risks = this.state.currentProject.risks.filter(r => r.id !== id);
+      }
+      this.syncCurrentProjectCache();
+      this.renderRisks();
+      this.renderOverview();
+      this.showToast('Risk removed', 'success');
+    } catch (err) {
+      this.showToast('Failed to delete risk: ' + (err.message || err), 'error');
+    }
+  },
+
+  // ==================== BUDGET CRUD ====================
+
+  openBudgetModal(id = null) {
+    const modal = document.getElementById('budget-modal');
+    if (!modal) return;
+    const idInput = document.getElementById('budget-input-id');
+    const catSelect = document.getElementById('budget-input-category');
+    const descInput = document.getElementById('budget-input-description');
+    const planInput = document.getElementById('budget-input-planned');
+    const actInput = document.getElementById('budget-input-actual');
+    const titleEl = document.getElementById('budget-modal-title');
+
+    if (id) {
+      const b = (this.state.currentProject?.budgets || []).find(item => item.id === id);
+      if (idInput) idInput.value = id;
+      if (catSelect) catSelect.value = b?.category || 'Hardware / Materials';
+      if (descInput) descInput.value = b?.notes || '';
+      if (planInput) planInput.value = b?.estimated_cost || 0;
+      if (actInput) actInput.value = b?.actual_cost || 0;
+      if (titleEl) titleEl.textContent = 'Edit Cost Item';
+    } else {
+      if (idInput) idInput.value = '';
+      if (catSelect) catSelect.value = 'Hardware / Materials';
+      if (descInput) descInput.value = '';
+      if (planInput) planInput.value = '';
+      if (actInput) actInput.value = '';
+      if (titleEl) titleEl.textContent = 'Add Cost Item';
+    }
+
+    modal.classList.remove('hidden');
+    descInput?.focus();
+    this.initLucide();
+  },
+
+  closeBudgetModal() {
+    document.getElementById('budget-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveBudget() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const id = document.getElementById('budget-input-id')?.value;
+    const category = document.getElementById('budget-input-category')?.value || 'Hardware / Materials';
+    const notes = document.getElementById('budget-input-description')?.value.trim() || '';
+    const estimated_cost = parseFloat(document.getElementById('budget-input-planned')?.value) || 0.0;
+    const actual_cost = parseFloat(document.getElementById('budget-input-actual')?.value) || 0.0;
+
+    this.closeBudgetModal();
+
+    try {
+      if (id) {
+        const res = await this.api(`/api/budgets/${id}`, {
+          method: 'PUT',
+          body: { category, notes, estimated_cost, actual_cost }
+        });
+        if (this.state.currentProject?.budgets) {
+          const idx = this.state.currentProject.budgets.findIndex(b => b.id === Number(id));
+          if (idx !== -1) this.state.currentProject.budgets[idx] = res;
+        }
+        this.showToast('Budget item updated', 'success');
+      } else {
+        const res = await this.api(`/api/projects/${pid}/budgets`, {
+          method: 'POST',
+          body: { category, notes, estimated_cost, actual_cost }
+        });
+        if (!this.state.currentProject.budgets) this.state.currentProject.budgets = [];
+        this.state.currentProject.budgets.push(res);
+        this.showToast('Budget item added', 'success');
+      }
+      this.syncCurrentProjectCache();
+      this.renderBudget();
+      this.renderOverview();
+    } catch (err) {
+      this.showToast('Failed to save budget item: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteBudget(id) {
+    if (!confirm('Are you sure you want to delete this cost item?')) return;
+    try {
+      await this.api(`/api/budgets/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.budgets) {
+        this.state.currentProject.budgets = this.state.currentProject.budgets.filter(b => b.id !== id);
+      }
+      this.syncCurrentProjectCache();
+      this.renderBudget();
+      this.renderOverview();
+      this.showToast('Cost item deleted', 'success');
+    } catch (err) {
+      this.showToast('Failed to delete cost item: ' + (err.message || err), 'error');
+    }
+  },
+
+  // ==================== DOCUMENTS CRUD ====================
+
+  openDocumentModal() {
+    const modal = document.getElementById('document-modal');
+    if (!modal) return;
+    const titleInput = document.getElementById('document-input-title');
+    const urlInput = document.getElementById('document-input-url');
+    const descInput = document.getElementById('document-input-description');
+    if (titleInput) titleInput.value = '';
+    if (urlInput) urlInput.value = '';
+    if (descInput) descInput.value = '';
+    modal.classList.remove('hidden');
+    titleInput?.focus();
+    this.initLucide();
+  },
+
+  closeDocumentModal() {
+    document.getElementById('document-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveDocument() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const title = document.getElementById('document-input-title')?.value.trim();
+    const doc_type = document.getElementById('document-input-type')?.value || 'Specification';
+    const url = document.getElementById('document-input-url')?.value.trim();
+    const description = document.getElementById('document-input-description')?.value.trim() || '';
+
+    if (!title || !url) {
+      this.showToast('Please enter document title and URL link', 'error');
+      return;
+    }
+
+    this.closeDocumentModal();
+
+    try {
+      const res = await this.api(`/api/projects/${pid}/documents`, {
+        method: 'POST',
+        body: { title, doc_type, url, description }
+      });
+      if (!this.state.currentProject.documents) this.state.currentProject.documents = [];
+      this.state.currentProject.documents.unshift(res);
+      this.syncCurrentProjectCache();
+      this.renderDocuments();
+      this.showToast('Document registered', 'success');
+    } catch (err) {
+      this.showToast('Failed to save document: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteDocument(id) {
+    if (!confirm('Are you sure you want to remove this document reference?')) return;
+    try {
+      await this.api(`/api/documents/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.documents) {
+        this.state.currentProject.documents = this.state.currentProject.documents.filter(d => d.id !== id);
+      }
+      this.syncCurrentProjectCache();
+      this.renderDocuments();
+      this.showToast('Document reference removed', 'success');
+    } catch (err) {
+      this.showToast('Failed to remove document: ' + (err.message || err), 'error');
+    }
+  },
+
+  // ==================== APPROVALS & SIGN-OFF CRUD ====================
+
+  openSignoffModal(approverId = null) {
+    const modal = document.getElementById('signoff-modal');
+    if (!modal) return;
+    const idInput = document.getElementById('signoff-input-id');
+    const nameInput = document.getElementById('signoff-input-name');
+    const roleSelect = document.getElementById('signoff-input-role');
+    const statusSelect = document.getElementById('signoff-input-status');
+    const notesInput = document.getElementById('signoff-input-comments');
+
+    if (idInput) idInput.value = approverId || '';
+
+    if (approverId) {
+      const appr = (this.state.currentProject?.approvals || []).find(a => a.id === approverId);
+      if (nameInput) nameInput.value = appr?.approver_name || (this.state.user?.full_name || '');
+      if (roleSelect && appr?.role_title) roleSelect.value = appr.role_title;
+      if (statusSelect) statusSelect.value = appr?.status === 'rejected' ? 'rejected' : 'approved';
+      if (notesInput) notesInput.value = appr?.comments || '';
+    } else {
+      if (nameInput) nameInput.value = this.state.user?.full_name || '';
+      if (roleSelect) roleSelect.value = 'Project Sponsor';
+      if (statusSelect) statusSelect.value = 'approved';
+      if (notesInput) notesInput.value = 'Approved and authorized for execution.';
+    }
+
+    modal.classList.remove('hidden');
+    notesInput?.focus();
+    this.initLucide();
+  },
+
+  closeSignoffModal() {
+    document.getElementById('signoff-modal')?.classList.add('hidden');
+  },
+
+  async handleSaveSignoff() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+
+    const approver_name = document.getElementById('signoff-input-name')?.value.trim();
+    if (!approver_name) {
+      this.showToast('Please enter approver name', 'error');
+      return;
+    }
+    const role_title = document.getElementById('signoff-input-role')?.value || 'Project Sponsor';
+    const decision = document.getElementById('signoff-input-status')?.value || 'approved';
+    const comments = document.getElementById('signoff-input-comments')?.value.trim() || '';
+
+    this.closeSignoffModal();
+
+    try {
+      const res = await this.api(`/api/projects/${pid}/sign_off`, {
+        method: 'POST',
+        body: { approver_name, role_title, decision, comments }
+      });
+
+      // Refetch project to get updated governance status
+      const updatedProj = await this.api(`/api/projects/${pid}`);
+      if (updatedProj) {
+        this.state.currentProject = updatedProj;
+        this.syncCurrentProjectCache();
+        this.updateProjectTabStrip();
+        this.renderApprovals();
+        this.renderOverview();
+      }
+      this.showToast(`Charter decision "${decision}" recorded successfully!`, 'success');
+    } catch (err) {
+      this.showToast('Failed to record sign-off: ' + (err.message || err), 'error');
+    }
+  },
+
+  async openAddApproverModal() {
+    const pid = this.state.currentProjectId;
+    if (!pid) return;
+    const role = prompt('Enter Stakeholder Role Title (e.g. Finance Controller, Regulatory Lead, Operations Head):');
+    if (!role || !role.trim()) return;
+    const name = prompt('Enter Approver Full Name:');
+    if (!name || !name.trim()) return;
+    const email = prompt('Enter Approver Email (optional):') || `${name.toLowerCase().replace(/\s+/g, '.')}@company.internal`;
+
+    try {
+      const res = await this.api(`/api/projects/${pid}/approvals`, {
+        method: 'POST',
+        body: { role_title: role.trim(), approver_name: name.trim(), approver_email: email.trim() }
+      });
+      if (!this.state.currentProject.approvals) this.state.currentProject.approvals = [];
+      this.state.currentProject.approvals.push(res);
+      this.syncCurrentProjectCache();
+      this.renderApprovals();
+      this.showToast('Stakeholder approver added', 'success');
+    } catch (err) {
+      this.showToast('Failed to add approver: ' + (err.message || err), 'error');
+    }
+  },
+
+  async deleteApprover(id) {
+    if (!confirm('Are you sure you want to remove this approver from the governance register?')) return;
+    try {
+      await this.api(`/api/approvals/${id}`, { method: 'DELETE' });
+      if (this.state.currentProject?.approvals) {
+        this.state.currentProject.approvals = this.state.currentProject.approvals.filter(a => a.id !== id);
+      }
+      this.syncCurrentProjectCache();
+      this.renderApprovals();
+      this.showToast('Approver removed', 'success');
+    } catch (err) {
+      this.showToast('Failed to remove approver: ' + (err.message || err), 'error');
+    }
   },
 
   renderKanban() {
@@ -3591,6 +5085,8 @@ const app = {
         estInput.value = localTask.estimated_hours || 0;
         if (actInput) actInput.value = localTask.actual_hours || 0;
         tagsInput.value = (localTask.tags || []).join(', ');
+        const delivSelectLocal = document.getElementById('task-input-deliverable');
+        if (delivSelectLocal) delivSelectLocal.value = localTask.deliverable_id ? String(localTask.deliverable_id) : '';
         this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
         this.renderTaskModalResourceChips(localTask.resources || []);
       }
@@ -3636,6 +5132,8 @@ const app = {
           estInput.value = task.estimated_hours || 0;
           if (actInput) actInput.value = task.actual_hours || 0;
           tagsInput.value = (task.tags || []).join(', ');
+          const delivSelectServer = document.getElementById('task-input-deliverable');
+          if (delivSelectServer) delivSelectServer.value = task.deliverable_id ? String(task.deliverable_id) : '';
           this.renderSubtaskList(task.subtasks || []);
           this.renderTaskModalResourceChips(task.resources || []);
           this.updateTaskAssigneeDeleteBtnVisibility();
@@ -3672,6 +5170,8 @@ const app = {
       estInput.value = '4.0';
       if (actInput) actInput.value = '0.0';
       tagsInput.value = '';
+      const delivSelectNew = document.getElementById('task-input-deliverable');
+      if (delivSelectNew) delivSelectNew.value = params.deliverable_id ? String(params.deliverable_id) : '';
       this.renderTaskModalResourceChips([]);
 
       if (params.insert_after_id && posSelect) {
@@ -3738,6 +5238,7 @@ const app = {
     const p = this.state.currentProject;
     const assigneeSelect = document.getElementById('task-input-assignee');
     const membersDatalist = document.getElementById('project-members-datalist');
+    const deliverableSelect = document.getElementById('task-input-deliverable');
     const uniqueMembers = this.getUniqueProjectMembers();
 
     if (assigneeSelect && p) {
@@ -3748,6 +5249,16 @@ const app = {
         `<option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>`;
       if (curVal && curVal !== '__manual__' && curVal !== '__manage__') {
         assigneeSelect.value = curVal;
+      }
+    }
+
+    if (deliverableSelect && p) {
+      const curDeliv = deliverableSelect.value;
+      const deliverables = p.deliverables || [];
+      deliverableSelect.innerHTML = `<option value="">-- No Deliverable Linked --</option>` +
+        deliverables.map(d => `<option value="${d.id}">${this.escapeHtml(d.title)}</option>`).join('');
+      if (curDeliv) {
+        deliverableSelect.value = curDeliv;
       }
     }
 
@@ -4216,6 +5727,9 @@ const app = {
     const selectedChips = document.querySelectorAll('#task-modal-resources-container .task-resource-chip.selected-chip');
     const resourceIds = Array.from(selectedChips).map(c => Number(c.dataset.resourceId)).filter(Boolean);
 
+    const delivVal = document.getElementById('task-input-deliverable')?.value;
+    const deliverableId = delivVal ? Number(delivVal) : null;
+
     const payload = {
       title,
       description: desc,
@@ -4233,7 +5747,8 @@ const app = {
       actual_hours: isNaN(actHours) ? 0.0 : actHours,
       tags,
       subtasks: tempSubtasks,
-      resource_ids: resourceIds
+      resource_ids: resourceIds,
+      deliverable_id: deliverableId
     };
 
     // Close modal immediately (instant 0ms UX)
@@ -4258,7 +5773,9 @@ const app = {
           estimated_hours: isNaN(estHours) ? 0.0 : estHours,
           actual_hours: isNaN(actHours) ? 0.0 : actHours,
           tags,
-          resource_ids: resourceIds
+          resource_ids: resourceIds,
+          deliverable_id: deliverableId,
+          deliverable_title: deliverableId ? (this.state.currentProject?.deliverables?.find(d => d.id === deliverableId)?.title || null) : null
         });
         if (this.state.projectResources) {
           localTask.resources = this.state.projectResources
@@ -4433,29 +5950,71 @@ const app = {
     if (!modal) return;
 
     const idInput = document.getElementById('project-input-id');
+    const codeBadge = document.getElementById('project-modal-code-badge');
     const nameInput = document.getElementById('project-input-name');
+    const deptInput = document.getElementById('project-input-department');
     const descInput = document.getElementById('project-input-description');
+    const mgrInput = document.getElementById('project-input-manager');
+    const sponsorInput = document.getElementById('project-input-sponsor');
+    const startDateInput = document.getElementById('project-input-startdate');
+    const endDateInput = document.getElementById('project-input-enddate');
+    const statusInput = document.getElementById('project-input-status');
+    const priorityInput = document.getElementById('project-input-priority');
     const colorInput = document.getElementById('project-input-color');
+    const inScopeInput = document.getElementById('project-input-inscope');
+    const outOfScopeInput = document.getElementById('project-input-outofscope');
+    const assumptionsInput = document.getElementById('project-input-assumptions');
+    const constraintsInput = document.getElementById('project-input-constraints');
+
     const delBtn = document.getElementById('project-delete-btn');
     const dupBtn = document.getElementById('project-duplicate-btn');
     const titleEl = document.getElementById('project-modal-title');
     const submitBtn = document.getElementById('project-submit-btn');
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const defaultEnd = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
+
     if (editProjectId) {
       const proj = this.state.projects.find(p => p.id === editProjectId) || this.state.currentProject;
       if (idInput) idInput.value = editProjectId;
+      if (codeBadge) codeBadge.textContent = proj?.project_code || ('PRJ-' + String(editProjectId).padStart(3, '0'));
       if (nameInput) nameInput.value = proj?.name || '';
+      if (deptInput) deptInput.value = proj?.department || 'Engineering';
       if (descInput) descInput.value = proj?.description || '';
+      if (mgrInput) mgrInput.value = proj?.manager_name || (this.state.user?.full_name || 'Project Manager');
+      if (sponsorInput) sponsorInput.value = proj?.sponsor || '';
+      if (startDateInput) startDateInput.value = proj?.start_date || todayStr;
+      if (endDateInput) endDateInput.value = proj?.target_end_date || defaultEnd;
+      if (statusInput) statusInput.value = proj?.status || 'active';
+      if (priorityInput) priorityInput.value = proj?.priority || 'medium';
       if (colorInput) colorInput.value = proj?.color || '#3B82F6';
-      if (titleEl) titleEl.textContent = 'Project Settings';
+      if (inScopeInput) inScopeInput.value = proj?.in_scope || '';
+      if (outOfScopeInput) outOfScopeInput.value = proj?.out_of_scope || '';
+      if (assumptionsInput) assumptionsInput.value = proj?.assumptions || '';
+      if (constraintsInput) constraintsInput.value = proj?.constraints || '';
+
+      if (titleEl) titleEl.textContent = 'Project Settings & Charter';
       if (submitBtn) submitBtn.textContent = 'Save Changes';
       if (delBtn) delBtn.classList.remove('hidden');
       if (dupBtn) dupBtn.classList.remove('hidden');
     } else {
       if (idInput) idInput.value = '';
+      if (codeBadge) codeBadge.textContent = 'AUTO';
       if (nameInput) nameInput.value = '';
+      if (deptInput) deptInput.value = 'Engineering';
       if (descInput) descInput.value = '';
+      if (mgrInput) mgrInput.value = this.state.user?.full_name || 'Project Manager';
+      if (sponsorInput) sponsorInput.value = 'Executive Sponsor';
+      if (startDateInput) startDateInput.value = todayStr;
+      if (endDateInput) endDateInput.value = defaultEnd;
+      if (statusInput) statusInput.value = 'active';
+      if (priorityInput) priorityInput.value = 'medium';
       if (colorInput) colorInput.value = '#3B82F6';
+      if (inScopeInput) inScopeInput.value = '• Core deliverables and system implementation\n• Quality assurance, verification, and testing';
+      if (outOfScopeInput) outOfScopeInput.value = '• Deferred roadmap enhancements\n• Third-party hardware changes';
+      if (assumptionsInput) assumptionsInput.value = '• Key team members remain allocated to the project.\n• Material suppliers deliver on committed dates.';
+      if (constraintsInput) constraintsInput.value = '• Compliance with organizational standards.\n• Must complete within budgeted costs.';
+
       if (titleEl) titleEl.textContent = 'Create New Project';
       if (submitBtn) submitBtn.textContent = 'Create Project';
       if (delBtn) delBtn.classList.add('hidden');
@@ -4687,34 +6246,66 @@ const app = {
       this.showToast('Please enter a project name', 'error');
       return;
     }
+    const department = document.getElementById('project-input-department')?.value.trim() || 'Engineering';
     const description = document.getElementById('project-input-description')?.value || '';
+    const manager_name = document.getElementById('project-input-manager')?.value.trim() || 'Project Manager';
+    const sponsor = document.getElementById('project-input-sponsor')?.value.trim() || '';
+    const start_date = document.getElementById('project-input-startdate')?.value || new Date().toISOString().split('T')[0];
+    const target_end_date = document.getElementById('project-input-enddate')?.value || '';
+    const status = document.getElementById('project-input-status')?.value || 'active';
+    const priority = document.getElementById('project-input-priority')?.value || 'medium';
     const color = document.getElementById('project-input-color')?.value || '#3B82F6';
+    const in_scope = document.getElementById('project-input-inscope')?.value || '';
+    const out_of_scope = document.getElementById('project-input-outofscope')?.value || '';
+    const assumptions = document.getElementById('project-input-assumptions')?.value || '';
+    const constraints = document.getElementById('project-input-constraints')?.value || '';
 
     this.closeProjectModal();
+
+    const payload = {
+      name,
+      department,
+      description,
+      manager_name,
+      sponsor,
+      start_date,
+      target_end_date,
+      status,
+      priority,
+      color,
+      in_scope,
+      out_of_scope,
+      assumptions,
+      constraints
+    };
 
     if (id) {
       // Edit existing project (Optimistic)
       const numId = Number(id);
       const proj = this.state.projects.find(p => p.id === numId);
       if (proj) {
-        proj.name = name;
-        proj.description = description;
-        proj.color = color;
+        Object.assign(proj, payload);
       }
       if (this.state.currentProject && this.state.currentProject.id === numId) {
-        this.state.currentProject.name = name;
-        this.state.currentProject.description = description;
-        this.state.currentProject.color = color;
+        Object.assign(this.state.currentProject, payload);
       }
+      this.updateProjectTabStrip();
       this.renderProjectsDropdown();
       this.renderProjectsSidebar();
+      this.renderCurrentView();
       this.showToast('Project updated successfully', 'success');
 
       try {
-        await this.api(`/api/projects/${id}`, {
+        const updated = await this.api(`/api/projects/${id}`, {
           method: 'PUT',
-          body: JSON.stringify({ name, description, color })
+          body: payload
         });
+        if (updated && this.state.currentProject && this.state.currentProject.id === numId) {
+          Object.assign(this.state.currentProject, updated);
+          this.syncCurrentProjectCache();
+          this.updateProjectTabStrip();
+          this.renderCurrentView();
+        }
       } catch (e) {
         console.error('Failed to update project on server:', e);
         this.showToast('Failed to update project settings', 'error');
@@ -4724,7 +6315,7 @@ const app = {
       try {
         const project = await this.api('/api/projects', {
           method: 'POST',
-          body: JSON.stringify({ name, description, color })
+          body: payload
         });
 
         // Add to projects list
@@ -4738,12 +6329,13 @@ const app = {
         localStorage.setItem('projectpulse_active_project', project.id);
         this.syncCurrentProjectCache();
 
+        this.updateProjectTabStrip();
         this.renderProjectsDropdown();
         this.renderProjectsSidebar();
         this.populateFilterDropdowns();
-        this.renderCurrentView();
+        this.switchView('overview');
 
-        this.showToast('Project created successfully', 'success');
+        this.showToast(`Project "${project.name}" created successfully!`, 'success');
       } catch (e) {
         console.error('Failed to create project:', e);
         this.showToast('Failed to create project', 'error');
@@ -5651,7 +7243,8 @@ const app = {
         this.renderProjectsDropdown();
         this.renderProjectsSidebar();
         this.populateFilterDropdowns();
-        this.renderCurrentView();
+        this.updateProjectTabStrip();
+        this.switchView('overview');
         this.hideAuthContainer();
         this.showToast(`Welcome back, ${res.user.full_name}!`, 'success');
       }
@@ -5719,7 +7312,8 @@ const app = {
         this.renderProjectsDropdown();
         this.renderProjectsSidebar();
         this.populateFilterDropdowns();
-        this.renderCurrentView();
+        this.updateProjectTabStrip();
+        this.switchView('overview');
         this.hideAuthContainer();
         this.showToast(`Account created! Welcome, ${res.user.full_name}!`, 'success');
       }

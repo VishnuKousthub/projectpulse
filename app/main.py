@@ -182,10 +182,12 @@ def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
     tasks_raw = conn.execute("""
         SELECT t.*,
             m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
-            s.name as sprint_name
+            s.name as sprint_name,
+            d.title as deliverable_title
         FROM tasks t
         LEFT JOIN members m ON t.assignee_id = m.id
         LEFT JOIN sprints s ON t.sprint_id = s.id
+        LEFT JOIN deliverables d ON t.deliverable_id = d.id
         WHERE t.project_id = ?
         ORDER BY t.order_index ASC, t.id ASC
     """, (target_id,)).fetchall()
@@ -437,28 +439,98 @@ def create_project():
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create projects. Only PM and Admin have full access control."}, status=403)
 
     data = request.json or {}
-    name = data.get("name", "").strip()
+    name = clean_text(data.get("name"))
     if not name:
         return json_response({"error": "Project name is required"}, status=400)
     
-    desc = data.get("description", "")
-    color = data.get("color", "#3B82F6")
+    desc = str(data.get("description") or "")
+    color = data.get("color") or "#3B82F6"
     now_str = get_now_iso()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    default_end = (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d")
+
+    manager_name = clean_text(data.get("manager_name")) or (user.get("full_name") if user else "Project Manager")
+    department = clean_text(data.get("department")) or "Engineering"
+    start_date = data.get("start_date") or today_str
+    target_end_date = data.get("target_end_date") or default_end
+    status = data.get("status") or "active"
+    priority = data.get("priority") or "medium"
+    sponsor = clean_text(data.get("sponsor")) or "Executive Committee"
+    in_scope = data.get("in_scope") or "• Core system implementation and requirement verification\n• End-to-end testing and quality validation\n• Production readiness and deployment documentation"
+    out_of_scope = data.get("out_of_scope") or "• Downstream feature extensions outside baseline scope\n• Third-party infrastructure not in project scope"
+    assumptions = data.get("assumptions") or "• Key personnel and lab/equipment resources remain allocated as planned.\n• External material supply lead times meet scheduled dates."
+    constraints = data.get("constraints") or "• Adhere to quality, compliance, and allocated budget limits.\n• Milestones must meet target regulatory standards."
+    approval_status = data.get("approval_status") or "draft"
 
     with get_db() as conn:
         cursor = conn.cursor()
+        
+        # Determine next project code
+        p_code = clean_text(data.get("project_code"))
+        if not p_code:
+            max_p = conn.execute("SELECT MAX(id) as max_id FROM projects").fetchone()
+            next_id = (max_p["max_id"] or 0) + 1
+            p_code = f"PRJ-{next_id:03d}"
+
         cursor.execute("""
-            INSERT INTO projects (name, description, color, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (name, desc, color, now_str, now_str))
+            INSERT INTO projects (
+                name, description, color, project_code, manager_name, department,
+                start_date, target_end_date, status, priority, sponsor,
+                in_scope, out_of_scope, assumptions, constraints, approval_status,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            name, desc, color, p_code, manager_name, department,
+            start_date, target_end_date, status, priority, sponsor,
+            in_scope, out_of_scope, assumptions, constraints, approval_status,
+            now_str, now_str
+        ))
         p_id = cursor.lastrowid
 
+        # Insert project lead/manager member
         cursor.execute("""
             INSERT INTO members (project_id, name, email, role, avatar_color)
             VALUES (?, ?, ?, ?, ?)
-        """, (p_id, "Project Lead", "lead@company.internal", "Owner", color))
+        """, (p_id, manager_name, f"{manager_name.lower().replace(' ', '.')}@company.internal", "Owner", color))
 
-        record_activity(conn, p_id, "System", "Project Created", f'Created project "{name}"')
+        # Seed default 5 budget categories
+        for cat in [
+            "Raw Materials / Consumables",
+            "Manpower / Labor",
+            "Analytical Testing / External Services",
+            "Equipment / Facility Utilization",
+            "Miscellaneous / Contingency"
+        ]:
+            cursor.execute("""
+                INSERT INTO project_budgets (project_id, category, estimated_cost, actual_cost, notes, created_at, updated_at)
+                VALUES (?, ?, 0.0, 0.0, '', ?, ?)
+            """, (p_id, cat, now_str, now_str))
+
+        # Seed default approval slots
+        default_approvers = [
+            ("Project Sponsor", sponsor),
+            ("Project Manager", manager_name),
+            ("Technical Lead", "Technical Lead"),
+            ("Quality / Reviewer", "QA / Compliance Lead")
+        ]
+        for role_title, app_name in default_approvers:
+            cursor.execute("""
+                INSERT INTO project_approvals (project_id, role_title, approver_name, approver_email, status, created_at)
+                VALUES (?, ?, ?, ?, 'pending', ?)
+            """, (p_id, role_title, app_name, f"{app_name.lower().replace(' ', '.')}@company.internal", now_str))
+
+        # Seed initial objective
+        cursor.execute("""
+            INSERT INTO project_objectives (project_id, objective, success_criteria, status, order_index, created_at)
+            VALUES (?, ?, ?, 'in_progress', 0, ?)
+        """, (p_id, f"Deliver {name} within approved specifications and timeline", ">= 95% acceptance criteria met", now_str))
+        cursor.execute("""
+            INSERT INTO project_objectives (project_id, objective, success_criteria, status, order_index, created_at)
+            VALUES (?, ?, ?, 'in_progress', 1, ?)
+        """, (p_id, "Maintain budget compliance across all resource allocations", "<= 5% variance from estimated budget", now_str))
+
+        record_activity(conn, p_id, "System", "Project Created", f'Created project "{name}" ({p_code})')
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (p_id,)).fetchone()
         members = conn.execute("SELECT * FROM members WHERE project_id = ?", (p_id,)).fetchall()
         
@@ -466,6 +538,7 @@ def create_project():
         proj_dict["members"] = members
         proj_dict["sprints"] = []
         proj_dict["milestones"] = []
+        proj_dict["deliverables"] = []
         proj_dict["total_tasks"] = 0
         proj_dict["completed_tasks"] = 0
         proj_dict["overdue_tasks"] = 0
@@ -508,12 +581,70 @@ def get_project(project_id):
         deduplicate_project_members(conn, project_id)
         members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
         sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date DESC", (project_id,)).fetchall()
-        milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
+        milestones = conn.execute("""
+            SELECT m.*, d.title as deliverable_title 
+            FROM milestones m
+            LEFT JOIN deliverables d ON m.deliverable_id = d.id
+            WHERE m.project_id = ? 
+            ORDER BY m.due_date ASC
+        """, (project_id,)).fetchall()
+
+        # Deliverables with linked task progress
+        deliverables_raw = conn.execute("""
+            SELECT d.*,
+                COUNT(t.id) as task_count,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_task_count
+            FROM deliverables d
+            LEFT JOIN tasks t ON t.deliverable_id = d.id
+            WHERE d.project_id = ?
+            GROUP BY d.id
+            ORDER BY d.due_date ASC, d.id ASC
+        """, (project_id,)).fetchall()
+        deliverables = []
+        for d in deliverables_raw:
+            d_dict = dict(d)
+            tc = d_dict.get("task_count") or 0
+            cc = d_dict.get("completed_task_count") or 0
+            if tc > 0:
+                d_dict["progress_pct"] = int((cc / tc) * 100)
+            deliverables.append(d_dict)
+
+        objectives = [dict(o) for o in conn.execute(
+            "SELECT * FROM project_objectives WHERE project_id = ? ORDER BY order_index ASC, id ASC", (project_id,)
+        ).fetchall()]
+
+        risks = [dict(r) for r in conn.execute(
+            "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
+
+        budgets = [dict(b) for b in conn.execute(
+            "SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
+
+        total_est = sum(safe_float(b.get("estimated_cost"), 0.0) for b in budgets)
+        total_act = sum(safe_float(b.get("actual_cost"), 0.0) for b in budgets)
+
+        documents = [dict(doc) for doc in conn.execute(
+            "SELECT * FROM project_documents WHERE project_id = ? ORDER BY created_at DESC, id DESC", (project_id,)
+        ).fetchall()]
+
+        approvals = [dict(appr) for appr in conn.execute(
+            "SELECT * FROM project_approvals WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
         
         result = dict(project)
         result["members"] = members
         result["sprints"] = sprints
         result["milestones"] = milestones
+        result["deliverables"] = deliverables
+        result["objectives"] = objectives
+        result["risks"] = risks
+        result["budgets"] = budgets
+        result["total_estimated_cost"] = total_est
+        result["total_actual_cost"] = total_act
+        result["budget_variance"] = total_est - total_act
+        result["documents"] = documents
+        result["approvals"] = approvals
         return json_response(result)
 
 @app.put("/api/projects/<project_id:int>")
@@ -528,19 +659,41 @@ def update_project(project_id):
         if not project:
             return json_response({"error": "Project not found"}, status=404)
         
-        name = data.get("name", project["name"])
-        desc = data.get("description", project["description"])
+        name = clean_text(data.get("name", project["name"]))
+        desc = str(data.get("description", project["description"] or ""))
         color = data.get("color", project["color"])
+        project_code = clean_text(data.get("project_code", project.get("project_code") or f"PRJ-{project_id:03d}"))
+        manager_name = clean_text(data.get("manager_name", project.get("manager_name") or ""))
+        department = clean_text(data.get("department", project.get("department") or "Engineering"))
+        start_date = data.get("start_date", project.get("start_date"))
+        target_end_date = data.get("target_end_date", project.get("target_end_date"))
+        status = data.get("status", project.get("status") or "active")
+        priority = data.get("priority", project.get("priority") or "medium")
+        sponsor = clean_text(data.get("sponsor", project.get("sponsor") or ""))
+        in_scope = str(data.get("in_scope", project.get("in_scope") or ""))
+        out_of_scope = str(data.get("out_of_scope", project.get("out_of_scope") or ""))
+        assumptions = str(data.get("assumptions", project.get("assumptions") or ""))
+        constraints = str(data.get("constraints", project.get("constraints") or ""))
+        approval_status = data.get("approval_status", project.get("approval_status") or "draft")
         now_str = get_now_iso()
 
         conn.execute("""
-            UPDATE projects SET name = ?, description = ?, color = ?, updated_at = ?
+            UPDATE projects SET
+                name = ?, description = ?, color = ?, project_code = ?,
+                manager_name = ?, department = ?, start_date = ?, target_end_date = ?,
+                status = ?, priority = ?, sponsor = ?, in_scope = ?, out_of_scope = ?,
+                assumptions = ?, constraints = ?, approval_status = ?, updated_at = ?
             WHERE id = ?
-        """, (name, desc, color, now_str, project_id))
+        """, (
+            name, desc, color, project_code, manager_name, department,
+            start_date, target_end_date, status, priority, sponsor,
+            in_scope, out_of_scope, assumptions, constraints, approval_status,
+            now_str, project_id
+        ))
         
-        record_activity(conn, project_id, "User", "Project Updated", "Updated project settings")
+        record_activity(conn, project_id, "User", "Project Updated", f"Updated project settings ({name})")
         updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
-        return json_response(updated)
+        return json_response(dict(updated))
 
 @app.delete("/api/projects/<project_id:int>")
 def delete_project(project_id):
@@ -558,6 +711,1235 @@ def delete_project(project_id):
             "message": "Project deleted",
             "deleted_id": project_id
         })
+
+# ==================== DELIVERABLES ====================
+
+@app.get("/api/projects/<project_id:int>/deliverables")
+def get_project_deliverables(project_id):
+    with get_db() as conn:
+        deliverables_raw = conn.execute("""
+            SELECT d.*,
+                COUNT(t.id) as task_count,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_task_count
+            FROM deliverables d
+            LEFT JOIN tasks t ON t.deliverable_id = d.id
+            WHERE d.project_id = ?
+            GROUP BY d.id
+            ORDER BY d.due_date ASC, d.id ASC
+        """, (project_id,)).fetchall()
+        deliverables = []
+        for d in deliverables_raw:
+            d_dict = dict(d)
+            tc = d_dict.get("task_count") or 0
+            cc = d_dict.get("completed_task_count") or 0
+            if tc > 0:
+                d_dict["progress_pct"] = int((cc / tc) * 100)
+            deliverables.append(d_dict)
+        return json_response(deliverables)
+
+@app.post("/api/projects/<project_id:int>/deliverables")
+def create_deliverable(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can add deliverables."}, status=403)
+    data = request.json or {}
+    title = clean_text(data.get("title"))
+    if not title:
+        return json_response({"error": "Deliverable title is required"}, status=400)
+    
+    desc = str(data.get("description") or "")
+    owner_name = clean_text(data.get("owner_name") or "")
+    owner_id = safe_int(data.get("owner_id"))
+    due_date = data.get("due_date") or None
+    status = data.get("status") or "pending"
+    progress_pct = safe_int(data.get("progress_pct"), 0) or 0
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO deliverables (project_id, title, description, owner_name, owner_id, due_date, status, progress_pct, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, title, desc, owner_name, owner_id, due_date, status, progress_pct, now_str, now_str))
+        del_id = cursor.lastrowid
+        record_activity(conn, project_id, "User", "Deliverable Added", f'Added deliverable "{title}"')
+        created = conn.execute("SELECT * FROM deliverables WHERE id = ?", (del_id,)).fetchone()
+        res = dict(created)
+        res["task_count"] = 0
+        res["completed_task_count"] = 0
+        return json_response(res, status=201)
+
+@app.put("/api/deliverables/<deliverable_id:int>")
+def update_deliverable(deliverable_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can edit deliverables."}, status=403)
+    data = request.json or {}
+    with get_db() as conn:
+        d = conn.execute("SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
+        if not d:
+            return json_response({"error": "Deliverable not found"}, status=404)
+        
+        title = clean_text(data.get("title", d["title"]))
+        desc = str(data.get("description", d["description"] or ""))
+        owner_name = clean_text(data.get("owner_name", d["owner_name"] or ""))
+        owner_id = safe_int(data.get("owner_id", d["owner_id"]))
+        due_date = data.get("due_date", d["due_date"])
+        status = data.get("status", d["status"])
+        progress_pct = safe_int(data.get("progress_pct"), d["progress_pct"]) or 0
+        now_str = get_now_iso()
+
+        conn.execute("""
+            UPDATE deliverables SET
+                title = ?, description = ?, owner_name = ?, owner_id = ?,
+                due_date = ?, status = ?, progress_pct = ?, updated_at = ?
+            WHERE id = ?
+        """, (title, desc, owner_name, owner_id, due_date, status, progress_pct, now_str, deliverable_id))
+        
+        record_activity(conn, d["project_id"], "User", "Deliverable Updated", f'Updated deliverable "{title}"')
+        updated = conn.execute("""
+            SELECT d.*,
+                COUNT(t.id) as task_count,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_task_count
+            FROM deliverables d
+            LEFT JOIN tasks t ON t.deliverable_id = d.id
+            WHERE d.id = ?
+            GROUP BY d.id
+        """, (deliverable_id,)).fetchone()
+        return json_response(dict(updated))
+
+@app.delete("/api/deliverables/<deliverable_id:int>")
+def delete_deliverable(deliverable_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can delete deliverables."}, status=403)
+    with get_db() as conn:
+        d = conn.execute("SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
+        if not d:
+            return json_response({"error": "Deliverable not found"}, status=404)
+        conn.execute("UPDATE tasks SET deliverable_id = NULL WHERE deliverable_id = ?", (deliverable_id,))
+        conn.execute("UPDATE milestones SET deliverable_id = NULL WHERE deliverable_id = ?", (deliverable_id,))
+        conn.execute("DELETE FROM deliverables WHERE id = ?", (deliverable_id,))
+        record_activity(conn, d["project_id"], "User", "Deliverable Deleted", f'Deleted deliverable "{d["title"]}"')
+        return json_response({"success": True, "deleted_id": deliverable_id})
+
+# ==================== OBJECTIVES ====================
+
+@app.get("/api/projects/<project_id:int>/objectives")
+def get_project_objectives(project_id):
+    with get_db() as conn:
+        objs = conn.execute("SELECT * FROM project_objectives WHERE project_id = ? ORDER BY order_index ASC, id ASC", (project_id,)).fetchall()
+        return json_response([dict(o) for o in objs])
+
+@app.post("/api/projects/<project_id:int>/objectives")
+def create_objective(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can add objectives."}, status=403)
+    data = request.json or {}
+    objective = clean_text(data.get("objective"))
+    if not objective:
+        return json_response({"error": "Objective text is required"}, status=400)
+    criteria = clean_text(data.get("success_criteria") or "")
+    status = data.get("status") or "in_progress"
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        max_order = conn.execute("SELECT COALESCE(MAX(order_index), -1) as m FROM project_objectives WHERE project_id = ?", (project_id,)).fetchone()["m"]
+        cursor.execute("""
+            INSERT INTO project_objectives (project_id, objective, success_criteria, status, order_index, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (project_id, objective, criteria, status, max_order + 1, now_str))
+        obj_id = cursor.lastrowid
+        record_activity(conn, project_id, "User", "Objective Added", f'Added objective "{objective}"')
+        row = conn.execute("SELECT * FROM project_objectives WHERE id = ?", (obj_id,)).fetchone()
+        return json_response(dict(row), status=201)
+
+@app.put("/api/objectives/<objective_id:int>")
+def update_objective(objective_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can edit objectives."}, status=403)
+    data = request.json or {}
+    with get_db() as conn:
+        obj = conn.execute("SELECT * FROM project_objectives WHERE id = ?", (objective_id,)).fetchone()
+        if not obj:
+            return json_response({"error": "Objective not found"}, status=404)
+        objective = clean_text(data.get("objective", obj["objective"]))
+        criteria = clean_text(data.get("success_criteria", obj["success_criteria"]))
+        status = data.get("status", obj["status"])
+        order_index = safe_int(data.get("order_index", obj["order_index"]))
+
+        conn.execute("""
+            UPDATE project_objectives SET objective = ?, success_criteria = ?, status = ?, order_index = ?
+            WHERE id = ?
+        """, (objective, criteria, status, order_index, objective_id))
+        updated = conn.execute("SELECT * FROM project_objectives WHERE id = ?", (objective_id,)).fetchone()
+        return json_response(dict(updated))
+
+@app.delete("/api/objectives/<objective_id:int>")
+def delete_objective(objective_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can delete objectives."}, status=403)
+    with get_db() as conn:
+        obj = conn.execute("SELECT * FROM project_objectives WHERE id = ?", (objective_id,)).fetchone()
+        if not obj:
+            return json_response({"error": "Objective not found"}, status=404)
+        conn.execute("DELETE FROM project_objectives WHERE id = ?", (objective_id,))
+        return json_response({"success": True, "deleted_id": objective_id})
+
+# ==================== RISKS ====================
+
+@app.get("/api/projects/<project_id:int>/risks")
+def get_project_risks(project_id):
+    with get_db() as conn:
+        risks = conn.execute("SELECT * FROM project_risks WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        return json_response([dict(r) for r in risks])
+
+@app.post("/api/projects/<project_id:int>/risks")
+def create_risk(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can add risks."}, status=403)
+    data = request.json or {}
+    desc = clean_text(data.get("description"))
+    if not desc:
+        return json_response({"error": "Risk description is required"}, status=400)
+    
+    impact = data.get("impact") or "medium"
+    prob = data.get("probability") or "medium"
+    mitigation = clean_text(data.get("mitigation") or "")
+    owner = clean_text(data.get("owner") or "")
+    status = data.get("status") or "open"
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        risk_code = clean_text(data.get("risk_code"))
+        if not risk_code:
+            count = conn.execute("SELECT COUNT(*) as c FROM project_risks WHERE project_id = ?", (project_id,)).fetchone()["c"]
+            risk_code = f"RSK-{(count + 1):02d}"
+
+        cursor.execute("""
+            INSERT INTO project_risks (project_id, risk_code, description, impact, probability, mitigation, owner, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, risk_code, desc, impact, prob, mitigation, owner, status, now_str))
+        r_id = cursor.lastrowid
+        record_activity(conn, project_id, "User", "Risk Added", f'Logged risk "{risk_code}: {desc[:40]}"')
+        created = conn.execute("SELECT * FROM project_risks WHERE id = ?", (r_id,)).fetchone()
+        return json_response(dict(created), status=201)
+
+@app.put("/api/risks/<risk_id:int>")
+def update_risk(risk_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can edit risks."}, status=403)
+    data = request.json or {}
+    with get_db() as conn:
+        r = conn.execute("SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
+        if not r:
+            return json_response({"error": "Risk not found"}, status=404)
+        
+        risk_code = clean_text(data.get("risk_code", r["risk_code"]))
+        desc = clean_text(data.get("description", r["description"]))
+        impact = data.get("impact", r["impact"])
+        prob = data.get("probability", r["probability"])
+        mitigation = clean_text(data.get("mitigation", r["mitigation"]))
+        owner = clean_text(data.get("owner", r["owner"]))
+        status = data.get("status", r["status"])
+
+        conn.execute("""
+            UPDATE project_risks SET
+                risk_code = ?, description = ?, impact = ?, probability = ?,
+                mitigation = ?, owner = ?, status = ?
+            WHERE id = ?
+        """, (risk_code, desc, impact, prob, mitigation, owner, status, risk_id))
+        updated = conn.execute("SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
+        return json_response(dict(updated))
+
+@app.delete("/api/risks/<risk_id:int>")
+def delete_risk(risk_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can delete risks."}, status=403)
+    with get_db() as conn:
+        r = conn.execute("SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
+        if not r:
+            return json_response({"error": "Risk not found"}, status=404)
+        conn.execute("DELETE FROM project_risks WHERE id = ?", (risk_id,))
+        return json_response({"success": True, "deleted_id": risk_id})
+
+# ==================== BUDGET ====================
+
+@app.get("/api/projects/<project_id:int>/budgets")
+def get_project_budgets(project_id):
+    with get_db() as conn:
+        budgets = [dict(b) for b in conn.execute("SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()]
+        total_est = sum(safe_float(b.get("estimated_cost"), 0.0) for b in budgets)
+        total_act = sum(safe_float(b.get("actual_cost"), 0.0) for b in budgets)
+        return json_response({
+            "budgets": budgets,
+            "total_estimated_cost": total_est,
+            "total_actual_cost": total_act,
+            "budget_variance": total_est - total_act
+        })
+
+@app.post("/api/projects/<project_id:int>/budgets")
+def save_project_budget(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can modify budget."}, status=403)
+    data = request.json or {}
+    category = clean_text(data.get("category"))
+    if not category:
+        return json_response({"error": "Budget category is required"}, status=400)
+    
+    est = safe_float(data.get("estimated_cost"), 0.0)
+    act = safe_float(data.get("actual_cost"), 0.0)
+    notes = str(data.get("notes") or "")
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        existing = conn.execute("SELECT id FROM project_budgets WHERE project_id = ? AND category = ?", (project_id, category)).fetchone()
+        if existing:
+            conn.execute("""
+                UPDATE project_budgets SET estimated_cost = ?, actual_cost = ?, notes = ?, updated_at = ?
+                WHERE id = ?
+            """, (est, act, notes, now_str, existing["id"]))
+            b_id = existing["id"]
+        else:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO project_budgets (project_id, category, estimated_cost, actual_cost, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (project_id, category, est, act, notes, now_str, now_str))
+            b_id = cursor.lastrowid
+        
+        record_activity(conn, project_id, "User", "Budget Updated", f'Updated budget for "{category}"')
+        row = conn.execute("SELECT * FROM project_budgets WHERE id = ?", (b_id,)).fetchone()
+        return json_response(dict(row))
+
+@app.put("/api/budgets/<budget_id:int>")
+def update_budget_entry(budget_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can edit budget."}, status=403)
+    data = request.json or {}
+    with get_db() as conn:
+        b = conn.execute("SELECT * FROM project_budgets WHERE id = ?", (budget_id,)).fetchone()
+        if not b:
+            return json_response({"error": "Budget entry not found"}, status=404)
+        
+        category = clean_text(data.get("category", b["category"]))
+        est = safe_float(data.get("estimated_cost", b["estimated_cost"]))
+        act = safe_float(data.get("actual_cost", b["actual_cost"]))
+        notes = str(data.get("notes", b["notes"] or ""))
+        now_str = get_now_iso()
+
+        conn.execute("""
+            UPDATE project_budgets SET category = ?, estimated_cost = ?, actual_cost = ?, notes = ?, updated_at = ?
+            WHERE id = ?
+        """, (category, est, act, notes, now_str, budget_id))
+        updated = conn.execute("SELECT * FROM project_budgets WHERE id = ?", (budget_id,)).fetchone()
+        return json_response(dict(updated))
+
+@app.delete("/api/budgets/<budget_id:int>")
+def delete_budget_entry(budget_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can delete budget category."}, status=403)
+    with get_db() as conn:
+        b = conn.execute("SELECT * FROM project_budgets WHERE id = ?", (budget_id,)).fetchone()
+        if not b:
+            return json_response({"error": "Budget entry not found"}, status=404)
+        conn.execute("DELETE FROM project_budgets WHERE id = ?", (budget_id,))
+        return json_response({"success": True, "deleted_id": budget_id})
+
+# ==================== DOCUMENTS ====================
+
+@app.get("/api/projects/<project_id:int>/documents")
+def get_project_documents(project_id):
+    with get_db() as conn:
+        docs = conn.execute("SELECT * FROM project_documents WHERE project_id = ? ORDER BY created_at DESC, id DESC", (project_id,)).fetchall()
+        result = []
+        for d in docs:
+            d_dict = dict(d)
+            d_dict["url"] = d_dict.get("file_url") or ""
+            d_dict["description"] = d_dict.get("notes") or ""
+            result.append(d_dict)
+        return json_response(result)
+
+@app.post("/api/projects/<project_id:int>/documents")
+def create_project_document(project_id):
+    data = request.json or {}
+    title = clean_text(data.get("title"))
+    if not title:
+        return json_response({"error": "Document title is required"}, status=400)
+    
+    doc_type = data.get("doc_type") or "document"
+    file_url = data.get("file_url") or data.get("url") or ""
+    notes = clean_text(data.get("notes") or data.get("description") or "")
+    user = get_current_user()
+    uploaded_by = (user.get("full_name") if user else "User")
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO project_documents (project_id, title, doc_type, file_url, notes, uploaded_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, title, doc_type, file_url, notes, uploaded_by, now_str))
+        doc_id = cursor.lastrowid
+        row = conn.execute("SELECT * FROM project_documents WHERE id = ?", (doc_id,)).fetchone()
+        row_dict = dict(row)
+        row_dict["url"] = row_dict.get("file_url") or ""
+        row_dict["description"] = row_dict.get("notes") or ""
+        return json_response(row_dict, status=201)
+
+@app.delete("/api/documents/<doc_id:int>")
+def delete_project_document(doc_id):
+    with get_db() as conn:
+        doc = conn.execute("SELECT * FROM project_documents WHERE id = ?", (doc_id,)).fetchone()
+        if not doc:
+            return json_response({"error": "Document not found"}, status=404)
+        conn.execute("DELETE FROM project_documents WHERE id = ?", (doc_id,))
+        return json_response({"success": True, "deleted_id": doc_id})
+
+# ==================== APPROVALS & SIGN-OFF ====================
+
+@app.get("/api/projects/<project_id:int>/approvals")
+def get_project_approvals(project_id):
+    with get_db() as conn:
+        approvals = conn.execute("SELECT * FROM project_approvals WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        return json_response([dict(a) for a in approvals])
+
+@app.post("/api/projects/<project_id:int>/approvals")
+def create_project_approval(project_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can add approval roles."}, status=403)
+    data = request.json or {}
+    role_title = clean_text(data.get("role_title"))
+    approver_name = clean_text(data.get("approver_name"))
+    if not role_title or not approver_name:
+        return json_response({"error": "Role title and Approver name are required"}, status=400)
+    email = data.get("approver_email") or f"{approver_name.lower().replace(' ', '.')}@company.internal"
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO project_approvals (project_id, role_title, approver_name, approver_email, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', ?)
+        """, (project_id, role_title, approver_name, email, now_str))
+        a_id = cursor.lastrowid
+        row = conn.execute("SELECT * FROM project_approvals WHERE id = ?", (a_id,)).fetchone()
+        return json_response(dict(row), status=201)
+
+@app.put("/api/approvals/<approval_id:int>")
+def update_project_approval(approval_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can edit approval roles."}, status=403)
+    data = request.json or {}
+    with get_db() as conn:
+        a = conn.execute("SELECT * FROM project_approvals WHERE id = ?", (approval_id,)).fetchone()
+        if not a:
+            return json_response({"error": "Approval slot not found"}, status=404)
+        role_title = clean_text(data.get("role_title", a["role_title"]))
+        approver_name = clean_text(data.get("approver_name", a["approver_name"]))
+        email = clean_text(data.get("approver_email", a["approver_email"]))
+        status = data.get("status", a["status"])
+        comments = data.get("comments", a["comments"])
+        signed_at = data.get("signed_at", a["signed_at"])
+
+        conn.execute("""
+            UPDATE project_approvals SET
+                role_title = ?, approver_name = ?, approver_email = ?,
+                status = ?, comments = ?, signed_at = ?
+            WHERE id = ?
+        """, (role_title, approver_name, email, status, comments, signed_at, approval_id))
+        updated = conn.execute("SELECT * FROM project_approvals WHERE id = ?", (approval_id,)).fetchone()
+        return json_response(dict(updated))
+
+@app.delete("/api/approvals/<approval_id:int>")
+def delete_project_approval(approval_id):
+    user = get_current_user()
+    if user and not is_full_access(user):
+        return json_response({"error": "Permission Denied: Only PM or Admin can remove approval roles."}, status=403)
+    with get_db() as conn:
+        a = conn.execute("SELECT * FROM project_approvals WHERE id = ?", (approval_id,)).fetchone()
+        if not a:
+            return json_response({"error": "Approval slot not found"}, status=404)
+        conn.execute("DELETE FROM project_approvals WHERE id = ?", (approval_id,))
+        return json_response({"success": True, "deleted_id": approval_id})
+
+@app.post("/api/projects/<project_id:int>/sign_off")
+def project_sign_off(project_id):
+    user = get_current_user()
+    data = request.json or {}
+    approval_id = safe_int(data.get("approval_id"))
+    comments = clean_text(data.get("comments") or "Approved and verified Project Charter baseline.")
+    now_str = get_now_iso()
+
+    with get_db() as conn:
+        if approval_id:
+            slot = conn.execute("SELECT * FROM project_approvals WHERE id = ? AND project_id = ?", (approval_id, project_id)).fetchone()
+        else:
+            # Match by role or first pending slot
+            slot = conn.execute("SELECT * FROM project_approvals WHERE project_id = ? AND status = 'pending' ORDER BY id ASC LIMIT 1", (project_id,)).fetchone()
+
+        if not slot:
+            return json_response({"error": "No pending approval slot found for this project"}, status=404)
+
+        signer_name = (user.get("full_name") if user else slot["approver_name"]) or slot["approver_name"]
+        conn.execute("""
+            UPDATE project_approvals SET status = 'approved', approver_name = ?, comments = ?, signed_at = ?
+            WHERE id = ?
+        """, (signer_name, comments, now_str, slot["id"]))
+
+        # Check if all slots are approved
+        pending_count = conn.execute("SELECT COUNT(*) as c FROM project_approvals WHERE project_id = ? AND status != 'approved'", (project_id,)).fetchone()["c"]
+        if pending_count == 0:
+            conn.execute("UPDATE projects SET approval_status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?", (signer_name, now_str, project_id))
+        else:
+            conn.execute("UPDATE projects SET approval_status = 'under_review' WHERE id = ? AND approval_status = 'draft'", (project_id,))
+
+        record_activity(conn, project_id, signer_name, "Charter Signed", f'Signed Project Charter as {slot["role_title"]}')
+        updated_approvals = conn.execute("SELECT * FROM project_approvals WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        return json_response({
+            "success": True,
+            "project": dict(proj),
+            "approvals": [dict(a) for a in updated_approvals]
+        })
+
+# ==================== PROJECT CHARTER JSON & PRINT VIEW ====================
+
+@app.get("/api/projects/<project_id:int>/charter")
+def get_project_charter(project_id):
+    with get_db() as conn:
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not project:
+            return json_response({"error": "Project not found"}, status=404)
+        
+        proj_dict = dict(project)
+        members = [dict(m) for m in conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()]
+        deliverables_raw = conn.execute("""
+            SELECT d.*,
+                COUNT(t.id) as task_count,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_task_count
+            FROM deliverables d
+            LEFT JOIN tasks t ON t.deliverable_id = d.id
+            WHERE d.project_id = ?
+            GROUP BY d.id
+            ORDER BY d.due_date ASC, d.id ASC
+        """, (project_id,)).fetchall()
+        
+        deliverables = []
+        for d in deliverables_raw:
+            d_dict = dict(d)
+            tc = d_dict.get("task_count") or 0
+            cc = d_dict.get("completed_task_count") or 0
+            d_dict["progress_pct"] = int((cc / tc) * 100) if tc > 0 else (d_dict.get("progress_pct") or 0)
+            
+            # Key tasks under this deliverable
+            d_tasks = conn.execute("""
+                SELECT id, title, status, priority, start_date, due_date, progress_pct 
+                FROM tasks 
+                WHERE deliverable_id = ? 
+                ORDER BY order_index ASC, id ASC
+            """, (d["id"],)).fetchall()
+            d_dict["tasks"] = [dict(t) for t in d_tasks]
+            deliverables.append(d_dict)
+
+        milestones = [dict(m) for m in conn.execute("""
+            SELECT m.*, d.title as deliverable_title
+            FROM milestones m
+            LEFT JOIN deliverables d ON m.deliverable_id = d.id
+            WHERE m.project_id = ?
+            ORDER BY m.due_date ASC
+        """, (project_id,)).fetchall()]
+
+        objectives = [dict(o) for o in conn.execute(
+            "SELECT * FROM project_objectives WHERE project_id = ? ORDER BY order_index ASC, id ASC", (project_id,)
+        ).fetchall()]
+
+        risks = [dict(r) for r in conn.execute(
+            "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
+
+        budgets = [dict(b) for b in conn.execute(
+            "SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
+        total_est = sum(safe_float(b.get("estimated_cost"), 0.0) for b in budgets)
+        total_act = sum(safe_float(b.get("actual_cost"), 0.0) for b in budgets)
+
+        resources = [dict(r) for r in conn.execute("""
+            SELECT pr.*, r.resource_code, r.name, r.type, r.department as resource_department
+            FROM project_resources pr
+            JOIN resources r ON pr.resource_id = r.id
+            WHERE pr.project_id = ?
+            ORDER BY r.name ASC
+        """, (project_id,)).fetchall()]
+
+        approvals = [dict(a) for a in conn.execute(
+            "SELECT * FROM project_approvals WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
+
+        task_stats = conn.execute("""
+            SELECT 
+                COUNT(id) as total_tasks,
+                SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
+                COALESCE(SUM(estimated_hours), 0) as total_est_hours,
+                COALESCE(SUM(actual_hours), 0) as total_act_hours
+            FROM tasks WHERE project_id = ?
+        """, (project_id,)).fetchone()
+
+        documents = [dict(d) for d in conn.execute(
+            "SELECT * FROM project_documents WHERE project_id = ? ORDER BY id ASC", (project_id,)
+        ).fetchall()]
+
+        return json_response({
+            "project": proj_dict,
+            "members": members,
+            "deliverables": deliverables,
+            "milestones": milestones,
+            "objectives": objectives,
+            "risks": risks,
+            "budgets": budgets,
+            "budget_summary": {
+                "total_estimated": total_est,
+                "total_actual": total_act,
+                "variance": total_est - total_act
+            },
+            "resources": resources,
+            "documents": documents,
+            "approvals": approvals,
+            "stats": dict(task_stats) if task_stats else {}
+        })
+
+@app.get("/api/projects/<project_id:int>/charter/print")
+def print_project_charter(project_id):
+    autoprint = request.query.get("autoprint") == "1"
+    with get_db() as conn:
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not project:
+            return "<h3>Project not found</h3>"
+        
+        p = dict(project)
+        deliverables_raw = conn.execute("""
+            SELECT d.*,
+                COUNT(t.id) as task_count,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_task_count
+            FROM deliverables d
+            LEFT JOIN tasks t ON t.deliverable_id = d.id
+            WHERE d.project_id = ?
+            GROUP BY d.id
+            ORDER BY d.due_date ASC, d.id ASC
+        """, (project_id,)).fetchall()
+        
+        deliverables = []
+        for d in deliverables_raw:
+            d_dict = dict(d)
+            tc = d_dict.get("task_count") or 0
+            cc = d_dict.get("completed_task_count") or 0
+            d_dict["progress_pct"] = int((cc / tc) * 100) if tc > 0 else (d_dict.get("progress_pct") or 0)
+            d_tasks = conn.execute("""
+                SELECT title, status, due_date, progress_pct FROM tasks WHERE deliverable_id = ? ORDER BY order_index ASC
+            """, (d["id"],)).fetchall()
+            d_dict["tasks"] = [dict(t) for t in d_tasks]
+            deliverables.append(d_dict)
+
+        milestones = conn.execute("""
+            SELECT m.*, d.title as deliverable_title 
+            FROM milestones m
+            LEFT JOIN deliverables d ON m.deliverable_id = d.id
+            WHERE m.project_id = ? ORDER BY m.due_date ASC
+        """, (project_id,)).fetchall()
+
+        objectives = conn.execute("SELECT * FROM project_objectives WHERE project_id = ? ORDER BY order_index ASC", (project_id,)).fetchall()
+        risks = conn.execute("SELECT * FROM project_risks WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        budgets = conn.execute("SELECT * FROM project_budgets WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        total_est = sum(safe_float(b["estimated_cost"]) for b in budgets)
+        total_act = sum(safe_float(b["actual_cost"]) for b in budgets)
+        members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
+        approvals = conn.execute("SELECT * FROM project_approvals WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        documents = conn.execute("SELECT * FROM project_documents WHERE project_id = ? ORDER BY id ASC", (project_id,)).fetchall()
+        
+        now_date = datetime.now().strftime("%B %d, %Y")
+
+        # HTML Generation with high-fidelity corporate styling
+        def esc(val):
+            if val is None:
+                return ""
+            return str(val).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+        def format_lines(text):
+            if not text:
+                return "<p style='color:#64748b;font-style:italic;'>None specified</p>"
+            lines = [l.strip() for l in str(text).split("\n") if l.strip()]
+            items = "".join(f"<li style='margin-bottom:4px;'>{esc(l.lstrip('•-* '))}</li>" for l in lines)
+            return f"<ul style='margin:0;padding-left:18px;'>{items}</ul>"
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Project Charter — {esc(p['name'])} ({esc(p.get('project_code') or 'PRJ')})</title>
+  <style>
+    @page {{
+      size: A4 portrait;
+      margin: 14mm 15mm 16mm 15mm;
+      @bottom-right {{
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        color: #94a3b8;
+      }}
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #0f172a;
+      background: #f8fafc;
+      margin: 0;
+      padding: 0;
+      font-size: 11pt;
+      line-height: 1.5;
+    }}
+    .print-bar {{
+      position: sticky;
+      top: 0;
+      background: #0f172a;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }}
+    .print-btn {{
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .print-btn:hover {{ background: #1d4ed8; }}
+    .close-btn {{
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #475569;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }}
+    .close-btn:hover {{ color: white; border-color: #cbd5e1; }}
+    .page-container {{
+      max-width: 900px;
+      margin: 20px auto;
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
+      border: 1px solid #e2e8f0;
+    }}
+    .header-banner {{
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }}
+    .brand-title {{
+      font-size: 24pt;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+      margin: 0;
+    }}
+    .doc-subtitle {{
+      font-size: 10pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #2563eb;
+      margin-top: 4px;
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }}
+    .badge-blue {{ background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }}
+    .badge-green {{ background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }}
+    .badge-amber {{ background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }}
+    .badge-purple {{ background: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff; }}
+    
+    h2.section-title {{
+      font-size: 12pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #1e293b;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-bottom: 5px;
+      margin-top: 26px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .meta-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }}
+    .meta-item {{
+      font-size: 9.5pt;
+    }}
+    .meta-label {{
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 2px;
+    }}
+    .meta-val {{
+      font-weight: 600;
+      color: #0f172a;
+    }}
+    .desc-box {{
+      background: #f8fafc;
+      border-left: 4px solid #2563eb;
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      font-size: 10pt;
+      color: #334155;
+      margin-bottom: 18px;
+    }}
+    table.charter-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+    }}
+    table.charter-table th {{
+      background: #f1f5f9;
+      color: #334155;
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 1px solid #cbd5e1;
+    }}
+    table.charter-table td {{
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      vertical-align: top;
+    }}
+    table.charter-table tr:nth-child(even) td {{
+      background: #fcfdfe;
+    }}
+    .scope-grid {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+    }}
+    .scope-card {{
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 9.5pt;
+    }}
+    .scope-card.in-scope {{
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }}
+    .scope-card.out-scope {{
+      background: #fef2f2;
+      border-color: #fecaca;
+    }}
+    .scope-header {{
+      font-size: 9pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .approvals-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 12px;
+      page-break-inside: avoid;
+    }}
+    .approval-box {{
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #ffffff;
+    }}
+    .approval-role {{
+      font-size: 8.5pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #64748b;
+    }}
+    .approval-name {{
+      font-size: 11pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 2px;
+    }}
+    .sig-line {{
+      border-bottom: 1px dashed #94a3b8;
+      height: 28px;
+      margin: 10px 0 6px 0;
+      display: flex;
+      align-items: flex-end;
+      font-size: 8.5pt;
+      color: #15803d;
+      font-family: monospace;
+    }}
+    .footer-note {{
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 8pt;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }}
+    @media print {{
+      body {{ background: white; }}
+      .print-bar {{ display: none !important; }}
+      .page-container {{
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }}
+      .page-break {{ page-break-before: always; }}
+    }}
+  </style>
+</head>
+<body>
+
+  <div class="print-bar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-weight:700;font-size:14px;">ProjectPulse Charter Viewer</span>
+      <span style="font-size:12px;color:#94a3b8;">{esc(p['name'])}</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="print-btn" onclick="window.print()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        Print / Save as PDF
+      </button>
+      <button class="close-btn" onclick="window.close()">Close</button>
+    </div>
+  </div>
+
+  <div class="page-container">
+    <!-- HEADER -->
+    <div class="header-banner">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-weight:900;color:#2563eb;font-size:16pt;letter-spacing:-0.5px;">ProjectPulse</span>
+          <span style="color:#94a3b8;">|</span>
+          <span class="badge badge-blue">{esc(p.get('project_code') or 'PRJ')}</span>
+          <span class="badge badge-purple">{esc(p.get('department') or 'General')}</span>
+        </div>
+        <h1 class="brand-title">{esc(p['name'])}</h1>
+        <div class="doc-subtitle">Project Charter & Management Baseline Document</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:8pt;font-weight:700;color:#64748b;text-transform:uppercase;">Generated Date</div>
+        <div style="font-size:9.5pt;font-weight:600;color:#0f172a;">{now_date}</div>
+        <div style="margin-top:6px;">
+          <span class="badge badge-{'green' if p.get('approval_status') == 'approved' else 'amber'}">
+            Approval: {esc((p.get('approval_status') or 'Draft').upper())}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. EXECUTIVE SUMMARY & IDENTIFICATION -->
+    <h2 class="section-title">1. Project Overview & Business Objective</h2>
+    <div class="meta-grid">
+      <div class="meta-item">
+        <div class="meta-label">Project Manager</div>
+        <div class="meta-val">{esc(p.get('manager_name') or 'Not Assigned')}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Project Sponsor</div>
+        <div class="meta-val">{esc(p.get('sponsor') or 'Executive Sponsor')}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Timeline Baseline</div>
+        <div class="meta-val">{esc(p.get('start_date') or 'TBD')} &rarr; {esc(p.get('target_end_date') or 'TBD')}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Status & Priority</div>
+        <div class="meta-val">{esc((p.get('status') or 'active').title())} / {esc((p.get('priority') or 'medium').upper())}</div>
+      </div>
+    </div>
+
+    <div class="desc-box">
+      <strong>Business Need / Objective:</strong><br>
+      {esc(p.get('description') or 'No project description entered yet.')}
+    </div>
+
+    <!-- 2. PROJECT OBJECTIVES -->
+    <h2 class="section-title">2. Project Objectives & Success Criteria</h2>
+    <table class="charter-table">
+      <thead>
+        <tr>
+          <th style="width:30px;">#</th>
+          <th>Specific Objective</th>
+          <th>Success Criteria / Target</th>
+          <th style="width:110px;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(f'''<tr>
+          <td style="font-weight:700;color:#64748b;">{i+1}</td>
+          <td style="font-weight:600;">{esc(o['objective'])}</td>
+          <td>{esc(o.get('success_criteria') or 'Standard Acceptance')}</td>
+          <td><span class="badge badge-{'green' if o.get('status') == 'achieved' else 'blue'}">{esc(o.get('status') or 'in_progress')}</span></td>
+        </tr>''' for i, o in enumerate(objectives)) if objectives else "<tr><td colspan='4' style='text-align:center;color:#64748b;'>No objectives recorded.</td></tr>"}
+      </tbody>
+    </table>
+
+    <!-- 3. PROJECT SCOPE -->
+    <h2 class="section-title">3. Project Scope Boundaries</h2>
+    <div class="scope-grid">
+      <div class="scope-card in-scope">
+        <div class="scope-header" style="color:#15803d;">
+          <span>✓</span> IN SCOPE
+        </div>
+        {format_lines(p.get('in_scope'))}
+      </div>
+      <div class="scope-card out-scope">
+        <div class="scope-header" style="color:#b91c1c;">
+          <span>✕</span> OUT OF SCOPE
+        </div>
+        {format_lines(p.get('out_of_scope'))}
+      </div>
+    </div>
+
+    <!-- 4. MAJOR DELIVERABLES -->
+    <h2 class="section-title">4. Major Deliverables & Key Activities</h2>
+    <table class="charter-table">
+      <thead>
+        <tr>
+          <th>Deliverable Outcome</th>
+          <th>Description & Scope</th>
+          <th style="width:120px;">Owner</th>
+          <th style="width:90px;">Target Date</th>
+          <th style="width:85px;">Progress</th>
+          <th style="width:95px;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(f'''<tr>
+          <td style="font-weight:700;color:#0f172a;">{esc(d['title'])}</td>
+          <td>
+            {esc(d.get('description') or '')}
+            {"<div style='margin-top:4px;font-size:8.5pt;color:#64748b;'><strong>Key Activities:</strong> " + ", ".join(esc(t['title']) for t in d.get('tasks', [])) + "</div>" if d.get('tasks') else ""}
+          </td>
+          <td>{esc(d.get('owner_name') or 'Team')}</td>
+          <td>{esc(d.get('due_date') or 'TBD')}</td>
+          <td style="font-weight:700;">{d.get('progress_pct', 0)}%</td>
+          <td><span class="badge badge-{'green' if d.get('status') == 'completed' else 'blue'}">{esc(d.get('status') or 'pending')}</span></td>
+        </tr>''' for d in deliverables) if deliverables else "<tr><td colspan='6' style='text-align:center;color:#64748b;'>No deliverables defined yet.</td></tr>"}
+      </tbody>
+    </table>
+
+    <!-- 5. MILESTONES -->
+    <h2 class="section-title">5. Project Milestones & Target Schedule</h2>
+    <table class="charter-table">
+      <thead>
+        <tr>
+          <th>Milestone Review Point</th>
+          <th>Target Date</th>
+          <th>Status</th>
+          <th>Linked Deliverable</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(f'''<tr>
+          <td style="font-weight:700;">{esc(m['title'])}</td>
+          <td>{esc(m.get('due_date') or 'TBD')}</td>
+          <td><span class="badge badge-{'green' if m.get('status') == 'completed' else 'amber'}">{esc(m.get('status') or 'pending')}</span></td>
+          <td>{esc(m.get('deliverable_title') or 'Overall Project')}</td>
+        </tr>''' for m in milestones) if milestones else "<tr><td colspan='4' style='text-align:center;color:#64748b;'>No milestones recorded.</td></tr>"}
+      </tbody>
+    </table>
+
+    <!-- 6. BUDGET SUMMARY -->
+    <h2 class="section-title">6. Budget & Cost Summary</h2>
+    <table class="charter-table">
+      <thead>
+        <tr>
+          <th>Cost Category</th>
+          <th style="text-align:right;width:130px;">Estimated Cost</th>
+          <th style="text-align:right;width:130px;">Actual Cost</th>
+          <th style="text-align:right;width:110px;">Variance</th>
+          <th>Notes / Justification</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(f'''<tr>
+          <td style="font-weight:600;">{esc(b['category'])}</td>
+          <td style="text-align:right;font-family:monospace;">${safe_float(b.get('estimated_cost')):,.2f}</td>
+          <td style="text-align:right;font-family:monospace;">${safe_float(b.get('actual_cost')):,.2f}</td>
+          <td style="text-align:right;font-family:monospace;color:{'#15803d' if safe_float(b.get('estimated_cost')) >= safe_float(b.get('actual_cost')) else '#b91c1c'};">${(safe_float(b.get('estimated_cost')) - safe_float(b.get('actual_cost'))):,.2f}</td>
+          <td>{esc(b.get('notes') or '')}</td>
+        </tr>''' for b in budgets)}
+        <tr style="background:#f1f5f9;font-weight:800;border-top:2px solid #cbd5e1;">
+          <td>TOTAL PROJECT BUDGET</td>
+          <td style="text-align:right;font-family:monospace;">${total_est:,.2f}</td>
+          <td style="text-align:right;font-family:monospace;">${total_act:,.2f}</td>
+          <td style="text-align:right;font-family:monospace;color:{'#15803d' if total_est >= total_act else '#b91c1c'};">${(total_est - total_act):,.2f}</td>
+          <td>Baseline Cap</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 7. RISKS & ASSUMPTIONS -->
+    <h2 class="section-title">7. Risk Register & Mitigations</h2>
+    <table class="charter-table">
+      <thead>
+        <tr>
+          <th style="width:70px;">Risk ID</th>
+          <th>Risk Description</th>
+          <th style="width:70px;">Impact</th>
+          <th style="width:70px;">Prob</th>
+          <th>Mitigation Strategy</th>
+          <th style="width:100px;">Owner</th>
+          <th style="width:85px;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(f'''<tr>
+          <td style="font-weight:700;font-family:monospace;">{esc(r['risk_code'] or 'RSK')}</td>
+          <td>{esc(r['description'])}</td>
+          <td><span class="badge badge-{'amber' if r.get('impact') in ('medium','low') else 'rose'}">{esc((r.get('impact') or 'med').upper())}</span></td>
+          <td>{esc((r.get('probability') or 'med').upper())}</td>
+          <td>{esc(r.get('mitigation') or 'Monitoring')}</td>
+          <td>{esc(r.get('owner') or 'PM')}</td>
+          <td>{esc(r.get('status') or 'open')}</td>
+        </tr>''' for r in risks) if risks else "<tr><td colspan='7' style='text-align:center;color:#64748b;'>No risks logged.</td></tr>"}
+      </tbody>
+    </table>
+
+    <!-- 8. ASSUMPTIONS & CONSTRAINTS -->
+    <h2 class="section-title">8. Assumptions & Constraints</h2>
+    <div class="scope-grid">
+      <div class="scope-card" style="background:#f8fafc;">
+        <div class="scope-header" style="color:#2563eb;">PROJECT ASSUMPTIONS</div>
+        {format_lines(p.get('assumptions'))}
+      </div>
+      <div class="scope-card" style="background:#f8fafc;">
+        <div class="scope-header" style="color:#d97706;">PROJECT CONSTRAINTS</div>
+        {format_lines(p.get('constraints'))}
+      </div>
+    </div>
+
+    <!-- 9. TEAM & STAKEHOLDERS -->
+    <h2 class="section-title">9. Core Team & Key Stakeholders</h2>
+    <table class="charter-table">
+      <thead>
+        <tr>
+          <th>Role / Title</th>
+          <th>Name</th>
+          <th>Contact Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:700;">Project Sponsor</td>
+          <td>{esc(p.get('sponsor') or 'Executive Committee')}</td>
+          <td>sponsor@company.internal</td>
+        </tr>
+        <tr>
+          <td style="font-weight:700;">Project Manager</td>
+          <td>{esc(p.get('manager_name') or 'Project Manager')}</td>
+          <td>{esc((p.get('manager_name') or 'pm').lower().replace(' ', '.'))}@company.internal</td>
+        </tr>
+        {"".join(f'''<tr>
+          <td style="font-weight:600;">{esc(m['role'] or 'Team Member')}</td>
+          <td>{esc(m['name'])}</td>
+          <td>{esc(m['email'] or '')}</td>
+        </tr>''' for m in members if m['name'] != p.get('manager_name'))}
+      </tbody>
+    </table>
+
+    <!-- 10. REFERENCE DOCUMENTATION & LINKS -->
+    {"<h2 class='section-title'>10. Reference Documentation & Links</h2><table class='charter-table'><thead><tr><th>Document Title</th><th style='width:110px;'>Type</th><th>Reference / URL</th><th>Notes</th></tr></thead><tbody>" + "".join(f'''<tr><td style="font-weight:700;">{esc(d['title'])}</td><td><span class="badge badge-blue">{esc(d.get('doc_type') or 'Spec')}</span></td><td><a href="{esc(d.get('file_url') or d.get('url') or '')}" target="_blank" style="color:#2563eb;text-decoration:none;">{esc(d.get('file_url') or d.get('url') or '')}</a></td><td>{esc(d.get('notes') or d.get('description') or '')}</td></tr>''' for d in documents) + "</tbody></table>" if documents else ""}
+
+    <!-- 11. APPROVALS & SIGN-OFF -->
+    <h2 class="section-title">11. Approvals & Formal Sign-off</h2>
+    <p style="font-size:9pt;color:#64748b;margin-bottom:12px;">By signing below, the undersigned stakeholders approve the scope, objectives, baseline schedule, and budget allocations detailed in this Project Charter.</p>
+    <div class="approvals-grid">
+      {"".join(f'''<div class="approval-box">
+        <div class="approval-role">{esc(a['role_title'])}</div>
+        <div class="approval-name">{esc(a['approver_name'])}</div>
+        <div class="sig-line">
+          {"✓ Digitally Signed & Approved" if a.get('status') == 'approved' else ""}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:8pt;color:#64748b;margin-top:4px;">
+          <span>Status: <strong>{esc((a.get('status') or 'pending').title())}</strong></span>
+          <span>Date: <strong>{esc((a.get('signed_at') or '')[:10] if a.get('signed_at') else 'Pending')}</strong></span>
+        </div>
+      </div>''' for a in approvals) if approvals else "<p style='color:#64748b;'>No approval slots defined.</p>"}
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer-note">
+      <span>ProjectPulse Project Management System &copy; {datetime.now().year}</span>
+      <span>CONFIDENTIAL — INTERNAL MANAGEMENT USE ONLY</span>
+      <span>Document Code: {esc(p.get('project_code') or 'PRJ')}</span>
+    </div>
+  </div>
+
+  {"<script>window.onload = function() { window.print(); };</script>" if autoprint else ""}
+</body>
+</html>"""
+        response.content_type = "text/html; charset=utf-8"
+        return html
+
 
 # ==================== PROJECT CLONING / TEMPLATE COPY ====================
 
@@ -1012,7 +2394,13 @@ def delete_sprint(project_id, sprint_id):
 @app.get("/api/projects/<project_id:int>/milestones")
 def get_milestones(project_id):
     with get_db() as conn:
-        milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
+        milestones = conn.execute("""
+            SELECT m.*, d.title as deliverable_title 
+            FROM milestones m
+            LEFT JOIN deliverables d ON m.deliverable_id = d.id
+            WHERE m.project_id = ? 
+            ORDER BY m.due_date ASC
+        """, (project_id,)).fetchall()
         return json_response(milestones)
 
 @app.post("/api/projects/<project_id:int>/milestones")
@@ -1028,15 +2416,30 @@ def create_milestone(project_id):
         return json_response({"error": "Title and due date are required"}, status=400)
     
     status = data.get("status", "pending")
+    deliv_id = data.get("deliverable_id")
+    if deliv_id == "" or deliv_id == "null":
+        deliv_id = None
+    elif deliv_id is not None:
+        try:
+            deliv_id = int(deliv_id)
+        except (ValueError, TypeError):
+            deliv_id = None
+    desc = data.get("description", "")
+
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO milestones (project_id, title, due_date, status)
-            VALUES (?, ?, ?, ?)
-        """, (project_id, title, due_date, status))
+            INSERT INTO milestones (project_id, title, due_date, status, deliverable_id, description)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (project_id, title, due_date, status, deliv_id, desc))
         m_id = cursor.lastrowid
         record_activity(conn, project_id, "Lead", "Milestone Added", f'Added milestone "{title}"')
-        m = conn.execute("SELECT * FROM milestones WHERE id = ?", (m_id,)).fetchone()
+        m = conn.execute("""
+            SELECT m.*, d.title as deliverable_title 
+            FROM milestones m
+            LEFT JOIN deliverables d ON m.deliverable_id = d.id
+            WHERE m.id = ?
+        """, (m_id,)).fetchone()
         return json_response(m, status=201)
 
 @app.put("/api/projects/<project_id:int>/milestones/<milestone_id:int>")
@@ -1054,9 +2457,31 @@ def update_milestone(project_id, milestone_id):
         title = data.get("title", m["title"])
         due_date = data.get("due_date", m["due_date"])
         status = data.get("status", m["status"])
+        
+        deliv_id = m.get("deliverable_id")
+        if "deliverable_id" in data:
+            deliv_val = data.get("deliverable_id")
+            if deliv_val == "" or deliv_val == "null" or deliv_val is None:
+                deliv_id = None
+            else:
+                try:
+                    deliv_id = int(deliv_val)
+                except (ValueError, TypeError):
+                    deliv_id = None
+        
+        desc = data.get("description", m.get("description") or "")
 
-        conn.execute("UPDATE milestones SET title = ?, due_date = ?, status = ? WHERE id = ?", (title, due_date, status, milestone_id))
-        updated = conn.execute("SELECT * FROM milestones WHERE id = ?", (milestone_id,)).fetchone()
+        conn.execute("""
+            UPDATE milestones 
+            SET title = ?, due_date = ?, status = ?, deliverable_id = ?, description = ? 
+            WHERE id = ?
+        """, (title, due_date, status, deliv_id, desc, milestone_id))
+        updated = conn.execute("""
+            SELECT m.*, d.title as deliverable_title 
+            FROM milestones m
+            LEFT JOIN deliverables d ON m.deliverable_id = d.id
+            WHERE m.id = ?
+        """, (milestone_id,)).fetchone()
         return json_response(updated)
 
 @app.delete("/api/projects/<project_id:int>/milestones/<milestone_id:int>")
@@ -1073,16 +2498,19 @@ def get_tasks(project_id):
     status = request.query.get("status")
     priority = request.query.get("priority")
     assignee_id = request.query.get("assignee_id")
+    deliverable_id = request.query.get("deliverable_id")
     search = request.query.get("search")
 
     with get_db() as conn:
         query = """
             SELECT t.*,
                 m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
-                s.name as sprint_name
+                s.name as sprint_name,
+                d.title as deliverable_title
             FROM tasks t
             LEFT JOIN members m ON t.assignee_id = m.id
             LEFT JOIN sprints s ON t.sprint_id = s.id
+            LEFT JOIN deliverables d ON t.deliverable_id = d.id
             WHERE t.project_id = ?
         """
         params = [project_id]
@@ -1093,6 +2521,10 @@ def get_tasks(project_id):
             elif sprint_id.isdigit():
                 query += " AND t.sprint_id = ?"
                 params.append(int(sprint_id))
+
+        if deliverable_id and deliverable_id.isdigit():
+            query += " AND t.deliverable_id = ?"
+            params.append(int(deliverable_id))
 
         if status:
             query += " AND t.status = ?"
@@ -1207,6 +2639,11 @@ def create_task(project_id):
     if sprint_id is not None and sprint_id <= 0:
         sprint_id = None
         
+    deliverable_val = data.get("deliverable_id")
+    deliverable_id = safe_int(deliverable_val)
+    if deliverable_id is not None and deliverable_id <= 0:
+        deliverable_id = None
+        
     start_date = data.get("start_date")
     start_date = str(start_date).strip() if start_date and str(start_date).strip() not in ("", "null", "undefined", "None") else None
     
@@ -1318,13 +2755,13 @@ def create_task(project_id):
 
         cursor.execute("""
             INSERT INTO tasks (
-                project_id, sprint_id, title, description, status, priority,
+                project_id, sprint_id, deliverable_id, title, description, status, priority,
                 order_index, start_date, due_date, estimated_hours, actual_hours,
                 progress_pct, assignee_id, tags, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            project_id, sprint_id, title, desc, status, priority,
+            project_id, sprint_id, deliverable_id, title, desc, status, priority,
             target_order, start_date, due_date, est_hours, act_hours,
             progress_pct, assignee_id, tags_json, now_str, now_str
         ))
@@ -1368,11 +2805,13 @@ def get_task_dict(conn, task_id: int):
         SELECT t.*,
             m.name as assignee_name, m.avatar_color as assignee_avatar, m.role as assignee_role,
             s.name as sprint_name,
-            p.name as project_name, p.color as project_color
+            p.name as project_name, p.color as project_color,
+            d.title as deliverable_title
         FROM tasks t
         LEFT JOIN members m ON t.assignee_id = m.id
         LEFT JOIN sprints s ON t.sprint_id = s.id
         LEFT JOIN projects p ON t.project_id = p.id
+        LEFT JOIN deliverables d ON t.deliverable_id = d.id
         WHERE t.id = ?
     """, (task_id,)).fetchone()
 
@@ -1532,13 +2971,20 @@ def update_task(task_id):
         status = str(data["status"]) if "status" in data and data["status"] else task["status"]
         priority = str(data["priority"]) if "priority" in data and data["priority"] else task["priority"]
         
-        # 2. Sprint ID
+        # 2. Sprint ID & Deliverable ID
         if "sprint_id" in data:
             sprint_val = data["sprint_id"]
             parsed_sprint = safe_int(sprint_val)
             sprint_id = parsed_sprint if (parsed_sprint and parsed_sprint > 0) else None
         else:
             sprint_id = task["sprint_id"]
+
+        if "deliverable_id" in data:
+            del_val = data["deliverable_id"]
+            parsed_del = safe_int(del_val)
+            deliverable_id = parsed_del if (parsed_del and parsed_del > 0) else None
+        else:
+            deliverable_id = task.get("deliverable_id")
 
         # 3. Assignee resolution (handles custom name input, dropdown id, and unassignment)
         assignee_id = task["assignee_id"]
@@ -1624,12 +3070,12 @@ def update_task(task_id):
 
         conn.execute("""
             UPDATE tasks SET
-                title = ?, description = ?, status = ?, priority = ?, sprint_id = ?,
+                title = ?, description = ?, status = ?, priority = ?, sprint_id = ?, deliverable_id = ?,
                 assignee_id = ?, order_index = ?, start_date = ?, due_date = ?,
                 estimated_hours = ?, actual_hours = ?, progress_pct = ?, tags = ?, updated_at = ?
             WHERE id = ?
         """, (
-            title, desc, status, priority, sprint_id,
+            title, desc, status, priority, sprint_id, deliverable_id,
             assignee_id, order_index, start_date, due_date,
             est_hours, act_hours, progress_pct, tags_json, now_str, task_id
         ))

@@ -1439,6 +1439,221 @@ class TestProjectPulseAPI(unittest.TestCase):
         # Clean up
         self.request(f"/api/projects/{p_id}", method="DELETE")
 
+    def test_project_charter_and_simplified_creation(self):
+        """Verify simplified project creation, auto-generated code, and charter fields"""
+        p_data = {
+            "name": "Project Apollo Synthesis",
+            "description": "Develop and validate next-gen continuous manufacturing process.",
+            "manager_name": "Dr. Sarah Lin",
+            "department": "Process R&D",
+            "start_date": "2026-10-01",
+            "target_end_date": "2027-04-01",
+            "status": "active",
+            "priority": "high",
+            "sponsor": "Executive R&D Committee",
+            "in_scope": "• Pilot scale production\n• Analytical validation",
+            "out_of_scope": "• Commercial distribution",
+            "assumptions": "• Raw material batch purity >= 99%",
+            "constraints": "• Budget capped at $50,000"
+        }
+        s, res = self.request("/api/projects", method="POST", body=p_data)
+        self.assertEqual(s, 201)
+        p_id = res["id"]
+        self.assertTrue(res["project_code"].startswith("PRJ-"))
+        self.assertEqual(res["department"], "Process R&D")
+        self.assertEqual(res["manager_name"], "Dr. Sarah Lin")
+
+        # Fetch project details and verify auto-seeded budget categories and approvals
+        s, proj = self.request(f"/api/projects/{p_id}")
+        self.assertEqual(s, 200)
+        self.assertEqual(len(proj["budgets"]), 5)
+        self.assertEqual(len(proj["approvals"]), 4)
+        self.assertEqual(len(proj["objectives"]), 2)
+
+        # Test Charter JSON endpoint
+        s, charter = self.request(f"/api/projects/{p_id}/charter")
+        self.assertEqual(s, 200)
+        self.assertEqual(charter["project"]["name"], "Project Apollo Synthesis")
+        self.assertIn("budget_summary", charter)
+
+        # Test Charter Print endpoint
+        s, html_content = self.request(f"/api/projects/{p_id}/charter/print")
+        self.assertEqual(s, 200)
+        self.assertIn(b"Project Apollo Synthesis", html_content)
+        self.assertIn(b"Project Charter", html_content)
+
+        # Clean up
+        self.request(f"/api/projects/{p_id}", method="DELETE")
+
+    def test_deliverables_and_task_linkage(self):
+        """Verify Deliverables CRUD and linking activities to deliverables"""
+        s, p_res = self.request("/api/projects", method="POST", body={"name": "Deliverables Test Project"})
+        self.assertEqual(s, 201)
+        p_id = p_res["id"]
+
+        # Create deliverable
+        del_data = {
+            "title": "Phase 1: Process Chemistry Validation",
+            "description": "Complete initial 5 batches and analytical assays",
+            "owner_name": "Dr. Sarah Lin",
+            "due_date": "2026-11-15",
+            "status": "in_progress"
+        }
+        s, d_res = self.request(f"/api/projects/{p_id}/deliverables", method="POST", body=del_data)
+        self.assertEqual(s, 201)
+        del_id = d_res["id"]
+        self.assertEqual(d_res["title"], "Phase 1: Process Chemistry Validation")
+
+        # Create task linked to this deliverable
+        task_data = {
+            "title": "Prepare Reaction Step 1",
+            "deliverable_id": del_id,
+            "status": "todo",
+            "priority": "high",
+            "start_date": "2026-10-10",
+            "due_date": "2026-10-15"
+        }
+        s, t_res = self.request(f"/api/projects/{p_id}/tasks", method="POST", body=task_data)
+        self.assertEqual(s, 200)
+        self.assertEqual(t_res.get("deliverable_id"), del_id)
+
+        # Update task status to done and verify deliverable progress calculation
+        t_id = t_res["id"]
+        s, updated_task = self.request(f"/api/tasks/{t_id}", method="PUT", body={"status": "done", "progress_pct": 100})
+        self.assertEqual(s, 200)
+
+        s, deliverables_list = self.request(f"/api/projects/{p_id}/deliverables")
+        self.assertEqual(s, 200)
+        self.assertEqual(len(deliverables_list), 1)
+        self.assertEqual(deliverables_list[0]["task_count"], 1)
+        self.assertEqual(deliverables_list[0]["completed_task_count"], 1)
+        self.assertEqual(deliverables_list[0]["progress_pct"], 100)
+
+        # Clean up
+        self.request(f"/api/projects/{p_id}", method="DELETE")
+
+    def test_objectives_risks_budgets_and_signoff(self):
+        """Verify Objectives, Risks, Budget updates and Charter Sign-off workflow"""
+        s, p_res = self.request("/api/projects", method="POST", body={"name": "Governance Test Project"})
+        p_id = p_res["id"]
+
+        # 1. Objectives
+        s, obj_res = self.request(f"/api/projects/{p_id}/objectives", method="POST", body={
+            "objective": "Achieve 99.5% assay purity",
+            "success_criteria": "HPLC test >= 99.5%",
+            "status": "in_progress"
+        })
+        self.assertEqual(s, 201)
+        obj_id = obj_res["id"]
+
+        s, upd_obj = self.request(f"/api/objectives/{obj_id}", method="PUT", body={"status": "achieved"})
+        self.assertEqual(s, 200)
+        self.assertEqual(upd_obj["status"], "achieved")
+
+        # 2. Risks
+        s, rsk_res = self.request(f"/api/projects/{p_id}/risks", method="POST", body={
+            "description": "Raw material supplier stock shortage",
+            "impact": "high",
+            "probability": "medium",
+            "mitigation": "Establish secondary domestic supplier contract",
+            "owner": "Procurement Lead"
+        })
+        self.assertEqual(s, 201)
+        self.assertEqual(rsk_res["impact"], "high")
+
+        # 3. Budget update
+        s, b_list = self.request(f"/api/projects/{p_id}/budgets")
+        self.assertEqual(s, 200)
+        self.assertTrue(len(b_list["budgets"]) >= 5)
+        first_b_id = b_list["budgets"][0]["id"]
+        s, upd_b = self.request(f"/api/budgets/{first_b_id}", method="PUT", body={
+            "estimated_cost": 15000.0,
+            "actual_cost": 12500.0,
+            "notes": "Consumables baseline"
+        })
+        self.assertEqual(s, 200)
+        self.assertEqual(upd_b["estimated_cost"], 15000.0)
+
+        # 4. Sign-off
+        s, sign_res = self.request(f"/api/projects/{p_id}/sign_off", method="POST", body={
+            "comments": "Approved as Project Sponsor"
+        })
+        self.assertEqual(s, 200)
+        self.assertTrue(sign_res["success"])
+
+        # Clean up
+        self.request(f"/api/projects/{p_id}", method="DELETE")
+
+    def test_charter_milestone_deliverable_and_print_html(self):
+        s, proj = self.request("/api/projects", method="POST", body={
+            "name": "Integration Test Charter Project",
+            "department": "Biotech",
+            "manager_name": "Dr. Watson",
+            "sponsor": "Executive Board"
+        })
+        self.assertEqual(s, 201)
+        p_id = proj["id"]
+
+        # Create Deliverable
+        s, deliv = self.request(f"/api/projects/{p_id}/deliverables", method="POST", body={
+            "title": "Bio-Reactor Validation Package",
+            "description": "Validation protocol and compliance dossier",
+            "due_date": "2026-12-01",
+            "status": "in_progress"
+        })
+        self.assertEqual(s, 201)
+        deliv_id = deliv["id"]
+
+        # Create Milestone linked to Deliverable
+        s, ms = self.request(f"/api/projects/{p_id}/milestones", method="POST", body={
+            "title": "Protocol Sign-off",
+            "due_date": "2026-11-15",
+            "deliverable_id": deliv_id,
+            "description": "Complete QA sign-off"
+        })
+        self.assertEqual(s, 201)
+        self.assertEqual(ms.get("deliverable_id"), deliv_id)
+        self.assertEqual(ms.get("deliverable_title"), "Bio-Reactor Validation Package")
+
+        # Create Task linked to Deliverable
+        s, t = self.request(f"/api/projects/{p_id}/tasks", method="POST", body={
+            "title": "Run Sterilization Cycle Test",
+            "deliverable_id": deliv_id,
+            "status": "todo"
+        })
+        self.assertIn(s, (200, 201))
+        self.assertEqual(t.get("deliverable_id"), deliv_id)
+        self.assertEqual(t.get("deliverable_title"), "Bio-Reactor Validation Package")
+
+        # Create Document
+        s, doc = self.request(f"/api/projects/{p_id}/documents", method="POST", body={
+            "title": "SOP-402 Sterilization Procedure",
+            "doc_type": "Specification",
+            "url": "https://docs.company.internal/sop-402",
+            "description": "Standard operating procedure"
+        })
+        self.assertEqual(s, 201)
+        doc_id = doc["id"]
+
+        # Verify Charter JSON
+        s, charter = self.request(f"/api/projects/{p_id}/charter")
+        self.assertEqual(s, 200)
+        self.assertEqual(charter["project"]["name"], "Integration Test Charter Project")
+        self.assertTrue(len(charter["deliverables"]) >= 1)
+        self.assertTrue(len(charter["milestones"]) >= 1)
+        self.assertTrue(len(charter["documents"]) >= 1)
+
+        # Verify Printable Charter HTML endpoint
+        s, html_bytes = self.request(f"/api/projects/{p_id}/charter/print")
+        self.assertEqual(s, 200)
+        self.assertTrue(b"Project Charter" in html_bytes)
+        self.assertTrue(b"Bio-Reactor Validation Package" in html_bytes)
+        self.assertTrue(b"SOP-402" in html_bytes)
+
+        # Clean up
+        self.request(f"/api/documents/{doc_id}", method="DELETE")
+        self.request(f"/api/projects/{p_id}", method="DELETE")
+
 if __name__ == "__main__":
     unittest.main()
 
