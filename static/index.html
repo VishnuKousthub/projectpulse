@@ -1406,14 +1406,34 @@
               </div>
             </div>
 
-            <!-- Right: Search, Swimlane Grouping & Add Task -->
+            <!-- Right: Search, My Tasks Toggle, Deliverable Filter, Swimlane Grouping & Add Task -->
             <div class="flex flex-wrap items-center gap-2.5">
               
               <!-- Search within Kanban -->
-              <div class="relative w-48 sm:w-56">
+              <div class="relative w-44 sm:w-52">
                 <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2"></i>
                 <input type="text" id="kanban-search-input" oninput="app.handleKanbanFilter(this.value)" placeholder="Filter board cards..."
                   class="w-full pl-8 pr-3 py-1 text-xs bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+
+              <!-- My Tasks Segmented Toggle -->
+              <div class="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs">
+                <button id="kanban-filter-all-btn" onclick="app.setKanbanMyTasksFilter(false)" class="px-2.5 py-1 rounded-md font-semibold transition bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs">
+                  All Tasks
+                </button>
+                <button id="kanban-filter-mytasks-btn" onclick="app.setKanbanMyTasksFilter(true)" class="px-2.5 py-1 rounded-md font-semibold transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5">
+                  <i data-lucide="user" class="w-3.5 h-3.5"></i>
+                  <span>My Tasks</span>
+                  <span id="kanban-mytasks-count" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">0</span>
+                </button>
+              </div>
+
+              <!-- Deliverable Filter -->
+              <div class="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                <i data-lucide="package" class="w-3.5 h-3.5 text-indigo-500 flex-shrink-0"></i>
+                <select id="kanban-filter-deliverable" onchange="app.setKanbanDeliverableFilter(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer max-w-[140px] truncate">
+                  <option value="">All Deliverables</option>
+                </select>
               </div>
 
               <!-- Swimlane Grouping -->
@@ -1626,12 +1646,34 @@
           <!-- Table Toolbar -->
           <div class="p-3.5 border-b border-slate-200 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-850/50">
             
-            <!-- Left: Search & Filter within Table -->
-            <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
-              <div class="relative w-full max-w-xs">
-                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5"></i>
-                <input type="text" id="table-search-input" oninput="app.handleTableFilter(this.value)" placeholder="Search activities, assignees, tags..."
+            <!-- Left: Search, My Tasks Toggle, Deliverable & Status Filters -->
+            <div class="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+              
+              <!-- Search Input -->
+              <div class="relative w-full sm:w-48 lg:w-56">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5"></i>
+                <input type="text" id="table-search-input" oninput="app.handleTableFilter(this.value)" placeholder="Search activities, tags..."
                   class="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+
+              <!-- My Tasks Segmented Toggle -->
+              <div class="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs">
+                <button id="table-filter-all-btn" onclick="app.setTableMyTasksFilter(false)" class="px-2.5 py-1 rounded-md font-semibold transition bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs">
+                  All Activities
+                </button>
+                <button id="table-filter-mytasks-btn" onclick="app.setTableMyTasksFilter(true)" class="px-2.5 py-1 rounded-md font-semibold transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5">
+                  <i data-lucide="user" class="w-3.5 h-3.5"></i>
+                  <span>My Tasks</span>
+                  <span id="table-mytasks-count" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">0</span>
+                </button>
+              </div>
+
+              <!-- Deliverable Filter -->
+              <div class="flex items-center space-x-1 bg-white dark:bg-slate-900 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                <i data-lucide="package" class="w-3.5 h-3.5 text-indigo-500 flex-shrink-0"></i>
+                <select id="table-filter-deliverable" onchange="app.setTableDeliverableFilter(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[150px] truncate">
+                  <option value="">All Deliverables</option>
+                </select>
               </div>
 
               <!-- Status Filter -->
@@ -1643,10 +1685,25 @@
                 <option value="done">Done</option>
                 <option value="backlog">Backlog</option>
               </select>
+
+              <!-- Assignee Filter -->
+              <select id="table-filter-assignee" onchange="app.setTableAssigneeFilter(this.value)" class="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer max-w-[130px] truncate">
+                <option value="">All Assignees</option>
+              </select>
+
+              <!-- Priority Filter -->
+              <select id="table-filter-priority" onchange="app.setTablePriorityFilter(this.value)" class="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer">
+                <option value="">All Priorities</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+
             </div>
 
             <!-- Right Controls: Sort Order & Add Activity -->
-            <div class="flex flex-wrap items-center gap-2.5">
+            <div class="flex flex-wrap items-center gap-2">
               
               <!-- Sort By Selector -->
               <div class="flex items-center space-x-1.5 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
@@ -1657,7 +1714,7 @@
                   <option value="date_asc">Start Date (Earliest First)</option>
                   <option value="due_asc">Due Date (Earliest First)</option>
                   <option value="priority">Priority (High to Low)</option>
-                  <option value="hours_desc">Est. Hours (High to Low)</option>
+                  <option value="progress">Progress (%)</option>
                   <option value="title_asc">Title (A-Z)</option>
                 </select>
               </div>
@@ -1682,50 +1739,47 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[11px] font-bold border-b border-slate-200 dark:border-slate-700/80 shadow-xs select-none">
                 <tr>
-                  <th class="px-3.5 py-3 min-w-[320px]">
+                  <th class="px-3.5 py-3 min-w-[280px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('order')">
-                      <span>Activity Name & Sequence</span>
+                      <span>Activity / Task</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[130px]">
+                  <th class="px-3 py-3 min-w-[150px]">
+                    <span>Deliverable</span>
+                  </th>
+                  <th class="px-3 py-3 min-w-[150px]">Owner</th>
+                  <th class="px-3 py-3 min-w-[120px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('status')">
                       <span>Status</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[110px]">
+                  <th class="px-3 py-3 min-w-[100px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('priority')">
                       <span>Priority</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[180px]">Assignee / Role</th>
-                  <th class="px-3.5 py-3 min-w-[140px]">
-                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('progress')">
-                      <span>Progress (%)</span>
-                      <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
-                    </div>
-                  </th>
-                  <th class="px-3.5 py-3 min-w-[130px]">
+                  <th class="px-3 py-3 min-w-[110px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('date_asc')">
                       <span>Start Date</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[130px]">
+                  <th class="px-3 py-3 min-w-[140px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('due_asc')">
                       <span>Due Date</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[130px]">
-                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('hours_desc')">
-                      <span>Hours (Est / Act)</span>
+                  <th class="px-3 py-3 min-w-[130px]">
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('progress')">
+                      <span>Progress</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 text-right min-w-[80px]">Actions</th>
+                  <th class="px-3 py-3 text-right min-w-[70px]">Actions</th>
                 </tr>
               </thead>
               <tbody id="tasks-table-body" class="text-slate-700 dark:text-slate-200 divide-y divide-slate-100 dark:divide-slate-800">

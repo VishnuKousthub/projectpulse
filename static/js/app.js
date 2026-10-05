@@ -238,6 +238,11 @@ const app = {
           moreMenu.classList.add('hidden');
         }
       }
+
+      // Close table row action menus if clicking outside
+      if (!e.target.closest('[id^="task-menu-btn-"]') && !e.target.closest('[id^="task-menu-dropdown-"]')) {
+        this.closeAllTableMenus();
+      }
     });
   },
 
@@ -523,7 +528,12 @@ const app = {
 
   populateFilterDropdowns() {
     const memberSelect = document.getElementById('filter-assignee');
+    const tableAssigneeSelect = document.getElementById('table-filter-assignee');
+    const tableDeliverableSelect = document.getElementById('table-filter-deliverable');
+    const kanbanDeliverableSelect = document.getElementById('kanban-filter-deliverable');
     const members = this.getUniqueProjectMembers();
+    const deliverables = this.state.currentProject?.deliverables || [];
+
     if (memberSelect) {
       const currentVal = this.state.filterAssignee ? String(this.state.filterAssignee) : '';
       const hasMember = members.some(m => String(m.id) === currentVal);
@@ -536,6 +546,192 @@ const app = {
       `;
       memberSelect.value = this.state.filterAssignee || '';
     }
+
+    if (tableAssigneeSelect) {
+      const currentVal = this.state.tableAssigneeFilter ? String(this.state.tableAssigneeFilter) : '';
+      tableAssigneeSelect.innerHTML = `
+        <option value="">All Assignees</option>
+        ${members.map(m => `<option value="${m.id}" ${String(m.id) === currentVal ? 'selected' : ''}>${this.escapeHtml(m.name)}</option>`).join('')}
+      `;
+      tableAssigneeSelect.value = this.state.tableAssigneeFilter || '';
+    }
+
+    if (tableDeliverableSelect) {
+      const currentVal = this.state.tableDeliverableFilter ? String(this.state.tableDeliverableFilter) : '';
+      tableDeliverableSelect.innerHTML = `
+        <option value="">All Deliverables</option>
+        ${deliverables.map(d => `<option value="${d.id}" ${String(d.id) === currentVal ? 'selected' : ''}>${this.escapeHtml(d.title)}</option>`).join('')}
+      `;
+      tableDeliverableSelect.value = this.state.tableDeliverableFilter || '';
+    }
+
+    if (kanbanDeliverableSelect) {
+      const currentVal = this.state.kanbanDeliverableFilter ? String(this.state.kanbanDeliverableFilter) : '';
+      kanbanDeliverableSelect.innerHTML = `
+        <option value="">All Deliverables</option>
+        ${deliverables.map(d => `<option value="${d.id}" ${String(d.id) === currentVal ? 'selected' : ''}>${this.escapeHtml(d.title)}</option>`).join('')}
+      `;
+      kanbanDeliverableSelect.value = this.state.kanbanDeliverableFilter || '';
+    }
+  },
+
+  isMyTask(task) {
+    if (!task) return false;
+    const user = this.state.user;
+    if (!user) return false;
+
+    // 1. Direct assignee_id match
+    if (task.assignee_id && user.id && Number(task.assignee_id) === Number(user.id)) {
+      return true;
+    }
+
+    // 2. Name matches
+    const aName = (task.assignee_name || '').trim().toLowerCase();
+    if (aName) {
+      const uName = (user.name || '').trim().toLowerCase();
+      const uFullName = (user.full_name || '').trim().toLowerCase();
+      const uUser = (user.username || '').trim().toLowerCase();
+      if (uName && aName === uName) return true;
+      if (uFullName && aName === uFullName) return true;
+      if (uUser && aName === uUser) return true;
+      if (uFullName && uFullName.startsWith(aName)) return true;
+      if (uName && uName.startsWith(aName)) return true;
+    }
+
+    return false;
+  },
+
+  getDueDateUrgency(dueDateStr, isDone) {
+    if (isDone) {
+      return {
+        type: 'completed',
+        label: 'Completed',
+        badgeClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 font-semibold',
+        icon: 'check-circle-2'
+      };
+    }
+    if (!dueDateStr) {
+      return {
+        type: 'undeclared',
+        label: 'Not Declared',
+        badgeClass: 'bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-dashed border-amber-300 dark:border-amber-700/80 font-medium',
+        icon: 'calendar-off'
+      };
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const today = new Date(todayStr + 'T00:00:00');
+    const due = new Date(dueDateStr + 'T00:00:00');
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return {
+        type: 'overdue',
+        label: 'Overdue',
+        badgeClass: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60 font-bold',
+        icon: 'alert-triangle'
+      };
+    }
+    if (diffDays === 0) {
+      return {
+        type: 'today',
+        label: 'Due today',
+        badgeClass: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60 font-bold',
+        icon: 'clock'
+      };
+    }
+    if (diffDays <= 3) {
+      return {
+        type: 'soon',
+        label: `Due in ${diffDays}d`,
+        badgeClass: 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60 font-semibold',
+        icon: 'calendar-clock'
+      };
+    }
+    return {
+      type: 'normal',
+      label: null,
+      badgeClass: 'text-slate-600 dark:text-slate-300',
+      icon: 'calendar'
+    };
+  },
+
+  formatShortDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    } catch (e) {}
+    return dateStr;
+  },
+
+  setTableMyTasksFilter(onlyMyTasks) {
+    this.state.tableMyTasksOnly = Boolean(onlyMyTasks);
+    this.renderTable();
+  },
+
+  setKanbanMyTasksFilter(onlyMyTasks) {
+    this.state.kanbanMyTasksOnly = Boolean(onlyMyTasks);
+    this.renderKanban();
+  },
+
+  setTableDeliverableFilter(val) {
+    this.state.tableDeliverableFilter = val || '';
+    const sel = document.getElementById('table-filter-deliverable');
+    if (sel && sel.value !== this.state.tableDeliverableFilter) {
+      sel.value = this.state.tableDeliverableFilter;
+    }
+    this.renderTable();
+  },
+
+  setKanbanDeliverableFilter(val) {
+    this.state.kanbanDeliverableFilter = val || '';
+    const sel = document.getElementById('kanban-filter-deliverable');
+    if (sel && sel.value !== this.state.kanbanDeliverableFilter) {
+      sel.value = this.state.kanbanDeliverableFilter;
+    }
+    this.renderKanban();
+  },
+
+  filterByDeliverable(deliverableId) {
+    if (!deliverableId) return;
+    const strVal = String(deliverableId);
+    this.setTableDeliverableFilter(strVal);
+    this.setKanbanDeliverableFilter(strVal);
+    const d = this.state.currentProject?.deliverables?.find(item => item.id === Number(deliverableId));
+    if (d) {
+      this.showToast(`Filtered by deliverable: ${d.title}`, 'info');
+    }
+  },
+
+  setTableAssigneeFilter(val) {
+    this.state.tableAssigneeFilter = val || '';
+    this.renderTable();
+  },
+
+  setTablePriorityFilter(val) {
+    this.state.tablePriorityFilter = val || '';
+    this.renderTable();
+  },
+
+  toggleTableRowMenu(taskId) {
+    const dropdown = document.getElementById(`task-menu-dropdown-${taskId}`);
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    this.closeAllTableMenus();
+    if (isHidden) {
+      dropdown.classList.remove('hidden');
+      this.initLucide();
+    }
+  },
+
+  closeAllTableMenus() {
+    document.querySelectorAll('[id^="task-menu-dropdown-"]').forEach(el => {
+      el.classList.add('hidden');
+    });
   },
 
   updateProjectTabStrip() {
@@ -1178,15 +1374,9 @@ const app = {
   },
 
   switchToMyTasks() {
-    const myId = this.state.user?.id;
     this.switchPrimaryTab('work', 'table');
-    if (myId) {
-      this.state.filterAssignee = String(myId);
-      const assigneeSelect = document.getElementById('filter-assignee');
-      if (assigneeSelect) assigneeSelect.value = String(myId);
-      this.renderTable();
-      this.showToast('Showing your assigned tasks', 'info');
-    }
+    this.setTableMyTasksFilter(true);
+    this.showToast('Showing your assigned activities', 'info');
   },
 
   toggleSidebarCollapse() {
@@ -3327,13 +3517,51 @@ const app = {
     const members = this.state.currentProject?.members || [];
     const todayStr = new Date().toISOString().split('T')[0];
 
+    // Update My Tasks Count & Button Active States
+    const myTasksCount = allTasks.filter(t => this.isMyTask(t)).length;
+    const kanbanCountEl = document.getElementById('kanban-mytasks-count');
+    if (kanbanCountEl) kanbanCountEl.textContent = String(myTasksCount);
+
+    const allBtn = document.getElementById('kanban-filter-all-btn');
+    const myBtn = document.getElementById('kanban-filter-mytasks-btn');
+    if (allBtn && myBtn) {
+      if (this.state.kanbanMyTasksOnly) {
+        allBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+        myBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs flex items-center gap-1.5';
+      } else {
+        allBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs';
+        myBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5';
+      }
+    }
+
+    // Filter tasks
+    const q = this.state.kanbanFilterQuery || '';
+    const filteredTasks = allTasks.filter(t => {
+      if (this.state.kanbanMyTasksOnly && !this.isMyTask(t)) {
+        return false;
+      }
+      if (this.state.kanbanDeliverableFilter) {
+        const delivId = Number(this.state.kanbanDeliverableFilter);
+        if (Number(t.deliverable_id) !== delivId) return false;
+      }
+      if (!q) return true;
+      const titleMatch = (t.title || '').toLowerCase().includes(q);
+      const descMatch = (t.description || '').toLowerCase().includes(q);
+      const tagsMatch = (t.tags || []).some(tag => tag.toLowerCase().includes(q));
+      const delivMatch = (t.deliverable_title || '').toLowerCase().includes(q);
+      const assignee = members.find(m => m.id === t.assignee_id);
+      const assigneeMatch = (assignee && assignee.name.toLowerCase().includes(q)) || (t.assignee_name && t.assignee_name.toLowerCase().includes(q));
+      return titleMatch || descMatch || tagsMatch || delivMatch || assigneeMatch;
+    });
+
     // 1. Calculate Workflow Pipeline Breakdown
-    const totalAll = allTasks.length;
-    const countBacklog = allTasks.filter(t => t.status === 'backlog').length;
-    const countTodo = allTasks.filter(t => t.status === 'todo').length;
-    const countInProg = allTasks.filter(t => t.status === 'in_progress').length;
-    const countInRev = allTasks.filter(t => t.status === 'in_review').length;
-    const countDone = allTasks.filter(t => t.status === 'done').length;
+    const pipelineTasks = (this.state.kanbanMyTasksOnly || this.state.kanbanDeliverableFilter || q) ? filteredTasks : allTasks;
+    const totalAll = pipelineTasks.length;
+    const countBacklog = pipelineTasks.filter(t => t.status === 'backlog').length;
+    const countTodo = pipelineTasks.filter(t => t.status === 'todo').length;
+    const countInProg = pipelineTasks.filter(t => t.status === 'in_progress').length;
+    const countInRev = pipelineTasks.filter(t => t.status === 'in_review').length;
+    const countDone = pipelineTasks.filter(t => t.status === 'done').length;
 
     const pctBacklog = totalAll > 0 ? (countBacklog / totalAll) * 100 : 0;
     const pctTodo = totalAll > 0 ? (countTodo / totalAll) * 100 : 0;
@@ -3367,18 +3595,6 @@ const app = {
     if (lblP) lblP.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> In Progress: ${countInProg}`;
     if (lblR) lblR.innerHTML = `<span class="w-2 h-2 rounded-full bg-purple-500"></span> In Review: ${countInRev}`;
     if (lblD) lblD.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Done: ${countDone}`;
-
-    // 2. Filter tasks
-    const q = this.state.kanbanFilterQuery || '';
-    const filteredTasks = allTasks.filter(t => {
-      if (!q) return true;
-      const titleMatch = (t.title || '').toLowerCase().includes(q);
-      const descMatch = (t.description || '').toLowerCase().includes(q);
-      const tagsMatch = (t.tags || []).some(tag => tag.toLowerCase().includes(q));
-      const assignee = members.find(m => m.id === t.assignee_id);
-      const assigneeMatch = assignee && assignee.name.toLowerCase().includes(q);
-      return titleMatch || descMatch || tagsMatch || assigneeMatch;
-    });
 
     // 3. Destroy previous SortableJS instances
     this.state.sortableInstances.forEach(inst => inst.destroy());
@@ -3507,7 +3723,7 @@ const app = {
       `;
     }
 
-    // 5. Initialize SortableJS on all columns (destroy old instances first to prevent memory leaks and event collisions)
+    // 5. Initialize SortableJS on all columns
     if (this.state.sortableInstances && this.state.sortableInstances.length > 0) {
       this.state.sortableInstances.forEach(s => {
         try {
@@ -3551,8 +3767,8 @@ const app = {
     if (!members) members = this.state.currentProject?.members || [];
 
     const isDone = task.status === 'done';
-    const isOverdue = !isDone && task.due_date && task.due_date < todayStr;
     const assigned = members.find(m => m.id === task.assignee_id);
+    const urgency = this.getDueDateUrgency(task.due_date, isDone);
 
     // Left Border Strip Accent Color
     const borderLeftColor = {
@@ -3599,6 +3815,14 @@ const app = {
           </div>
         </div>
 
+        <!-- Deliverable Chip (Linkage to Phase 3 Planning) -->
+        ${task.deliverable_title ? `
+          <div onclick="event.stopPropagation(); app.filterByDeliverable(${task.deliverable_id})" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/50 max-w-full truncate cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition" title="Filter by: ${this.escapeHtml(task.deliverable_title)}">
+            <i data-lucide="package" class="w-3 h-3 text-indigo-500 flex-shrink-0"></i>
+            <span class="truncate">${this.escapeHtml(task.deliverable_title)}</span>
+          </div>
+        ` : ''}
+
         <!-- Task Title -->
         <h4 class="text-xs font-bold text-slate-800 dark:text-white leading-snug line-clamp-2 ${isDone ? 'line-through text-slate-400 dark:text-slate-500' : ''}">
           ${this.escapeHtml(task.title)}
@@ -3633,7 +3857,7 @@ const app = {
           <div class="space-y-1">
             <div class="flex justify-between text-[10px] text-slate-400 font-medium">
               <span class="flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i> Subtasks</span>
-              <span>${subtaskDone}/${subtaskTotal} (${subtaskPercent}%)</span>
+              <span class="font-mono font-semibold">${subtaskDone}/${subtaskTotal} (${subtaskPercent}%)</span>
             </div>
             <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
               <div class="h-full bg-blue-500 rounded-full transition-all duration-300" style="width: ${subtaskPercent}%"></div>
@@ -3651,18 +3875,26 @@ const app = {
                 ${assigned.name.charAt(0).toUpperCase()}
               </div>
               <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[80px]">${this.escapeHtml(assigned.name.split(' ')[0])}</span>
+            ` : (task.assignee_name ? `
+              <div class="w-5 h-5 rounded-full text-[9px] font-bold text-white flex items-center justify-center shadow-2xs flex-shrink-0 bg-blue-500" title="${this.escapeHtml(task.assignee_name)}">
+                ${task.assignee_name.charAt(0).toUpperCase()}
+              </div>
+              <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[80px]">${this.escapeHtml(task.assignee_name.split(' ')[0])}</span>
             ` : `
               <span class="text-[10px] text-slate-400">Unassigned</span>
-            `}
+            `)}
           </div>
 
-          <!-- Timeline / Due Date -->
+          <!-- Timeline / Due Date with Urgency -->
           <div class="flex items-center space-x-1 text-[10px]">
             ${task.due_date ? `
-              <span class="flex items-center space-x-1 ${isOverdue ? 'px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-bold' : 'text-slate-400'}">
-                <i data-lucide="calendar" class="w-3 h-3"></i>
+              <div class="flex items-center space-x-1 ${urgency.label && urgency.type === 'overdue' ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-slate-400'}">
+                <i data-lucide="${urgency.icon || 'calendar'}" class="w-3 h-3"></i>
                 <span>${task.start_date ? task.start_date.slice(5) + ' → ' : ''}${task.due_date.slice(5)}</span>
-              </span>
+                ${urgency.label && urgency.type !== 'normal' ? `
+                  <span class="ml-0.5 px-1 py-0.1 rounded text-[9px] border ${urgency.badgeClass}">${urgency.label}</span>
+                ` : ''}
+              </div>
             ` : (task.start_date ? `
               <span class="flex items-center space-x-1 text-slate-400">
                 <i data-lucide="calendar" class="w-3 h-3"></i>
@@ -3709,19 +3941,41 @@ const app = {
 
     // Optimistic instant state update
     task.status = newStatus;
+    const prevProgress = task.progress_pct;
+    const movePayload = { status: newStatus };
+    if (newStatus === 'done' && (task.progress_pct || 0) < 100) {
+      task.progress_pct = 100;
+      movePayload.progress_pct = 100;
+    } else if (newStatus !== 'done' && task.progress_pct === 100) {
+      task.progress_pct = 50;
+      movePayload.progress_pct = 50;
+    }
     this.renderKanban();
+
+    // Cross-view synchronization!
+    this.syncCurrentProjectCache();
+    if (typeof this.renderOverview === 'function') this.renderOverview();
+    if (typeof this.renderDeliverables === 'function') this.renderDeliverables();
+    if (typeof this.renderTable === 'function') this.renderTable();
+    if (typeof this.renderGantt === 'function') this.renderGantt();
 
     if (numId > 0) {
       try {
         await this.api(`/api/tasks/${numId}`, {
           method: 'PUT',
-          body: { status: newStatus }
+          body: movePayload
         });
         this.showToast(`Moved to ${newStatus.replace('_', ' ')}`, 'success');
       } catch (e) {
         console.error('Failed to move task:', e);
         task.status = prevStatus;
+        task.progress_pct = prevProgress;
         this.renderKanban();
+        this.syncCurrentProjectCache();
+        if (typeof this.renderOverview === 'function') this.renderOverview();
+        if (typeof this.renderDeliverables === 'function') this.renderDeliverables();
+        if (typeof this.renderTable === 'function') this.renderTable();
+        if (typeof this.renderGantt === 'function') this.renderGantt();
         this.showToast('Failed to update task status', 'error');
       }
     }
@@ -4332,6 +4586,23 @@ const app = {
     const members = this.getUniqueProjectMembers();
     const todayStr = new Date().toISOString().split('T')[0];
 
+    // Update My Tasks Count & Button Active States
+    const myTasksCount = allTasks.filter(t => this.isMyTask(t)).length;
+    const myTasksCountEl = document.getElementById('table-mytasks-count');
+    if (myTasksCountEl) myTasksCountEl.textContent = String(myTasksCount);
+
+    const allBtn = document.getElementById('table-filter-all-btn');
+    const myBtn = document.getElementById('table-filter-mytasks-btn');
+    if (allBtn && myBtn) {
+      if (this.state.tableMyTasksOnly) {
+        allBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+        myBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs flex items-center gap-1.5';
+      } else {
+        allBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs';
+        myBtn.className = 'px-2.5 py-1 rounded-md font-semibold transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5';
+      }
+    }
+
     // 1. Calculate KPI Metrics
     const totalCount = allTasks.length;
     const doneCount = allTasks.filter(t => t.status === 'done').length;
@@ -4363,16 +4634,31 @@ const app = {
     // 2. Filter Tasks
     const q = this.state.tableFilterQuery || '';
     let filtered = allTasks.filter(t => {
+      if (this.state.tableMyTasksOnly && !this.isMyTask(t)) {
+        return false;
+      }
       if (this.state.tableStatusFilter && t.status !== this.state.tableStatusFilter) {
+        return false;
+      }
+      if (this.state.tableDeliverableFilter) {
+        const delivId = Number(this.state.tableDeliverableFilter);
+        if (Number(t.deliverable_id) !== delivId) return false;
+      }
+      if (this.state.tableAssigneeFilter) {
+        const memId = Number(this.state.tableAssigneeFilter);
+        if (Number(t.assignee_id) !== memId) return false;
+      }
+      if (this.state.tablePriorityFilter && t.priority !== this.state.tablePriorityFilter) {
         return false;
       }
       if (!q) return true;
       const titleMatch = (t.title || '').toLowerCase().includes(q);
       const descMatch = (t.description || '').toLowerCase().includes(q);
       const tagsMatch = (t.tags || []).some(tag => tag.toLowerCase().includes(q));
+      const delivMatch = (t.deliverable_title || '').toLowerCase().includes(q);
       const assignee = members.find(m => m.id === t.assignee_id);
       const assigneeMatch = (assignee && assignee.name.toLowerCase().includes(q)) || (t.assignee_name && t.assignee_name.toLowerCase().includes(q));
-      return titleMatch || descMatch || tagsMatch || assigneeMatch;
+      return titleMatch || descMatch || tagsMatch || delivMatch || assigneeMatch;
     });
 
     // 3. Sort Tasks according to Sequence or user choice
@@ -4385,8 +4671,8 @@ const app = {
           return (a.due_date || '9999').localeCompare(b.due_date || '9999');
         case 'priority':
           return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-        case 'hours_desc':
-          return (b.estimated_hours || 0) - (a.estimated_hours || 0);
+        case 'progress':
+          return (b.progress_pct || 0) - (a.progress_pct || 0);
         case 'title_asc':
           return (a.title || '').localeCompare(b.title || '');
         case 'order':
@@ -4402,10 +4688,10 @@ const app = {
     if (filtered.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="8" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+          <td colspan="9" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
             <i data-lucide="search-x" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
             <div class="text-sm font-semibold text-slate-600 dark:text-slate-400">No activities match the current filter</div>
-            <div class="text-xs text-slate-400 mt-1">Try resetting search or adjusting status filter</div>
+            <div class="text-xs text-slate-400 mt-1">Try resetting search or adjusting your status / assignee filters</div>
           </td>
         </tr>
       `;
@@ -4418,10 +4704,9 @@ const app = {
     const isProgress = this.isProgressOnly();
     filtered.forEach((t, idx) => {
       const isDone = t.status === 'done';
-      const isOverdue = !isDone && t.due_date && t.due_date < todayStr;
       const assignedMember = members.find(m => m.id === t.assignee_id);
-      const estH = parseFloat(t.estimated_hours) || 0;
-      const actH = parseFloat(t.actual_hours) || 0;
+      const urgency = this.getDueDateUrgency(t.due_date, isDone);
+      const delivTitle = t.deliverable_title || (t.deliverable_id ? this.state.currentProject?.deliverables?.find(d => d.id === t.deliverable_id)?.title : null);
 
       // Status Badges & Colors
       const statusConfig = {
@@ -4447,7 +4732,7 @@ const app = {
       html += `
         <tr data-task-id="${t.id}" class="hover:bg-blue-50/40 dark:hover:bg-slate-800/60 transition group border-b border-slate-100 dark:border-slate-800/80">
           
-          <!-- 1. Activity Name & Sequence -->
+          <!-- 1. Activity / Task Name & Sequence -->
           <td class="px-3.5 py-2.5">
             <div class="flex items-center space-x-2">
               ${!isProgress ? `
@@ -4487,9 +4772,46 @@ const app = {
             </div>
           </td>
 
-          <!-- 2. Status Dropdown -->
-          <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[120px]">
+          <!-- 2. Deliverable (Planning Layer Linkage) -->
+          <td class="px-3 py-2.5">
+            ${delivTitle ? `
+              <span onclick="event.stopPropagation(); app.filterByDeliverable(${t.deliverable_id})" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/60 max-w-[150px] truncate cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition" title="Filter by: ${this.escapeHtml(delivTitle)}">
+                <i data-lucide="package" class="w-3 h-3 flex-shrink-0 text-indigo-500"></i>
+                <span class="truncate">${this.escapeHtml(delivTitle)}</span>
+              </span>
+            ` : `
+              <span class="text-[11px] text-slate-400 font-medium italic">--</span>
+            `}
+          </td>
+
+          <!-- 3. Owner (Assignee) -->
+          <td class="px-3 py-2.5">
+            <div class="flex items-center space-x-2 min-w-0 max-w-[150px]">
+              ${assignedMember ? `
+                <div class="w-6 h-6 rounded-full text-[10px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${assignedMember.avatar_color || '#3B82F6'};" title="${this.escapeHtml(assignedMember.name)} (${this.escapeHtml(assignedMember.role || 'Member')})">
+                  ${assignedMember.name.charAt(0).toUpperCase()}
+                </div>
+                <div class="min-w-0 flex-1 truncate">
+                  <div class="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">${this.escapeHtml(assignedMember.name)}</div>
+                  <div class="text-[10px] text-slate-400 truncate">${this.escapeHtml(assignedMember.role || 'Member')}</div>
+                </div>
+              ` : (t.assignee_name ? `
+                <div class="w-6 h-6 rounded-full text-[10px] font-bold text-white flex items-center justify-center flex-shrink-0 bg-blue-500" title="${this.escapeHtml(t.assignee_name)}">
+                  ${t.assignee_name.charAt(0).toUpperCase()}
+                </div>
+                <div class="min-w-0 flex-1 truncate">
+                  <div class="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">${this.escapeHtml(t.assignee_name)}</div>
+                  <div class="text-[10px] text-slate-400 truncate">Custom</div>
+                </div>
+              ` : `
+                <span class="text-[11px] text-slate-400 italic">Unassigned</span>
+              `)}
+            </div>
+          </td>
+
+          <!-- 4. Status Dropdown / Badge -->
+          <td class="px-3 py-2.5">
+            <div class="relative inline-block w-full max-w-[115px]">
               <select ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"`}
                 class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${statusConfig.color} ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
                 <option value="backlog" ${t.status === 'backlog' ? 'selected' : ''}>Backlog</option>
@@ -4501,9 +4823,9 @@ const app = {
             </div>
           </td>
 
-          <!-- 3. Priority Dropdown -->
-          <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[100px]">
+          <!-- 5. Priority Dropdown / Badge -->
+          <td class="px-3 py-2.5">
+            <div class="relative inline-block w-full max-w-[95px]">
               <select ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'priority', this.value)"`}
                 class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${priorityConfig.color} ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
                 <option value="low" ${t.priority === 'low' ? 'selected' : ''}>Low</option>
@@ -4514,112 +4836,93 @@ const app = {
             </div>
           </td>
 
-          <!-- 4. Assignee / Role -->
-          <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[170px]">
-              <select ${isProgress ? 'disabled' : `onchange="app.handleTableAssigneeChange(${t.id}, this.value)"`}
-                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
-                <option value="">Unassigned</option>
-                ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
-                ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(t.assignee_name)} (Custom)</option>` : ''}
-                <option value="__add_new__" class="font-bold text-blue-600 dark:text-blue-400">+ Type Custom Assignee...</option>
-                <option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>
-              </select>
-            </div>
-          </td>
-
-          <!-- 5. Progress (%) -->
-          <td class="px-3.5 py-2.5">
-            <div class="flex items-center space-x-2">
-              <input type="number" min="0" max="100" value="${t.progress_pct || 0}"
-                onchange="app.inlineUpdateTask(${t.id}, 'progress_pct', Math.max(0, Math.min(100, parseInt(this.value, 10) || 0)))"
-                class="w-14 px-1.5 py-1 text-xs text-center font-bold font-mono bg-slate-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
-              <div class="w-16 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex-shrink-0 hidden xl:block">
-                <div class="h-full ${(t.progress_pct || 0) === 100 ? 'bg-emerald-500' : 'bg-blue-600'} rounded-full transition-all duration-300" style="width: ${t.progress_pct || 0}%"></div>
-              </div>
-            </div>
-          </td>
-
           <!-- 6. Start Date -->
-          <td class="px-3.5 py-2.5">
+          <td class="px-3 py-2.5 whitespace-nowrap">
             ${t.start_date ? `
-              <div class="inline-flex items-center space-x-1 max-w-[130px]">
-                <input type="date" value="${t.start_date}"
-                  ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)"`}
-                  class="w-full bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
-                ${!isProgress ? `
-                <button onclick="app.inlineUpdateTask(${t.id}, 'start_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
-                  <i data-lucide="x" class="w-3 h-3"></i>
-                </button>
-                ` : ''}
-              </div>
+              <span class="text-xs font-mono font-medium text-slate-700 dark:text-slate-200">
+                ${this.formatShortDate(t.start_date)}
+              </span>
             ` : `
-              <div class="relative group/date inline-flex items-center">
-                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40'} transition">
-                  <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
-                  <span>Not Declared</span>
-                </div>
-                ${!isProgress ? `<input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)" title="Click to declare start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">` : ''}
-              </div>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 font-medium">
+                <i data-lucide="calendar-off" class="w-2.5 h-2.5"></i>
+                <span>Not Declared</span>
+              </span>
             `}
           </td>
 
-          <!-- 7. Due Date -->
-          <td class="px-3.5 py-2.5">
+          <!-- 7. Due Date with Urgency Indicators -->
+          <td class="px-3 py-2.5 whitespace-nowrap">
             ${t.due_date ? `
-              <div class="inline-flex items-center space-x-1 max-w-[130px]">
-                <input type="date" value="${t.due_date}"
-                  ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)"`}
-                  class="w-full text-xs rounded-lg px-2 py-1 border focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'} ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
-                ${!isProgress ? `
-                <button onclick="app.inlineUpdateTask(${t.id}, 'due_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
-                  <i data-lucide="x" class="w-3 h-3"></i>
-                </button>
+              <div class="space-y-0.5">
+                <div class="text-xs font-mono font-medium text-slate-700 dark:text-slate-200">
+                  ${this.formatShortDate(t.due_date)}
+                </div>
+                ${urgency.label ? `
+                  <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] border ${urgency.badgeClass}">
+                    ${urgency.icon ? `<i data-lucide="${urgency.icon}" class="w-2.5 h-2.5"></i>` : ''}
+                    <span>${urgency.label}</span>
+                  </span>
                 ` : ''}
               </div>
             ` : `
-              <div class="relative group/date inline-flex items-center">
-                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40'} transition">
-                  <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
-                  <span>Not Declared</span>
-                </div>
-                ${!isProgress ? `<input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">` : ''}
-              </div>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold">
+                <i data-lucide="calendar-off" class="w-2.5 h-2.5 text-amber-500"></i>
+                <span>Not Declared</span>
+              </span>
             `}
           </td>
 
-          <!-- 8. Hours (Est & Act) -->
-          <td class="px-3.5 py-2.5">
-            <div class="flex items-center space-x-1">
-              <input type="number" step="0.5" min="0" value="${estH}"
-                ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'estimated_hours', parseFloat(this.value) || 0)"`}
-                title="${isProgress ? 'Estimated hours locked to PM/Admin' : 'Estimated Hours'}"
-                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
-              <span class="text-slate-400">/</span>
-              <input type="number" step="0.5" min="0" value="${actH}"
-                onchange="app.inlineUpdateTask(${t.id}, 'actual_hours', parseFloat(this.value) || 0)"
-                title="Actual Logged Hours (Editable by all)"
-                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center cursor-pointer">
+          <!-- 8. Progress (%) + Subtask Count -->
+          <td class="px-3 py-2.5 min-w-[120px]">
+            <div class="space-y-1">
+              <div class="flex items-center justify-between text-xs font-semibold">
+                <span class="font-mono ${isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}">${t.progress_pct || 0}%</span>
+                ${t.subtask_count > 0 ? `
+                  <span class="text-[10px] text-slate-400 font-normal" title="${t.subtask_completed_count}/${t.subtask_count} subtasks completed">
+                    ${t.subtask_completed_count}/${t.subtask_count} subtasks
+                  </span>
+                ` : ''}
+              </div>
+              <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div class="h-full ${isDone ? 'bg-emerald-500' : 'bg-blue-600'} rounded-full transition-all duration-300" style="width: ${t.progress_pct || 0}%"></div>
+              </div>
             </div>
           </td>
 
-          <!-- 9. Actions -->
-          <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
+          <!-- 9. Actions (Details Button & ⋯ More Menu) -->
+          <td class="px-3 py-2.5 text-right whitespace-nowrap">
             <div class="flex items-center justify-end space-x-1">
-              ${!isProgress ? `
-              <button onclick="app.openTaskModal({ insert_after_id: ${t.id} })" class="p-1 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition flex items-center space-x-1" title="Insert New Activity Below This">
-                <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
-                <span class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hidden xl:inline">Insert Below</span>
-              </button>
-              ` : ''}
-              <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details / Update Progress">
+              <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="View / Edit Task Details">
                 <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
               </button>
-              ${!isProgress ? `
-              <button onclick="app.inlineDeleteTask(${t.id})" class="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Delete Activity">
-                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-              </button>
-              ` : ''}
+              
+              <!-- ⋯ More Dropdown Menu -->
+              <div class="relative inline-block text-left">
+                <button onclick="event.stopPropagation(); app.toggleTableRowMenu(${t.id})" id="task-menu-btn-${t.id}" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="More Options">
+                  <i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i>
+                </button>
+                <div id="task-menu-dropdown-${t.id}" class="hidden absolute right-0 mt-1 w-44 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30 text-xs text-left animate-in fade-in zoom-in-95 duration-100">
+                  <button onclick="event.stopPropagation(); app.closeAllTableMenus(); app.openTaskModal({id: ${t.id}})" class="w-full px-3 py-1.5 text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 transition">
+                    <i data-lucide="eye" class="w-3.5 h-3.5 text-blue-500"></i>
+                    <span>View Details</span>
+                  </button>
+                  ${!isProgress ? `
+                  <button onclick="event.stopPropagation(); app.closeAllTableMenus(); app.openTaskModal({id: ${t.id}})" class="w-full px-3 py-1.5 text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 transition">
+                    <i data-lucide="edit-3" class="w-3.5 h-3.5 text-amber-500"></i>
+                    <span>Edit Activity</span>
+                  </button>
+                  <button onclick="event.stopPropagation(); app.closeAllTableMenus(); app.openTaskModal({insert_after_id: ${t.id}})" class="w-full px-3 py-1.5 text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 transition">
+                    <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
+                    <span>Insert Below</span>
+                  </button>
+                  <div class="my-1 border-t border-slate-100 dark:border-slate-700/60"></div>
+                  <button onclick="event.stopPropagation(); app.closeAllTableMenus(); app.confirmDeleteActivity(${t.id})" class="w-full px-3 py-1.5 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 transition">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                    <span>Delete Activity</span>
+                  </button>
+                  ` : ''}
+                </div>
+              </div>
             </div>
           </td>
 
@@ -4629,7 +4932,7 @@ const app = {
 
     tbody.innerHTML = html;
 
-    if (!this.isProgressOnly() && (!this.state.tableSortBy || this.state.tableSortBy === 'order') && !this.state.tableFilterQuery && !this.state.tableStatusFilter) {
+    if (!this.isProgressOnly() && (!this.state.tableSortBy || this.state.tableSortBy === 'order') && !this.state.tableFilterQuery && !this.state.tableStatusFilter && !this.state.tableDeliverableFilter && !this.state.tableAssigneeFilter && !this.state.tablePriorityFilter && !this.state.tableMyTasksOnly) {
       if (tbody && typeof Sortable !== 'undefined') {
         const sortable = new Sortable(tbody, {
           animation: 150,
@@ -4652,7 +4955,11 @@ const app = {
     // Update Footer Summary
     const footer = document.getElementById('table-summary-footer');
     if (footer) {
-      footer.textContent = `Showing ${filtered.length} of ${totalCount} activities in sequential process order`;
+      if (this.state.tableMyTasksOnly) {
+        footer.textContent = `Showing ${filtered.length} of ${totalCount} activities assigned to you`;
+      } else {
+        footer.textContent = `Showing ${filtered.length} of ${totalCount} activities`;
+      }
     }
 
     this.initLucide();
@@ -4668,11 +4975,20 @@ const app = {
     if (!t) return;
 
     const previousValue = t[field];
+    const prevProgress = t.progress_pct;
     const prevAssigneeName = t.assignee_name;
     const prevAssigneeAvatar = t.assignee_avatar;
 
     // 1. Optimistic instant state update
     t[field] = value;
+    if (field === 'status' && value === 'done' && (t.progress_pct || 0) < 100) {
+      t.progress_pct = 100;
+      extraPayload.progress_pct = 100;
+    } else if (field === 'status' && value !== 'done' && t.progress_pct === 100) {
+      t.progress_pct = 50;
+      extraPayload.progress_pct = 50;
+    }
+
     if (field === 'assignee_id') {
       const memberId = value ? Number(value) : null;
       const member = memberId ? this.state.currentProject?.members?.find(m => m.id === memberId) : null;
@@ -4722,6 +5038,7 @@ const app = {
         console.error('Failed to update task:', e);
         // Rollback on failure
         t[field] = previousValue;
+        if (field === 'status') t.progress_pct = prevProgress;
         t.assignee_name = prevAssigneeName;
         t.assignee_avatar = prevAssigneeAvatar;
         this.syncCurrentProjectCache();
@@ -7052,6 +7369,8 @@ const app = {
         estimated_hours: estHours,
         actual_hours: actHours,
         tags,
+        deliverable_id: deliverableId,
+        deliverable_title: deliverableId ? (this.state.currentProject?.deliverables?.find(d => d.id === deliverableId)?.title || null) : null,
         subtask_count: tempSubtasks.length,
         subtask_completed_count: 0,
         subtasks_list: tempSubtasks.map((st, i) => ({ id: i + 1, task_id: tempId, title: st, completed: 0, order_index: i })),
