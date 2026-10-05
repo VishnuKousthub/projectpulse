@@ -113,6 +113,19 @@ const app = {
     return (this.state.user?.role || '').toLowerCase();
   },
 
+  isAdmin() {
+    return this.getUserRole() === 'admin';
+  },
+
+  isPm() {
+    const role = this.getUserRole();
+    return role === 'admin' || role === 'pm' || role === 'project manager' || role === 'manager';
+  },
+
+  isMember() {
+    return !this.isPm();
+  },
+
   isFullAccess() {
     const role = this.getUserRole();
     return role === 'admin' || role === 'pm' || role === 'project manager' || role === 'manager' || !this.state.authToken;
@@ -147,28 +160,44 @@ const app = {
   },
 
   applyRolePermissionsUI() {
-    const isProgress = this.isProgressOnly();
+    const role = this.getUserRole();
+    const isAdmin = this.isAdmin();
+    const isPm = this.isPm();
+    const isMember = this.isMember();
 
-    // Header buttons
+    // 1. Sidebar Administration Group (Admin only)
+    const adminGroup = document.getElementById('nav-group-admin');
+    if (adminGroup) adminGroup.style.display = isAdmin ? '' : 'none';
+
+    // 2. Sidebar Reset Demo Data button (Admin only)
+    const sbResetDemo = document.getElementById('sidebar-reset-demo-btn');
+    if (sbResetDemo) sbResetDemo.style.display = isAdmin ? '' : 'none';
+
+    // 3. Sidebar Backup / Import / Export (Admin or PM only)
+    const sbImportExport = document.getElementById('sidebar-import-export-btn');
+    if (sbImportExport) sbImportExport.style.display = (isAdmin || isPm) ? '' : 'none';
+
+    // 4. Project Controls Tab (Controls restricted for normal members)
+    const controlsTab = document.getElementById('tab-primary-controls');
+    if (controlsTab) {
+      controlsTab.style.display = (isAdmin || isPm) ? '' : 'none';
+    }
+
+    // 5. Header Action Buttons
     const headerNewTaskBtn = document.getElementById('header-new-task-btn');
     const headerUploadGanttBtn = document.getElementById('header-upload-gantt-btn');
-    if (headerNewTaskBtn) headerNewTaskBtn.style.display = isProgress ? 'none' : '';
-    if (headerUploadGanttBtn) headerUploadGanttBtn.style.display = isProgress ? 'none' : '';
+    if (headerNewTaskBtn) headerNewTaskBtn.style.display = isMember ? 'none' : '';
+    if (headerUploadGanttBtn) headerUploadGanttBtn.style.display = isMember ? 'none' : '';
 
-    // Sidebar project administration & backup buttons
+    // 6. Sidebar Project Creation Buttons
     const sbManageProject = document.getElementById('sidebar-manage-project-btn');
     const sbNewProject = document.getElementById('sidebar-new-project-btn');
     const sbAddProjIcon = document.getElementById('sidebar-add-project-icon-btn');
-    const sbImportExport = document.getElementById('sidebar-import-export-btn');
-    const sbResetDemo = document.getElementById('sidebar-reset-demo-btn');
+    if (sbManageProject) sbManageProject.style.display = isMember ? 'none' : '';
+    if (sbNewProject) sbNewProject.style.display = isMember ? 'none' : '';
+    if (sbAddProjIcon) sbAddProjIcon.style.display = isMember ? 'none' : '';
 
-    if (sbManageProject) sbManageProject.style.display = isProgress ? 'none' : '';
-    if (sbNewProject) sbNewProject.style.display = isProgress ? 'none' : '';
-    if (sbAddProjIcon) sbAddProjIcon.style.display = isProgress ? 'none' : '';
-    if (sbImportExport) sbImportExport.style.display = isProgress ? 'none' : '';
-    if (sbResetDemo) sbResetDemo.style.display = isProgress ? 'none' : '';
-
-    // View specific buttons
+    // 7. View-Specific Add / Import Buttons
     const kanbanAddBtn = document.getElementById('kanban-add-task-btn');
     const tableAddBtn = document.getElementById('table-add-task-btn');
     const calendarAddBtn = document.getElementById('calendar-add-task-btn');
@@ -176,12 +205,12 @@ const app = {
     const resAddBtn = document.getElementById('res-add-library-btn');
     const resMapBtn = document.getElementById('res-map-project-btn');
 
-    if (kanbanAddBtn) kanbanAddBtn.style.display = isProgress ? 'none' : '';
-    if (tableAddBtn) tableAddBtn.style.display = isProgress ? 'none' : '';
-    if (calendarAddBtn) calendarAddBtn.style.display = isProgress ? 'none' : '';
-    if (ganttImportBtn) ganttImportBtn.style.display = isProgress ? 'none' : '';
-    if (resAddBtn) resAddBtn.style.display = isProgress ? 'none' : '';
-    if (resMapBtn) resMapBtn.style.display = isProgress ? 'none' : '';
+    if (kanbanAddBtn) kanbanAddBtn.style.display = isMember ? 'none' : '';
+    if (tableAddBtn) tableAddBtn.style.display = isMember ? 'none' : '';
+    if (calendarAddBtn) calendarAddBtn.style.display = isMember ? 'none' : '';
+    if (ganttImportBtn) ganttImportBtn.style.display = isMember ? 'none' : '';
+    if (resAddBtn) resAddBtn.style.display = isMember ? 'none' : '';
+    if (resMapBtn) resMapBtn.style.display = isMember ? 'none' : '';
   },
 
   initClickOutside() {
@@ -534,56 +563,243 @@ const app = {
     }
   },
 
-  switchView(viewName) {
-    this.state.activeView = viewName;
+  // ==================== PHASE 1: INFORMATION ARCHITECTURE & NAVIGATION ====================
+  _tabStructure: {
+    overview: {
+      label: 'Overview',
+      icon: 'layout-dashboard',
+      defaultSub: 'overview',
+      subs: []
+    },
+    plan: {
+      label: 'Plan',
+      icon: 'calendar-range',
+      defaultSub: 'gantt',
+      subs: [
+        { id: 'gantt', label: 'Gantt & Timeline', icon: 'gantt-chart' },
+        { id: 'deliverables', label: 'Deliverables', icon: 'package' },
+        { id: 'milestones', label: 'Milestones', icon: 'flag' }
+      ]
+    },
+    work: {
+      label: 'Work',
+      icon: 'check-square',
+      defaultSub: 'table',
+      subs: [
+        { id: 'table', label: 'List / Table Grid', icon: 'check-square' },
+        { id: 'kanban', label: 'Board / Kanban', icon: 'kanban' },
+        { id: 'calendar', label: 'Calendar Schedule', icon: 'calendar' }
+      ]
+    },
+    resources: {
+      label: 'Resources',
+      icon: 'users',
+      defaultSub: 'project',
+      subs: [
+        { id: 'project', label: 'Project Team', icon: 'users' },
+        { id: 'library', label: 'Resource Allocation / Pool', icon: 'cpu' }
+      ]
+    },
+    controls: {
+      label: 'Controls',
+      icon: 'shield-alert',
+      defaultSub: 'risks',
+      subs: [
+        { id: 'risks', label: 'Risks & Assumptions', icon: 'alert-triangle' },
+        { id: 'budget', label: 'Budget', icon: 'dollar-sign' },
+        { id: 'approvals', label: 'Approvals & Sign-off', icon: 'award' }
+      ]
+    },
+    reports: {
+      label: 'Reports',
+      icon: 'file-bar-chart',
+      defaultSub: 'charter',
+      subs: [
+        { id: 'charter', label: 'Project Charter', icon: 'file-text' },
+        { id: 'activity_report', label: 'Activity Report', icon: 'file-spreadsheet' },
+        { id: 'analytics', label: 'Analytics', icon: 'bar-chart-3' },
+        { id: 'documents', label: 'Documents', icon: 'file-check' }
+      ]
+    }
+  },
 
-    // Sidebar active item styling
+  _subViewToPrimary: {
+    overview: 'overview',
+    gantt: 'plan',
+    deliverables: 'plan',
+    milestones: 'plan',
+    table: 'work',
+    kanban: 'work',
+    calendar: 'work',
+    resources: 'resources',
+    project: 'resources',
+    library: 'resources',
+    risks: 'controls',
+    budget: 'controls',
+    approvals: 'controls',
+    charter: 'reports',
+    activity_report: 'reports',
+    analytics: 'reports',
+    documents: 'reports'
+  },
+
+  switchPrimaryTab(primaryTab, subView = null) {
+    if (!this._tabStructure[primaryTab]) {
+      primaryTab = 'overview';
+    }
+
+    const config = this._tabStructure[primaryTab];
+    let sub = subView;
+    if (!sub || (config.subs.length > 0 && !config.subs.some(s => s.id === sub))) {
+      sub = this._lastSubTab?.[primaryTab] || config.defaultSub;
+    }
+
+    if (!this._lastSubTab) this._lastSubTab = {};
+    this._lastSubTab[primaryTab] = sub;
+
+    this.state.activePrimaryTab = primaryTab;
+    this.state.activeSubView = sub;
+    this.state.activeView = (sub === 'project' || sub === 'library') ? 'resources' : sub;
+
+    // 1. Update Primary Tab button active classes
+    document.querySelectorAll('#primary-project-tabs .project-tab').forEach(btn => {
+      btn.classList.remove('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
+      btn.classList.add('text-slate-600', 'dark:text-slate-300');
+    });
+    const activePrimaryBtn = document.getElementById(`tab-primary-${primaryTab}`);
+    if (activePrimaryBtn) {
+      activePrimaryBtn.classList.add('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
+      activePrimaryBtn.classList.remove('text-slate-600', 'dark:text-slate-300');
+    }
+
+    // 2. Render Secondary Sub-navigation Pill Bar
+    const subnavBar = document.getElementById('secondary-subnav-bar');
+    if (subnavBar) {
+      if (config.subs.length > 0) {
+        subnavBar.classList.remove('hidden');
+        subnavBar.innerHTML = config.subs.map(s => {
+          const isActive = (s.id === sub);
+          const activeClass = isActive
+            ? 'bg-blue-600 text-white font-bold shadow-xs'
+            : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 font-semibold';
+          return `<button onclick="app.switchPrimaryTab('${primaryTab}', '${s.id}')" class="px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1.5 cursor-pointer ${activeClass}" id="subtab-${s.id}">
+            <i data-lucide="${s.icon}" class="w-3.5 h-3.5"></i>
+            <span>${s.label}</span>
+          </button>`;
+        }).join('');
+      } else {
+        subnavBar.classList.add('hidden');
+        subnavBar.innerHTML = '';
+      }
+    }
+
+    // 3. Hide all view panels and display active one
+    document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
+
+    if (sub === 'project' || sub === 'library') {
+      const resPanel = document.getElementById('view-resources-container');
+      if (resPanel) resPanel.classList.remove('hidden');
+      this.setResourceTab(sub);
+    } else if (sub === 'charter') {
+      const charterPanel = document.getElementById('view-charter-container');
+      if (charterPanel) {
+        charterPanel.classList.remove('hidden');
+        this.refreshCharterPreview();
+      }
+    } else if (sub === 'activity_report') {
+      const repPanel = document.getElementById('view-activity-report-container');
+      if (repPanel) repPanel.classList.remove('hidden');
+    } else {
+      const targetPanel = document.getElementById(`view-${sub}-container`);
+      if (targetPanel) targetPanel.classList.remove('hidden');
+    }
+
+    // 4. Update Sidebar Active Item Highlighting
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.classList.remove('bg-blue-600', 'text-white', 'font-semibold', 'shadow-xs');
       btn.classList.add('text-slate-300');
     });
-    const activeNav = document.getElementById(`nav-${viewName}`);
-    if (activeNav) {
-      activeNav.classList.add('bg-blue-600', 'text-white', 'font-semibold', 'shadow-xs');
-      activeNav.classList.remove('text-slate-300');
+
+    let activeNavId = null;
+    if (primaryTab === 'overview') activeNavId = 'nav-dashboard';
+    else if (primaryTab === 'work') {
+      activeNavId = this.state.filterAssignee ? 'nav-my-tasks' : 'nav-projects';
+    } else if (primaryTab === 'plan' && sub === 'gantt') activeNavId = 'nav-gantt';
+    else if (primaryTab === 'resources') activeNavId = 'nav-resources';
+    else if (primaryTab === 'controls' && sub === 'risks') activeNavId = 'nav-risks';
+    else if (primaryTab === 'reports') activeNavId = 'nav-reports';
+
+    if (activeNavId) {
+      const activeNav = document.getElementById(activeNavId);
+      if (activeNav) {
+        activeNav.classList.add('bg-blue-600', 'text-white', 'font-semibold', 'shadow-xs');
+        activeNav.classList.remove('text-slate-300');
+      }
     }
 
-    // Top Project Tab Strip active item styling
-    document.querySelectorAll('.project-tab').forEach(btn => {
-      btn.classList.remove('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
-      btn.classList.add('text-slate-600', 'dark:text-slate-300');
-    });
-    const activeTab = document.getElementById(`tab-${viewName}`);
-    if (activeTab) {
-      activeTab.classList.add('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
-      activeTab.classList.remove('text-slate-600', 'dark:text-slate-300');
-    }
-
-    document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
-    const targetPanel = document.getElementById(`view-${viewName}-container`);
-    if (targetPanel) targetPanel.classList.remove('hidden');
-
+    // 5. Update View Title
     const titles = {
       overview: 'Project Overview',
-      table: 'Activities / Tasks',
       gantt: 'Gantt & Timeline',
       deliverables: 'Project Deliverables',
       milestones: 'Project Milestones',
-      resources: 'Resource Management & Mapping',
-      risks: 'Risks, Assumptions & Constraints',
-      budget: 'Budget & Cost Tracking',
-      documents: 'Project Documentation',
-      approvals: 'Approvals & Sign-off',
-      analytics: 'Analytics Dashboard',
+      table: 'Activities / Tasks',
       kanban: 'Kanban Board',
-      calendar: 'Calendar Schedule'
+      calendar: 'Calendar Schedule',
+      project: 'Project Team',
+      library: 'Resource Allocation & Pool',
+      resources: 'Resource Management',
+      risks: 'Risks & Assumptions',
+      budget: 'Budget & Cost Tracking',
+      approvals: 'Approvals & Sign-off',
+      charter: 'Project Charter Document',
+      activity_report: 'Project Activity Report',
+      analytics: 'Analytics Dashboard',
+      documents: 'Project Documentation'
     };
-    const titleText = titles[viewName] || 'Project Management';
+    const titleText = titles[sub] || titles[primaryTab] || 'Project Management';
     const vTitle = document.getElementById('view-title');
     if (vTitle) vTitle.textContent = titleText;
 
+    // 6. Render the data for the current view
     this.renderCurrentView();
     this.initLucide();
+  },
+
+  switchView(viewName) {
+    const primary = this._subViewToPrimary[viewName] || 'overview';
+    this.switchPrimaryTab(primary, viewName);
+  },
+
+  switchToMyTasks() {
+    const myId = this.state.user?.id;
+    this.switchPrimaryTab('work', 'table');
+    if (myId) {
+      this.state.filterAssignee = String(myId);
+      const assigneeSelect = document.getElementById('filter-assignee');
+      if (assigneeSelect) assigneeSelect.value = String(myId);
+      this.renderTable();
+      this.showToast('Showing your assigned tasks', 'info');
+    }
+  },
+
+  toggleSidebarCollapse() {
+    const sidebar = document.getElementById('sidebar');
+    const isCurrentlyCollapsed = sidebar?.classList.contains('sidebar-collapsed');
+    this.setSidebarMode(isCurrentlyCollapsed ? 'expanded' : 'collapsed');
+    const toggleIcon = document.getElementById('sidebar-toggle-icon');
+    if (toggleIcon) {
+      toggleIcon.setAttribute('data-lucide', isCurrentlyCollapsed ? 'panel-left-close' : 'panel-left-open');
+    }
+    this.initLucide();
+  },
+
+  refreshCharterPreview() {
+    const pid = this.state.currentProjectId;
+    const iframe = document.getElementById('charter-inline-preview-iframe');
+    if (iframe && pid) {
+      iframe.src = `/api/projects/${pid}/charter/print`;
+    }
   },
 
   renderCurrentView() {
@@ -627,6 +843,11 @@ const app = {
         break;
       case 'analytics':
         this.renderAnalytics();
+        break;
+      case 'charter':
+        this.refreshCharterPreview();
+        break;
+      case 'activity_report':
         break;
       default:
         this.renderOverview();

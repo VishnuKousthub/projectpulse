@@ -39,7 +39,7 @@
   <aside id="sidebar" class="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col flex-shrink-0 sticky top-0 z-30 border-r border-slate-800 select-none">
     <!-- Brand Header with High-Tech Pulse Logo -->
     <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800/80 flex-shrink-0 bg-slate-950/40">
-      <div class="brand-header-inner flex items-center space-x-3 group cursor-pointer w-full" onclick="app.switchView('kanban')" title="ProjectPulse OS">
+      <div class="brand-header-inner flex items-center space-x-3 group cursor-pointer flex-1 min-w-0" onclick="app.switchPrimaryTab('overview')" title="ProjectPulse Dashboard">
         
         <!-- Modern 3D Holographic Pulse Emblem -->
         <div class="relative flex items-center justify-center flex-shrink-0">
@@ -94,6 +94,9 @@
         </div>
 
       </div>
+      <button onclick="app.toggleSidebarCollapse()" title="Collapse / Expand Sidebar" class="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition flex-shrink-0 cursor-pointer ml-1" id="sidebar-toggle-btn">
+        <i data-lucide="panel-left-close" class="w-4 h-4" id="sidebar-toggle-icon"></i>
+      </button>
     </div>
 
     <!-- Active Project Switcher -->
@@ -140,121 +143,97 @@
     </div>
 
     <!-- Navigation Views & Categories -->
-    <nav class="flex-1 px-3 py-3 space-y-4 overflow-y-auto custom-scroll">
+    <nav class="flex-1 px-3 py-3 space-y-4 overflow-y-auto custom-scroll" id="sidebar-nav-container">
       
-      <!-- Group 1: Project Views -->
-      <div class="space-y-1">
-        <div class="sidebar-extra px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-          <span>Project Views</span>
-          <span class="text-[9px] text-slate-600 font-mono">13</span>
+      <!-- Group 1: Main -->
+      <div class="space-y-1" id="nav-group-main">
+        <div class="sidebar-extra px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <span>Main</span>
         </div>
         
-        <button onclick="app.switchView('overview')" id="nav-overview" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Project Overview">
-          <i data-lucide="layout-dashboard" class="w-4 h-4 text-blue-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Overview</span>
+        <button onclick="app.switchPrimaryTab('overview')" id="nav-dashboard" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Dashboard & Project Overview">
+          <i data-lucide="layout-dashboard" class="w-4 h-4 text-sky-400 flex-shrink-0"></i>
+          <span class="sidebar-label">Dashboard</span>
         </button>
 
-        <button onclick="app.switchView('table')" id="nav-table" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Activities & Tasks">
-          <i data-lucide="check-square" class="w-4 h-4 text-amber-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Activities / Tasks</span>
+        <button onclick="app.switchPrimaryTab('work', 'table')" id="nav-projects" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Projects & Work Items">
+          <i data-lucide="folder-kanban" class="w-4 h-4 text-blue-400 flex-shrink-0"></i>
+          <span class="sidebar-label">Projects</span>
         </button>
 
-        <button onclick="app.switchView('gantt')" id="nav-gantt" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Gantt & Timeline">
+        <button onclick="app.switchToMyTasks()" id="nav-my-tasks" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="My Assigned Tasks">
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
+          <span class="sidebar-label">My Tasks</span>
+        </button>
+
+        <button onclick="app.switchPrimaryTab('reports')" id="nav-reports" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Reports & Project Charter">
+          <i data-lucide="file-bar-chart" class="w-4 h-4 text-amber-400 flex-shrink-0"></i>
+          <span class="sidebar-label">Reports</span>
+        </button>
+      </div>
+
+      <!-- Group 2: Management -->
+      <div class="space-y-1 pt-1 border-t border-slate-800/60" id="nav-group-management">
+        <div class="sidebar-extra px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <span>Management</span>
+        </div>
+
+        <button onclick="app.switchPrimaryTab('plan', 'gantt')" id="nav-gantt" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Gantt & Timeline">
           <i data-lucide="gantt-chart" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
           <span class="sidebar-label">Gantt & Timeline</span>
         </button>
 
-        <button onclick="app.switchView('deliverables')" id="nav-deliverables" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Project Deliverables">
-          <i data-lucide="package" class="w-4 h-4 text-indigo-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Deliverables</span>
+        <button onclick="app.switchPrimaryTab('resources')" id="nav-resources" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Resources & Team Allocation">
+          <i data-lucide="users" class="w-4 h-4 text-cyan-400 flex-shrink-0"></i>
+          <span class="sidebar-label">Resources</span>
         </button>
 
-        <button onclick="app.switchView('milestones')" id="nav-milestones" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Key Milestones">
-          <i data-lucide="flag" class="w-4 h-4 text-purple-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Milestones</span>
-        </button>
-
-        <button onclick="app.switchView('resources')" id="nav-resources" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Resource Management & Mapping">
-          <i data-lucide="cpu" class="w-4 h-4 text-cyan-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Resource Mapping</span>
-        </button>
-
-        <button onclick="app.switchView('risks')" id="nav-risks" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Risks, Assumptions & Constraints">
+        <button onclick="app.switchPrimaryTab('controls', 'risks')" id="nav-risks" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Risks, Assumptions & Controls">
           <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Risks & Assumptions</span>
-        </button>
-
-        <button onclick="app.switchView('budget')" id="nav-budget" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Project Budget & Cost Tracking">
-          <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Budget</span>
-        </button>
-
-        <button onclick="app.switchView('documents')" id="nav-documents" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Documentation & Attachments">
-          <i data-lucide="file-check" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Documents</span>
-        </button>
-
-        <button onclick="app.switchView('approvals')" id="nav-approvals" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Project Charter Approvals & Sign-off">
-          <i data-lucide="award" class="w-4 h-4 text-amber-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Approvals & Sign-off</span>
-        </button>
-
-        <button onclick="app.switchView('analytics')" id="nav-analytics" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Analytics Dashboard">
-          <i data-lucide="bar-chart-3" class="w-4 h-4 text-indigo-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Analytics</span>
-        </button>
-
-        <button onclick="app.switchView('kanban')" id="nav-kanban" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Kanban Board">
-          <i data-lucide="kanban" class="w-4 h-4 text-blue-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Kanban Board</span>
-        </button>
-
-        <button onclick="app.switchView('calendar')" id="nav-calendar" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Calendar View">
-          <i data-lucide="calendar" class="w-4 h-4 text-purple-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Calendar View</span>
+          <span class="sidebar-label">Risks</span>
         </button>
       </div>
 
-      <!-- Group 2: Automation & Tools -->
-      <div class="space-y-1 pt-1 border-t border-slate-800/60">
-        <div class="sidebar-extra px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          <span>Automation & Tools</span>
+      <!-- Group 3: Administration (Role-restricted to Admin) -->
+      <div class="space-y-1 pt-1 border-t border-slate-800/60" id="nav-group-admin">
+        <div class="sidebar-extra px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+          <span>Administration</span>
+          <span class="text-[9px] bg-indigo-950 text-indigo-400 border border-indigo-800/60 px-1 rounded font-mono font-bold">ADMIN</span>
         </div>
 
-        <button onclick="app.openNotificationsModal()" id="nav-notifications" class="nav-item w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Outlook Email Alerts">
+        <button onclick="app.openManageAssigneesModal()" id="nav-admin-users" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Users & Roles Management">
+          <i data-lucide="user-cog" class="w-4 h-4 text-indigo-400 flex-shrink-0"></i>
+          <span class="sidebar-label">Users & Roles</span>
+        </button>
+
+        <button onclick="app.openNotificationsModal()" id="nav-admin-notifications" class="nav-item w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Outlook Email Alerts & Notifications">
           <div class="flex items-center space-x-3">
             <i data-lucide="mail" class="w-4 h-4 text-sky-400 flex-shrink-0"></i>
-            <span class="sidebar-label">Outlook Alerts</span>
+            <span class="sidebar-label">Notifications</span>
           </div>
           <span class="sidebar-label w-2 h-2 rounded-full bg-emerald-400"></span>
         </button>
 
-        <button onclick="app.openGanttUploadModal()" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Upload Gantt Excel">
-          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Upload Gantt (Excel)</span>
-        </button>
-
-        <button onclick="app.openProjectReportModal()" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Cumulative Project Activity Report">
-          <i data-lucide="file-text" class="w-4 h-4 text-amber-400 flex-shrink-0"></i>
-          <span class="sidebar-label">Project Activity Report</span>
+        <button onclick="app.openImportExportModal()" id="nav-admin-settings" class="nav-item w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-semibold transition hover:bg-slate-800 hover:text-white text-slate-300" title="Settings, Backup & Data Transfer">
+          <i data-lucide="settings-2" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+          <span class="sidebar-label">Settings</span>
         </button>
       </div>
 
-      <!-- Group 3: Projects Directory -->
-      <div class="space-y-1 pt-1 border-t border-slate-800/60">
+      <!-- Group 4: Projects Directory -->
+      <div class="space-y-1 pt-1 border-t border-slate-800/60" id="nav-group-projects-list">
         <div class="sidebar-extra px-3 pt-2 pb-1 flex items-center justify-between">
-          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">All Projects</span>
-          <button id="sidebar-add-project-icon-btn" onclick="app.openProjectModal()" title="Add Project" class="text-slate-400 hover:text-white transition">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Active Projects</span>
+          <button id="sidebar-add-project-icon-btn" onclick="app.openProjectModal()" title="Add Project" class="text-slate-400 hover:text-white transition cursor-pointer">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>
           </button>
         </div>
-        <div id="projects-list-sidebar" class="space-y-0.5 max-h-36 overflow-y-auto">
+        <div id="projects-list-sidebar" class="space-y-0.5 max-h-36 overflow-y-auto custom-scroll">
           <!-- Populated dynamically -->
         </div>
       </div>
 
     </nav>
-
     <!-- Sidebar Bottom Utilities & Sidebar Controller -->
     <div class="p-3 border-t border-slate-800 space-y-2 flex-shrink-0 bg-slate-950/60">
       
@@ -457,65 +436,44 @@
         </div>
       </div>
 
-      <!-- Tab Buttons Row (Clean horizontal scrolling on small screens) -->
-      <div class="flex items-center space-x-1 overflow-x-auto custom-scroll -mb-1 pb-1 text-xs">
-        <button onclick="app.switchView('overview')" id="tab-overview" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+      <!-- Primary Project Tabs (Overview | Plan | Work | Resources | Controls | Reports) -->
+      <div class="flex items-center space-x-1.5 overflow-x-auto custom-scroll -mb-1 pb-1 text-xs" id="primary-project-tabs">
+        <button onclick="app.switchPrimaryTab('overview')" id="tab-primary-overview" class="project-tab px-3.5 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer" data-primary-tab="overview">
           <i data-lucide="layout-dashboard" class="w-3.5 h-3.5 text-blue-500"></i>
           <span>Overview</span>
         </button>
 
-        <button onclick="app.switchView('table')" id="tab-table" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+        <button onclick="app.switchPrimaryTab('plan')" id="tab-primary-plan" class="project-tab px-3.5 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer" data-primary-tab="plan">
+          <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-emerald-500"></i>
+          <span>Plan</span>
+        </button>
+
+        <button onclick="app.switchPrimaryTab('work')" id="tab-primary-work" class="project-tab px-3.5 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer" data-primary-tab="work">
           <i data-lucide="check-square" class="w-3.5 h-3.5 text-amber-500"></i>
-          <span>Activities / Tasks</span>
+          <span>Work</span>
         </button>
 
-        <button onclick="app.switchView('gantt')" id="tab-gantt" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="gantt-chart" class="w-3.5 h-3.5 text-emerald-500"></i>
-          <span>Gantt & Timeline</span>
-        </button>
-
-        <button onclick="app.switchView('deliverables')" id="tab-deliverables" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="package" class="w-3.5 h-3.5 text-indigo-500"></i>
-          <span>Deliverables</span>
-        </button>
-
-        <button onclick="app.switchView('milestones')" id="tab-milestones" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="flag" class="w-3.5 h-3.5 text-purple-500"></i>
-          <span>Milestones</span>
-        </button>
-
-        <button onclick="app.switchView('resources')" id="tab-resources" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+        <button onclick="app.switchPrimaryTab('resources')" id="tab-primary-resources" class="project-tab px-3.5 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer" data-primary-tab="resources">
           <i data-lucide="users" class="w-3.5 h-3.5 text-cyan-500"></i>
           <span>Resources</span>
         </button>
 
-        <button onclick="app.switchView('risks')" id="tab-risks" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-rose-500"></i>
-          <span>Risks & Assumptions</span>
+        <button onclick="app.switchPrimaryTab('controls')" id="tab-primary-controls" class="project-tab px-3.5 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer" data-primary-tab="controls">
+          <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-rose-500"></i>
+          <span>Controls</span>
         </button>
 
-        <button onclick="app.switchView('budget')" id="tab-budget" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="dollar-sign" class="w-3.5 h-3.5 text-emerald-500"></i>
-          <span>Budget</span>
-        </button>
-
-        <button onclick="app.switchView('documents')" id="tab-documents" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="file-check" class="w-3.5 h-3.5 text-slate-500"></i>
-          <span>Documents</span>
-        </button>
-
-        <button onclick="app.switchView('approvals')" id="tab-approvals" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="award" class="w-3.5 h-3.5 text-amber-500"></i>
-          <span>Approvals & Sign-off</span>
-        </button>
-
-        <button onclick="app.switchView('analytics')" id="tab-analytics" class="project-tab px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
-          <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-indigo-500"></i>
-          <span>Analytics</span>
+        <button onclick="app.switchPrimaryTab('reports')" id="tab-primary-reports" class="project-tab px-3.5 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer" data-primary-tab="reports">
+          <i data-lucide="file-bar-chart" class="w-3.5 h-3.5 text-indigo-500"></i>
+          <span>Reports</span>
         </button>
       </div>
-    </div>
 
+      <!-- Secondary Sub-Navigation Segmented Pill Bar -->
+      <div id="secondary-subnav-bar" class="hidden mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center space-x-1.5 overflow-x-auto custom-scroll text-xs">
+        <!-- Rendered dynamically by app.renderSubNavPills() based on active primary tab -->
+      </div>
+    </div>
     <!-- VIEW CONTAINERS AREA (SCROLLS INDEPENDENTLY) -->
     <main class="app-main flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 bg-slate-50 dark:bg-slate-900 min-w-0 max-w-full">
       
@@ -1047,6 +1005,76 @@
                 <!-- Populated dynamically -->
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5.5 PROJECT CHARTER DOCUMENT VIEW (UNDER REPORTS) -->
+      <section id="view-charter-container" class="view-panel hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+          <div>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <i data-lucide="file-text" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
+              <span>Executive Project Charter Document</span>
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Automatically generated management charter from active project deliverables, milestones, budget, risks, and governance records.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="app.refreshCharterPreview()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition cursor-pointer" title="Refresh Live Document">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Refresh</span>
+            </button>
+            <button onclick="app.printProjectCharter()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition cursor-pointer" title="Print Live Document">
+              <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+              <span>Print</span>
+            </button>
+            <button onclick="app.openProjectCharterModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer" title="Open in Full Preview Window">
+              <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+              <span>Fullscreen</span>
+            </button>
+          </div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
+          <iframe id="charter-inline-preview-iframe" class="w-full border-0" style="height: 780px;" src="about:blank"></iframe>
+        </div>
+      </section>
+
+      <!-- 5.6 PROJECT ACTIVITY REPORT (UNDER REPORTS) -->
+      <section id="view-activity-report-container" class="view-panel hidden space-y-4">
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-4">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-slate-800 dark:text-white">Cumulative Project Activity Report</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Generate comprehensive execution summaries, task status distributions, and audit milestones.</p>
+              </div>
+            </div>
+            <button onclick="app.openProjectReportModal()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg flex items-center space-x-2 shadow-sm transition cursor-pointer">
+              <i data-lucide="external-link" class="w-4 h-4"></i>
+              <span>Open Detailed Report Filter</span>
+            </button>
+          </div>
+          <div class="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+            <div class="font-semibold text-slate-700 dark:text-slate-200">Quick Report Actions:</div>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="app.openProjectReportModal()" class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-medium hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center gap-1.5">
+                <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-500"></i>
+                <span>Open Full Audit Dialog</span>
+              </button>
+              <button onclick="app.exportCumulativeReport('csv')" class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-medium hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center gap-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-500"></i>
+                <span>Export CSV</span>
+              </button>
+              <button onclick="app.exportCumulativeReport('json')" class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-medium hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center gap-1.5">
+                <i data-lucide="code" class="w-3.5 h-3.5 text-indigo-500"></i>
+                <span>Export JSON</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
