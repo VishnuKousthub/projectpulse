@@ -1013,7 +1013,7 @@
       </section>
 
       <!-- DELIVERABLES VIEW -->
-      <section id="view-deliverables-container" class="view-panel hidden space-y-4">
+      <section id="view-deliverables-container" class="view-panel hidden space-y-5">
         <!-- Toolbar -->
         <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center space-x-3">
@@ -1021,24 +1021,49 @@
               <i data-lucide="package" class="w-5 h-5"></i>
             </div>
             <div>
-              <h2 class="text-sm font-extrabold text-slate-800 dark:text-white">Project Deliverables</h2>
-              <p class="text-[11px] text-slate-500">Major outputs and work packages linked directly to activities</p>
+              <h2 class="text-base font-extrabold text-slate-800 dark:text-white">Project Deliverables</h2>
+              <p class="text-xs text-slate-400">Major outputs and work packages linked directly to planned activities</p>
             </div>
           </div>
-          <button onclick="app.openDeliverableModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow-xs transition cursor-pointer">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span>Add Deliverable</span>
-          </button>
+
+          <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Search Input -->
+            <div class="relative">
+              <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input type="text" id="deliverables-search-input" oninput="app.handleDeliverablesFilter()" placeholder="Search deliverables..."
+                class="pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44 sm:w-56">
+            </div>
+
+            <!-- Status Filter -->
+            <select id="deliverables-status-filter" onchange="app.handleDeliverablesFilter()"
+              class="bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="delayed">Delayed</option>
+            </select>
+
+            <button onclick="app.openDeliverableModal()" class="h-8 px-3.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Deliverable</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Deliverables List -->
+        <!-- Deliverables Summary KPI Row -->
+        <div id="deliverables-stats-row" class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Deliverables List / Table Container -->
         <div id="deliverables-container-list" class="space-y-3">
           <!-- Populated dynamically -->
         </div>
       </section>
 
       <!-- MILESTONES VIEW -->
-      <section id="view-milestones-container" class="view-panel hidden space-y-4">
+      <section id="view-milestones-container" class="view-panel hidden space-y-5">
         <!-- Toolbar -->
         <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center space-x-3">
@@ -1046,14 +1071,30 @@
               <i data-lucide="flag" class="w-5 h-5"></i>
             </div>
             <div>
-              <h2 class="text-sm font-extrabold text-slate-800 dark:text-white">Project Milestones</h2>
-              <p class="text-[11px] text-slate-500">Key chronological checkpoints along the project schedule</p>
+              <h2 class="text-base font-extrabold text-slate-800 dark:text-white">Project Milestones</h2>
+              <p class="text-xs text-slate-400">Key chronological checkpoints, stage-gates, and target dates</p>
             </div>
           </div>
-          <button onclick="app.openMilestoneModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow-xs transition cursor-pointer">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span>Add Milestone</span>
-          </button>
+
+          <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Status Filter -->
+            <select id="milestones-status-filter" onchange="app.handleMilestonesFilter()"
+              class="bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+              <option value="">All Checkpoints</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Achieved / Completed</option>
+            </select>
+
+            <button onclick="app.openMilestoneModal()" class="h-8 px-3.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Milestone</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Milestones Summary KPI Row -->
+        <div id="milestones-stats-row" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <!-- Populated dynamically -->
         </div>
 
         <!-- Milestones Timeline Container -->
@@ -1446,19 +1487,16 @@
             <!-- Right: Segmented Scale Switcher, Timeline Nav, Import & Template Buttons -->
             <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
               
-              <!-- Timeline Scale Segmented Control (Daily, Weekly, Monthly, Yearly) -->
+              <!-- Timeline Scale Segmented Control (Day, Week, Month) -->
               <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
                 <button type="button" id="gantt-scale-day" onclick="app.setGanttScale('day')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
-                  Daily
+                  Day
                 </button>
                 <button type="button" id="gantt-scale-week" onclick="app.setGanttScale('week')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition bg-blue-600 text-white shadow-xs font-bold flex items-center justify-center">
-                  Weekly
+                  Week
                 </button>
                 <button type="button" id="gantt-scale-month" onclick="app.setGanttScale('month')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
-                  Monthly
-                </button>
-                <button type="button" id="gantt-scale-year" onclick="app.setGanttScale('year')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
-                  Yearly
+                  Month
                 </button>
               </div>
 
@@ -1474,6 +1512,12 @@
                   <i data-lucide="chevron-right" class="w-4 h-4"></i>
                 </button>
               </div>
+
+              <!-- Add Activity Primary Button -->
+              <button id="gantt-add-activity-btn" onclick="app.openTaskModal()" class="h-9 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 rounded-lg flex items-center gap-1.5 shadow-xs shadow-blue-600/20 transition cursor-pointer" title="Add New Planned Activity">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Add Activity</span>
+              </button>
 
               <!-- Project Report Button -->
               <button onclick="app.openProjectReportModal()" class="h-9 bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold px-3 rounded-lg flex items-center gap-1.5 transition" title="Cumulative Project Activity Report">
@@ -2457,29 +2501,7 @@
             class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
         </div>
 
-        <div>
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
-          <textarea id="task-input-description" rows="3" placeholder="Provide background context, technical specifications, or requirements..."
-            class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white"></textarea>
-        </div>
-
-        <!-- Sequential Position in Process -->
-        <div id="task-position-wrapper">
-          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-            <span class="flex items-center space-x-1.5">
-              <i data-lucide="list-ordered" class="w-3.5 h-3.5 text-blue-500"></i>
-              <span>Sequence / Position in Project</span>
-            </span>
-            <span class="text-[10px] text-slate-400 font-normal">Insert between activities</span>
-          </label>
-          <select id="task-input-position"
-            class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white font-medium">
-            <option value="end">At the end of the project (default)</option>
-            <option value="start">At the very beginning (Before #01)</option>
-          </select>
-        </div>
-
-        <!-- Deliverable Linkage (Optional) -->
+        <!-- Deliverable Linkage (Primary Field) -->
         <div id="task-deliverable-wrapper">
           <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
             <span class="flex items-center space-x-1.5">
@@ -2556,7 +2578,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="relative">
             <div class="flex items-center justify-between mb-1">
               <label class="block font-semibold text-slate-700 dark:text-slate-300">Start Date</label>
@@ -2590,49 +2612,86 @@
               </div>
             </div>
           </div>
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Est. Hours</label>
-            <input type="number" step="0.5" id="task-input-esthours" placeholder="0.0" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
-          </div>
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Act. Hours</label>
-            <input type="number" step="0.5" id="task-input-acthours" placeholder="0.0" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
-          </div>
-          <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tags</label>
-            <input type="text" id="task-input-tags" placeholder="qc, batch, 1kg" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
-          </div>
         </div>
 
-        <!-- Mapped Project Resources & Equipment Selection -->
-        <div class="pt-2 border-t border-slate-200 dark:border-slate-700">
-          <div class="flex items-center justify-between mb-1.5">
-            <span class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan-500"></i>
-              <span>Mapped Project Resources & Equipment</span>
-            </span>
-            <span class="text-[10px] text-slate-400">Attach mapped resources to this activity</span>
-          </div>
-          <div id="task-modal-resources-container" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-700">
-            <!-- Populated dynamically with selectable resource chips -->
-          </div>
-        </div>
+        <!-- Advanced Options Toggle -->
+        <button type="button" id="task-advanced-toggle-btn" onclick="app.toggleTaskAdvancedOptions()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-between transition cursor-pointer">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="sliders" class="w-3.5 h-3.5 text-blue-500"></i>
+            <span>Advanced Options (Description, Hours, Resources, Checklist)</span>
+          </span>
+          <i id="task-advanced-toggle-icon" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
+        </button>
 
-        <div class="pt-2 border-t border-slate-200 dark:border-slate-700">
-          <div class="flex items-center justify-between mb-2">
-            <span class="font-bold text-slate-700 dark:text-slate-300">Subtask Checklist</span>
-            <span id="subtask-progress-count" class="text-[11px] text-slate-400 font-semibold">0 / 0</span>
+        <!-- Advanced Options Collapsible Container -->
+        <div id="task-advanced-options-container" class="hidden space-y-4 pt-1">
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+            <textarea id="task-input-description" rows="3" placeholder="Provide background context, technical specifications, or requirements..."
+              class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white"></textarea>
           </div>
 
-          <div id="subtasks-container" class="space-y-1.5 mb-2.5"></div>
+          <!-- Sequential Position in Process -->
+          <div id="task-position-wrapper">
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+              <span class="flex items-center space-x-1.5">
+                <i data-lucide="list-ordered" class="w-3.5 h-3.5 text-blue-500"></i>
+                <span>Sequence / Position in Project</span>
+              </span>
+              <span class="text-[10px] text-slate-400 font-normal">Insert between activities</span>
+            </label>
+            <select id="task-input-position"
+              class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white font-medium">
+              <option value="end">At the end of the project (default)</option>
+              <option value="start">At the very beginning (Before #01)</option>
+            </select>
+          </div>
 
-          <div class="flex space-x-2">
-            <input type="text" id="new-subtask-input" placeholder="Add a checklist item... (Press Enter)"
-              onkeydown="if(event.key==='Enter') { event.preventDefault(); app.handleAddSubtask(); }"
-              class="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
-            <button type="button" onclick="app.handleAddSubtask()" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg font-semibold text-slate-700 dark:text-slate-200">
-              Add
-            </button>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Est. Hours</label>
+              <input type="number" step="0.5" id="task-input-esthours" placeholder="0.0" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Act. Hours</label>
+              <input type="number" step="0.5" id="task-input-acthours" placeholder="0.0" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white font-mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tags</label>
+              <input type="text" id="task-input-tags" placeholder="qc, batch, 1kg" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+            </div>
+          </div>
+
+          <!-- Mapped Project Resources & Equipment Selection -->
+          <div class="pt-2 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan-500"></i>
+                <span>Mapped Project Resources & Equipment</span>
+              </span>
+              <span class="text-[10px] text-slate-400">Attach mapped resources to this activity</span>
+            </div>
+            <div id="task-modal-resources-container" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-700">
+              <!-- Populated dynamically with selectable resource chips -->
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-bold text-slate-700 dark:text-slate-300">Subtask Checklist</span>
+              <span id="subtask-progress-count" class="text-[11px] text-slate-400 font-semibold">0 / 0</span>
+            </div>
+
+            <div id="subtasks-container" class="space-y-1.5 mb-2.5"></div>
+
+            <div class="flex space-x-2">
+              <input type="text" id="new-subtask-input" placeholder="Add a checklist item... (Press Enter)"
+                onkeydown="if(event.key==='Enter') { event.preventDefault(); app.handleAddSubtask(); }"
+                class="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <button type="button" onclick="app.handleAddSubtask()" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg font-semibold text-slate-700 dark:text-slate-200">
+                Add
+              </button>
+            </div>
           </div>
         </div>
 
@@ -4164,6 +4223,52 @@
       <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-700">
         <button onclick="app.closeDeliverableModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg cursor-pointer">Cancel</button>
         <button onclick="app.handleSaveDeliverable()" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm cursor-pointer">Save Deliverable</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELIVERABLE DETAILS MODAL -->
+  <div id="deliverable-details-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <!-- Header -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/70 dark:bg-slate-850">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
+            <i data-lucide="package" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span id="deliv-details-badge" class="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">Deliverable</span>
+              <span id="deliv-details-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">Pending</span>
+            </div>
+            <h3 id="deliv-details-title" class="text-base font-extrabold text-slate-800 dark:text-white mt-0.5">Deliverable Title</h3>
+          </div>
+        </div>
+        <button onclick="app.closeDeliverableDetailsModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div id="deliv-details-body" class="p-6 overflow-y-auto space-y-5 text-xs flex-1">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Footer -->
+      <div class="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <button id="deliv-details-delete-btn" type="button" class="text-rose-600 hover:text-rose-700 text-xs font-semibold flex items-center space-x-1 cursor-pointer">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete Deliverable</span>
+        </button>
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="app.closeDeliverableDetailsModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer">
+            Close
+          </button>
+          <button id="deliv-details-edit-btn" type="button" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition flex items-center space-x-1.5 cursor-pointer">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+            <span>Edit Details</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

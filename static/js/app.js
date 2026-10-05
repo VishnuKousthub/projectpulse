@@ -1693,13 +1693,94 @@ const app = {
     this.initLucide();
   },
 
+  handleDeliverablesFilter() {
+    this.renderDeliverables();
+  },
+
   renderDeliverables() {
     const p = this.state.currentProject;
     const container = document.getElementById('deliverables-container-list');
-    if (!container || !p) return;
+    const statsRow = document.getElementById('deliverables-stats-row');
+    if (!p) return;
 
-    const deliverables = p.deliverables || [];
-    if (deliverables.length === 0) {
+    const allDeliverables = p.deliverables || [];
+    const allTasks = this.state.tasks || [];
+
+    // 1. Render Deliverables KPI Summary Row
+    if (statsRow) {
+      const totalCount = allDeliverables.length;
+      const completedCount = allDeliverables.filter(d => d.status === 'completed').length;
+      const inProgressCount = allDeliverables.filter(d => d.status === 'in_progress').length;
+      const linkedTasksCount = allTasks.filter(t => t.deliverable_id).length;
+      const pctAchieved = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+      statsRow.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Deliverables</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${totalCount}</div>
+            <div class="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">Key Output Packages</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <i data-lucide="package" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">In Progress</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${inProgressCount}</div>
+            <div class="text-[11px] font-medium text-blue-600 dark:text-blue-400">Active Workstreams</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+            <i data-lucide="activity" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Completed</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${completedCount} <span class="text-xs font-semibold text-slate-400">(${pctAchieved}%)</span></div>
+            <div class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Achieved Output</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Linked Activities</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${linkedTasksCount}</div>
+            <div class="text-[11px] font-medium text-purple-600 dark:text-purple-400">Connected Tasks</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <i data-lucide="check-square" class="w-5 h-5"></i>
+          </div>
+        </div>
+      `;
+    }
+
+    if (!container) return;
+
+    // 2. Apply Filters (Search query & Status dropdown)
+    const searchInput = document.getElementById('deliverables-search-input');
+    const statusFilter = document.getElementById('deliverables-status-filter');
+    const query = (searchInput?.value || '').trim().toLowerCase();
+    const statusVal = statusFilter?.value || '';
+
+    const filtered = allDeliverables.filter(d => {
+      if (statusVal && (d.status || 'pending').toLowerCase() !== statusVal.toLowerCase()) return false;
+      if (query) {
+        const titleMatch = (d.title || '').toLowerCase().includes(query);
+        const descMatch = (d.description || '').toLowerCase().includes(query);
+        const ownerMatch = (d.owner_name || '').toLowerCase().includes(query);
+        if (!titleMatch && !descMatch && !ownerMatch) return false;
+      }
+      return true;
+    });
+
+    if (allDeliverables.length === 0) {
       container.innerHTML = `
         <div class="bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-3">
           <div class="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
@@ -1718,77 +1799,249 @@ const app = {
       return;
     }
 
-    container.innerHTML = deliverables.map(d => {
-      const dTasks = (this.state.tasks || []).filter(t => t.deliverable_id === d.id);
-      const completedCount = dTasks.filter(t => t.status === 'done').length;
-      const pct = dTasks.length > 0 ? Math.round((completedCount / dTasks.length) * 100) : (d.status === 'completed' ? 100 : 0);
-
-      const statusBadge = `
-        <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-          d.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
-          d.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200' :
-          d.status === 'delayed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
-          'bg-slate-100 text-slate-600 dark:bg-slate-750 dark:text-slate-300 border border-slate-200'
-        }">${this.escapeHtml(d.status || 'pending')}</span>
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-2">
+          <p class="text-xs text-slate-400">No deliverables match the selected filter criteria.</p>
+          <button onclick="document.getElementById('deliverables-search-input').value=''; document.getElementById('deliverables-status-filter').value=''; app.renderDeliverables();" class="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+            Reset Filters
+          </button>
+        </div>
       `;
+      this.initLucide();
+      return;
+    }
 
-      return `
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
-          <!-- Card Header -->
-          <div class="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700/60">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center space-x-2.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                <h3 class="text-sm sm:text-base font-bold text-slate-800 dark:text-white truncate">${this.escapeHtml(d.title)}</h3>
-                ${statusBadge}
-              </div>
-              ${d.description ? `<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">${this.escapeHtml(d.description)}</p>` : ''}
-              <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 mt-2">
-                <span>Target: <strong class="text-slate-600 dark:text-slate-300 font-semibold">${d.due_date || 'No Target Date'}</strong></span>
-                <span>•</span>
-                <span>${dTasks.length} Linked Activities (${completedCount} completed)</span>
-              </div>
-            </div>
+    // 3. Render Deliverables Project-Level Table
+    container.innerHTML = `
+      <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50/75 dark:bg-slate-850 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <th class="py-3 px-4">Deliverable</th>
+                <th class="py-3 px-4">Owner / Lead</th>
+                <th class="py-3 px-4">Target Date</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 min-w-[140px]">Progress</th>
+                <th class="py-3 px-4">Activities</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-750">
+              ${filtered.map(d => {
+                const dTasks = allTasks.filter(t => t.deliverable_id === d.id);
+                const completedCount = dTasks.filter(t => t.status === 'done').length;
+                const pct = dTasks.length > 0 ? Math.round((completedCount / dTasks.length) * 100) : (d.status === 'completed' ? 100 : 0);
+                const ownerName = d.owner_name || p.manager_name || 'Unassigned';
 
-            <!-- Actions -->
-            <div class="flex items-center space-x-2 flex-shrink-0 self-end sm:self-center">
-              <button onclick="app.openTaskModal({ deliverable_id: ${d.id} })" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 text-xs font-semibold rounded-lg flex items-center space-x-1 cursor-pointer" title="Add activity under this deliverable">
-                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                <span class="hidden sm:inline">Add Activity</span>
-              </button>
-              <button onclick="app.openDeliverableModal(${d.id})" class="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg cursor-pointer" title="Edit Deliverable">
-                <i data-lucide="edit-2" class="w-4 h-4"></i>
-              </button>
-              <button onclick="app.deleteDeliverable(${d.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer" title="Delete Deliverable">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-              </button>
-              <button onclick="app.toggleDeliverableAccordion(${d.id})" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg cursor-pointer" title="Toggle linked activities">
-                <i id="deliv-chevron-${d.id}" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
-              </button>
-            </div>
+                const statusBadge = `
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    d.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60' :
+                    d.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60' :
+                    d.status === 'delayed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60' :
+                    'bg-slate-100 text-slate-600 dark:bg-slate-750 dark:text-slate-300 border border-slate-200 dark:border-slate-600'
+                  }">${this.escapeHtml(d.status || 'pending')}</span>
+                `;
+
+                return `
+                  <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition group cursor-pointer" onclick="app.openDeliverableDetailsModal(${d.id})">
+                    <!-- Deliverable -->
+                    <td class="py-3 px-4">
+                      <div class="flex items-start space-x-2.5">
+                        <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                        </div>
+                        <div class="min-w-0">
+                          <div class="font-bold text-slate-800 dark:text-white group-hover:text-blue-600 transition truncate max-w-xs sm:max-w-md">${this.escapeHtml(d.title)}</div>
+                          ${d.description ? `<p class="text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-xs sm:max-w-md mt-0.5">${this.escapeHtml(d.description)}</p>` : ''}
+                        </div>
+                      </div>
+                    </td>
+
+                    <!-- Owner / Lead -->
+                    <td class="py-3 px-4 whitespace-nowrap">
+                      <div class="flex items-center space-x-1.5">
+                        <span class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold flex items-center justify-center">
+                          ${this.escapeHtml((ownerName || 'U').charAt(0).toUpperCase())}
+                        </span>
+                        <span class="font-medium text-slate-700 dark:text-slate-300">${this.escapeHtml(ownerName)}</span>
+                      </div>
+                    </td>
+
+                    <!-- Due Date -->
+                    <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+                      ${d.due_date ? `
+                        <div class="flex items-center space-x-1.5">
+                          <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400"></i>
+                          <span>${d.due_date}</span>
+                        </div>
+                      ` : '<span class="text-slate-400 italic">No Target Date</span>'}
+                    </td>
+
+                    <!-- Status -->
+                    <td class="py-3 px-4 whitespace-nowrap">
+                      ${statusBadge}
+                    </td>
+
+                    <!-- Progress -->
+                    <td class="py-3 px-4">
+                      <div class="space-y-1">
+                        <div class="flex items-center justify-between text-[10px] font-bold">
+                          <span class="text-indigo-600 dark:text-indigo-400">${pct}%</span>
+                          <span class="text-slate-400 font-normal">${completedCount}/${dTasks.length}</span>
+                        </div>
+                        <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <!-- Activities Count -->
+                    <td class="py-3 px-4 whitespace-nowrap">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                        ${dTasks.length} ${dTasks.length === 1 ? 'activity' : 'activities'}
+                      </span>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="py-3 px-4 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                      <div class="flex items-center justify-end space-x-1">
+                        <button onclick="app.openDeliverableDetailsModal(${d.id})" class="px-2 py-1 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 text-[11px] font-semibold rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="View details">
+                          Details
+                        </button>
+                        <button onclick="app.openTaskModal({ deliverable_id: ${d.id} })" class="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 transition" title="Add activity under this deliverable">
+                          <i data-lucide="plus" class="w-4 h-4 text-blue-500"></i>
+                        </button>
+                        <button onclick="app.openDeliverableModal(${d.id})" class="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Edit Deliverable">
+                          <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="app.deleteDeliverable(${d.id})" class="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="Delete Deliverable">
+                          <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    this.initLucide();
+  },
+
+  openDeliverableDetailsModal(id) {
+    const p = this.state.currentProject;
+    if (!p) return;
+    const d = (p.deliverables || []).find(item => item.id === Number(id));
+    if (!d) return;
+
+    const modal = document.getElementById('deliverable-details-modal');
+    const titleEl = document.getElementById('deliv-details-title');
+    const statusBadgeEl = document.getElementById('deliv-details-status-badge');
+    const bodyEl = document.getElementById('deliv-details-body');
+    const editBtn = document.getElementById('deliv-details-edit-btn');
+    const deleteBtn = document.getElementById('deliv-details-delete-btn');
+    if (!modal || !bodyEl) return;
+
+    if (titleEl) titleEl.textContent = d.title || 'Deliverable Details';
+    if (statusBadgeEl) {
+      statusBadgeEl.textContent = d.status || 'pending';
+      statusBadgeEl.className = `px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+        d.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' :
+        d.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
+        d.status === 'delayed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' :
+        'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+      }`;
+    }
+
+    // Related Tasks & Timeline Span Calculation
+    const dTasks = (this.state.tasks || []).filter(t => t.deliverable_id === d.id);
+    const completedTasks = dTasks.filter(t => t.status === 'done').length;
+    const pct = dTasks.length > 0 ? Math.round((completedTasks / dTasks.length) * 100) : (d.status === 'completed' ? 100 : 0);
+
+    let earliestStart = null;
+    let latestDue = null;
+    dTasks.forEach(t => {
+      if (t.start_date && (!earliestStart || t.start_date < earliestStart)) earliestStart = t.start_date;
+      if (t.due_date && (!latestDue || t.due_date > latestDue)) latestDue = t.due_date;
+    });
+
+    const dMilestones = (p.milestones || []).filter(m => m.deliverable_id === d.id);
+
+    bodyEl.innerHTML = `
+      <!-- Metadata & Timeline Span Summary Card -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 dark:bg-slate-900/70 rounded-xl border border-slate-200 dark:border-slate-700/80">
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Completion Date</div>
+          <div class="font-bold text-slate-800 dark:text-white mt-0.5 flex items-center gap-1.5">
+            <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-500"></i>
+            <span>${d.due_date || 'No Target Declared'}</span>
           </div>
-
-          <!-- Progress bar -->
-          <div class="px-4 sm:px-5 py-2.5 bg-slate-50/70 dark:bg-slate-900/40 flex items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700/60 text-xs">
-            <span class="font-semibold text-slate-600 dark:text-slate-300">Rollup Completion</span>
-            <div class="flex items-center space-x-3 flex-1 max-w-md">
-              <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
-              </div>
-              <span class="font-extrabold text-indigo-600 dark:text-indigo-400 w-10 text-right">${pct}%</span>
-            </div>
+        </div>
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Calculated Task Timeline Span</div>
+          <div class="font-bold text-slate-800 dark:text-white mt-0.5 flex items-center gap-1.5">
+            <i data-lucide="clock" class="w-3.5 h-3.5 text-blue-500"></i>
+            <span>${earliestStart || 'TBD'} → ${latestDue || 'TBD'}</span>
           </div>
+        </div>
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Responsible Owner / Lead</div>
+          <div class="font-bold text-slate-800 dark:text-white mt-0.5 flex items-center gap-1.5">
+            <i data-lucide="user" class="w-3.5 h-3.5 text-emerald-500"></i>
+            <span>${this.escapeHtml(d.owner_name || p.manager_name || 'Project Manager')}</span>
+          </div>
+        </div>
+      </div>
 
-          <!-- Linked Activities Accordion -->
-          <div id="deliv-tasks-${d.id}" class="p-4 sm:p-5 space-y-2 bg-slate-50/40 dark:bg-slate-900/20">
-            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Activities Under This Deliverable</div>
-            ${dTasks.length === 0 ? `
-              <div class="text-xs text-slate-400 italic py-2">No activities linked yet. Click "+ Add Activity" above to attach an execution work item.</div>
-            ` : dTasks.map(t => `
+      ${d.description ? `
+        <div class="space-y-1">
+          <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Scope / Description</div>
+          <div class="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 leading-relaxed text-xs">
+            ${this.escapeHtml(d.description)}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Rollup Progress -->
+      <div class="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+        <div class="flex items-center justify-between text-xs font-bold">
+          <span class="text-slate-700 dark:text-slate-300">Rollup Completion</span>
+          <span class="text-indigo-600 dark:text-indigo-400 font-extrabold">${pct}% (${completedTasks} of ${dTasks.length} activities completed)</span>
+        </div>
+        <div class="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+          <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+        </div>
+      </div>
+
+      <!-- Connected Activities Section -->
+      <div class="space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="list-checks" class="w-4 h-4 text-blue-500"></i>
+            <h4 class="font-bold text-slate-800 dark:text-white text-xs">Connected Activities & Tasks (${dTasks.length})</h4>
+          </div>
+          <button type="button" onclick="app.closeDeliverableDetailsModal(); app.openTaskModal({ deliverable_id: ${d.id} });" class="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Activity</span>
+          </button>
+        </div>
+
+        ${dTasks.length === 0 ? `
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-center text-slate-400 italic text-xs">
+            No activities currently linked to this deliverable.
+          </div>
+        ` : `
+          <div class="space-y-1.5 max-h-56 overflow-y-auto">
+            ${dTasks.map(t => `
               <div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 hover:shadow-2xs transition">
                 <div class="flex items-center space-x-2.5 min-w-0 flex-1">
-                  <input type="checkbox" ${t.status === 'done' ? 'checked' : ''} onchange="app.quickToggleTaskDone(${t.id}, '${t.status}')" class="rounded text-blue-600 focus:ring-0 cursor-pointer">
-                  <span onclick="app.openTaskModal(${t.id})" class="text-xs font-semibold text-slate-800 dark:text-white hover:text-blue-600 truncate cursor-pointer ${t.status === 'done' ? 'line-through opacity-60' : ''}">
+                  <input type="checkbox" ${t.status === 'done' ? 'checked' : ''} onchange="app.quickToggleTaskDone(${t.id}, '${t.status}'); setTimeout(() => app.openDeliverableDetailsModal(${d.id}), 300);" class="rounded text-blue-600 focus:ring-0 cursor-pointer">
+                  <span onclick="app.closeDeliverableDetailsModal(); app.openTaskModal({id: ${t.id}});" class="text-xs font-semibold text-slate-800 dark:text-white hover:text-blue-600 truncate cursor-pointer ${t.status === 'done' ? 'line-through opacity-60' : ''}">
                     ${this.escapeHtml(t.title)}
                   </span>
                 </div>
@@ -1798,17 +2051,61 @@ const app = {
                     t.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
                     'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
                   }">${this.escapeHtml(t.status)}</span>
-                  ${t.due_date ? `<span class="text-slate-400 font-medium">${t.due_date}</span>` : ''}
+                  ${t.due_date ? `<span class="text-slate-400 font-medium font-mono">${t.due_date}</span>` : ''}
                   ${t.assignee_name ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium truncate max-w-[80px]">${this.escapeHtml(t.assignee_name)}</span>` : ''}
                 </div>
               </div>
             `).join('')}
           </div>
-        </div>
-      `;
-    }).join('');
+        `}
+      </div>
 
+      <!-- Connected Milestones Section -->
+      ${dMilestones.length > 0 ? `
+        <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="flag" class="w-4 h-4 text-purple-500"></i>
+            <h4 class="font-bold text-slate-800 dark:text-white text-xs">Linked Milestones (${dMilestones.length})</h4>
+          </div>
+          <div class="space-y-1.5">
+            ${dMilestones.map(m => `
+              <div class="p-2 rounded-lg bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 flex items-center justify-between text-xs">
+                <div class="flex items-center space-x-2">
+                  <span class="text-purple-600 font-bold">◆</span>
+                  <span class="font-semibold text-slate-800 dark:text-white">${this.escapeHtml(m.title)}</span>
+                </div>
+                <div class="flex items-center space-x-2 text-[10px]">
+                  <span class="text-slate-400 font-mono">${m.due_date || 'TBD'}</span>
+                  <span class="px-2 py-0.5 rounded font-bold uppercase ${m.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${m.status || 'pending'}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    if (editBtn) {
+      editBtn.onclick = () => {
+        this.closeDeliverableDetailsModal();
+        this.openDeliverableModal(d.id);
+      };
+    }
+
+    if (deleteBtn) {
+      deleteBtn.onclick = async () => {
+        this.closeDeliverableDetailsModal();
+        await this.deleteDeliverable(d.id);
+      };
+    }
+
+    modal.classList.remove('hidden');
     this.initLucide();
+  },
+
+  closeDeliverableDetailsModal() {
+    const modal = document.getElementById('deliverable-details-modal');
+    if (modal) modal.classList.add('hidden');
   },
 
   toggleDeliverableAccordion(delivId) {
@@ -1822,13 +2119,75 @@ const app = {
     }
   },
 
+  handleMilestonesFilter() {
+    this.renderMilestones();
+  },
+
   renderMilestones() {
     const p = this.state.currentProject;
     const container = document.getElementById('milestones-container-list');
-    if (!container || !p) return;
+    const statsRow = document.getElementById('milestones-stats-row');
+    if (!p) return;
 
-    const milestones = p.milestones || [];
-    if (milestones.length === 0) {
+    const allMilestones = p.milestones || [];
+
+    // 1. Render Milestones KPI Summary Row
+    if (statsRow) {
+      const totalCount = allMilestones.length;
+      const completedCount = allMilestones.filter(m => m.status === 'completed').length;
+      const pendingCount = allMilestones.filter(m => m.status !== 'completed').length;
+      const pctDone = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+      statsRow.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Milestones</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${totalCount}</div>
+            <div class="text-[11px] font-medium text-purple-600 dark:text-purple-400">Schedule Checkpoints</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <i data-lucide="flag" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Achieved / Completed</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${completedCount} <span class="text-xs font-semibold text-slate-400">(${pctDone}%)</span></div>
+            <div class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Checkpoints Reached</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Upcoming / Pending</div>
+            <div class="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">${pendingCount}</div>
+            <div class="text-[11px] font-medium text-amber-600 dark:text-amber-400">Pending Gate Reviews</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+          </div>
+        </div>
+      `;
+    }
+
+    if (!container) return;
+
+    // 2. Apply Status Filter
+    const filterSelect = document.getElementById('milestones-status-filter');
+    const filterVal = filterSelect?.value || '';
+
+    const filtered = allMilestones.filter(m => {
+      if (!filterVal) return true;
+      if (filterVal === 'completed') return m.status === 'completed';
+      if (filterVal === 'pending') return m.status !== 'completed';
+      return true;
+    });
+
+    if (allMilestones.length === 0) {
       container.innerHTML = `
         <div class="bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-3">
           <div class="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
@@ -1847,42 +2206,104 @@ const app = {
       return;
     }
 
-    container.innerHTML = milestones.map(m => {
-      const isDone = m.status === 'completed';
-      return `
-        <div class="bg-white dark:bg-slate-800 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between gap-4 hover:border-purple-300 dark:hover:border-purple-800 transition">
-          <div class="flex items-start space-x-3.5 min-w-0 flex-1">
-            <button onclick="app.toggleMilestoneStatus(${m.id})" class="mt-0.5 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition ${
-              isDone ? 'bg-emerald-500 text-white' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-purple-500 text-transparent'
-            }" title="Click to toggle completion status">
-              <i data-lucide="check" class="w-3.5 h-3.5"></i>
-            </button>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center space-x-2">
-                <h4 class="text-sm font-bold text-slate-800 dark:text-white truncate ${isDone ? 'line-through opacity-70' : ''}">${this.escapeHtml(m.title)}</h4>
-                ${m.deliverable_title ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 truncate max-w-[150px]">${this.escapeHtml(m.deliverable_title)}</span>` : ''}
-              </div>
-              ${m.description ? `<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${this.escapeHtml(m.description)}</p>` : ''}
-              <div class="flex items-center space-x-2 text-[11px] text-slate-400 mt-1.5">
-                <i data-lucide="calendar" class="w-3 h-3 text-purple-500"></i>
-                <span class="font-semibold text-slate-600 dark:text-slate-300">Target Date: ${m.due_date || 'TBD'}</span>
-                <span>•</span>
-                <span class="uppercase font-bold ${isDone ? 'text-emerald-600' : 'text-amber-600'}">${m.status || 'pending'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex items-center space-x-1 flex-shrink-0">
-            <button onclick="app.openMilestoneModal(${m.id})" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer" title="Edit Milestone">
-              <i data-lucide="edit-2" class="w-4 h-4"></i>
-            </button>
-            <button onclick="app.deleteMilestone(${m.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer" title="Delete Milestone">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </div>
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 rounded-xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-2">
+          <p class="text-xs text-slate-400">No milestones match the selected checkpoint filter.</p>
+          <button onclick="document.getElementById('milestones-status-filter').value=''; app.renderMilestones();" class="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+            Reset Filter
+          </button>
         </div>
       `;
-    }).join('');
+      this.initLucide();
+      return;
+    }
+
+    // Sort chronological by due_date
+    const sorted = [...filtered].sort((a, b) => {
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
+
+    // 3. Render Milestones Table / Checkpoint List
+    container.innerHTML = `
+      <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50/75 dark:bg-slate-850 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <th class="py-3 px-4 w-12 text-center">Status</th>
+                <th class="py-3 px-4">Milestone Checkpoint</th>
+                <th class="py-3 px-4">Target Date</th>
+                <th class="py-3 px-4">Linked Deliverable</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-750">
+              ${sorted.map(m => {
+                const isDone = m.status === 'completed';
+                return `
+                  <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition group">
+                    <!-- Toggle Status Button -->
+                    <td class="py-3 px-4 text-center">
+                      <button onclick="app.toggleMilestoneStatus(${m.id})" class="w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition mx-auto ${
+                        isDone ? 'bg-emerald-500 text-white shadow-2xs' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-purple-500 text-transparent'
+                      }" title="Click to toggle achievement">
+                        <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                      </button>
+                    </td>
+
+                    <!-- Milestone Title & Description -->
+                    <td class="py-3 px-4">
+                      <div class="flex items-start space-x-2.5">
+                        <span class="text-base leading-none mt-0.5 ${isDone ? 'text-emerald-500' : 'text-purple-600 dark:text-purple-400'} font-bold">◆</span>
+                        <div class="min-w-0">
+                          <div class="font-bold text-slate-800 dark:text-white ${isDone ? 'line-through opacity-70' : ''}">${this.escapeHtml(m.title)}</div>
+                          ${m.description ? `<p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-2">${this.escapeHtml(m.description)}</p>` : ''}
+                        </div>
+                      </div>
+                    </td>
+
+                    <!-- Target Date -->
+                    <td class="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+                      ${m.due_date ? `
+                        <div class="flex items-center space-x-1.5 font-bold ${isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-200'}">
+                          <i data-lucide="calendar" class="w-3.5 h-3.5 text-purple-500"></i>
+                          <span>${m.due_date}</span>
+                        </div>
+                      ` : '<span class="text-slate-400 italic">No Target Date</span>'}
+                    </td>
+
+                    <!-- Linked Deliverable -->
+                    <td class="py-3 px-4 whitespace-nowrap">
+                      ${m.deliverable_title ? `
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 max-w-[180px] truncate">
+                          <i data-lucide="package" class="w-3 h-3 mr-1 text-indigo-500 flex-shrink-0"></i>
+                          <span class="truncate">${this.escapeHtml(m.deliverable_title)}</span>
+                        </span>
+                      ` : '<span class="text-slate-400 text-[11px]">—</span>'}
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="py-3 px-4 text-right whitespace-nowrap">
+                      <div class="flex items-center justify-end space-x-1">
+                        <button onclick="app.openMilestoneModal(${m.id})" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer" title="Edit Milestone">
+                          <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="app.deleteMilestone(${m.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer" title="Delete Milestone">
+                          <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
 
     this.initLucide();
   },
@@ -2324,7 +2745,7 @@ const app = {
     const titleEl = document.getElementById('deliverable-modal-title');
 
     if (id) {
-      const d = (this.state.currentProject?.deliverables || []).find(item => item.id === id);
+      const d = (this.state.currentProject?.deliverables || []).find(item => Number(item.id) === Number(id));
       if (idInput) idInput.value = id;
       if (titleInput) titleInput.value = d?.title || '';
       if (descInput) descInput.value = d?.description || '';
@@ -2439,7 +2860,7 @@ const app = {
     }
 
     if (id) {
-      const m = (this.state.currentProject?.milestones || []).find(item => item.id === id);
+      const m = (this.state.currentProject?.milestones || []).find(item => Number(item.id) === Number(id));
       if (idInput) idInput.value = id;
       if (titleInput) titleInput.value = m?.title || '';
       if (dateInput) dateInput.value = m?.due_date || '';
@@ -3676,111 +4097,70 @@ const app = {
       const pct = (t.progress_pct !== undefined && t.progress_pct !== null) ? Number(t.progress_pct) : statusStyle.defaultProgress;
       const progressWidth = Math.min(100, Math.max(0, pct));
 
+      // Resolve linked deliverable title if present
+      const delivObj = t.deliverable_id ? this.state.currentProject?.deliverables?.find(d => d.id === t.deliverable_id) : null;
+      const delivTitle = delivObj?.title || t.deliverable_title;
+
       return `
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
           
-          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px) -->
-          <div class="w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80">
+          <!-- Left Task Info Column (Sticky Left-0: 380px) -->
+          <div class="w-[380px] flex-shrink-0 flex items-center justify-between border-r border-slate-200 dark:border-slate-700/80 px-3 py-1 sticky left-0 z-20 bg-white dark:bg-slate-800 shadow-sm">
             
-            <!-- Column 1: Title & Assignee info (260px) -->
-            <div class="w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
-              <div class="flex items-center gap-1 min-w-0">
-                ${!isProgress ? `
-                  <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
-                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
-                  </div>
-                ` : ''}
-                <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
-                ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
-                <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer group-hover:text-blue-600 dark:group-hover:text-blue-400 transition" title="Click to view/edit details">${this.escapeHtml(t.title)}</span>
-                
-                ${!isProgress ? `
-                  <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto flex-shrink-0 transition">
-                    <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'up')" title="Move Up" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === 0 ? 'invisible pointer-events-none' : ''}">
-                      <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'down')" title="Move Down" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === sortedTasks.length - 1 ? 'invisible pointer-events-none' : ''}">
-                      <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition">
-                      <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})" title="Delete Activity" class="p-0.5 text-slate-400 hover:text-rose-500 rounded transition">
-                      <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
-                    </button>
-                  </div>
-                ` : ''}
-              </div>
-              <div class="flex items-center gap-1.5 mt-0.5 text-[10px] ${!isProgress ? 'pl-5' : 'pl-0'}">
-                <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
-                <span class="text-slate-300 dark:text-slate-600">•</span>
-                <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
-              </div>
-            </div>
-
-            <!-- Column 2: Start Date Picker (115px) -->
-            <div class="w-[115px] flex-shrink-0 flex items-center justify-center">
-              ${t.start_date ? `
-                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
-                  <input type="date" value="${t.start_date}"
-                    onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)"
-                    title="Edit Start Date"
-                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
-                  <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'start_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear Start Date">
-                    <i data-lucide="x" class="w-3 h-3"></i>
-                  </button>
-                </div>
-              ` : `
-                <div class="relative w-[105px] h-7 group/gstart">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
-                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
-                    <span class="truncate">Not Declared</span>
-                  </div>
-                  <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)" title="Click to set start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-                </div>
-              `}
-            </div>
-
-            <!-- Date Arrow Separator (25px) -->
-            <div class="w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
-
-            <!-- Column 3: End Date Picker (110px) -->
-            <div class="w-[110px] flex-shrink-0 flex items-center justify-center">
-              ${t.due_date ? `
-                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
-                  <input type="date" value="${t.due_date}"
-                    onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
-                    title="Edit End / Due Date"
-                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
-                  <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
-                    <i data-lucide="x" class="w-3 h-3"></i>
-                  </button>
-                </div>
-              ` : `
-                <div class="relative w-[105px] h-7 group/gdue">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
-                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
-                    <span class="truncate">Not Declared</span>
-                  </div>
-                  <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-                </div>
-              `}
-            </div>
-
-            <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
-            <div class="w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
+            <!-- Left Info: Drag handle, #ID, Title, Deliverable badge, Assignee, Dates -->
+            <div class="flex items-center gap-2 min-w-0 flex-1 pr-2">
               ${!isProgress ? `
-                <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
-                  title="Delete Activity"
-                  class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
-                  <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
-                </button>
+                <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
+                  <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                </div>
+              ` : ''}
+              <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
+              
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer group-hover:text-blue-600 dark:group-hover:text-blue-400 transition" title="Click to view/edit details">${this.escapeHtml(t.title)}</span>
+                  ${delivTitle ? `
+                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 truncate max-w-[95px] flex-shrink-0" title="Deliverable: ${this.escapeHtml(delivTitle)}">
+                      ${this.escapeHtml(delivTitle)}
+                    </span>
+                  ` : ''}
+                </div>
+                
+                <div class="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                  <div class="flex items-center gap-1 min-w-0">
+                    ${t.assignee_name ? `
+                      <span class="w-3.5 h-3.5 rounded-full text-[8px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>
+                      <span class="text-slate-600 dark:text-slate-300 font-medium truncate max-w-[85px]">${this.escapeHtml(t.assignee_name)}</span>
+                    ` : '<span class="text-slate-400 italic">Unassigned</span>'}
+                  </div>
+                  <span>•</span>
+                  <span class="font-mono text-[9px] text-slate-500 dark:text-slate-400 truncate">
+                    ${t.start_date ? t.start_date.slice(5) + ' → ' + (t.due_date ? t.due_date.slice(5) : 'TBD') : (t.due_date ? 'Due ' + t.due_date.slice(5) : 'No Dates')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Info inside Left Column: Status Badge, Progress % and Quick Actions -->
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold ${statusBadge}">${statusStyle.name}</span>
+              <span class="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 w-8 text-right">${progressWidth}%</span>
+
+              ${!isProgress ? `
+                <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition">
+                  <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition cursor-pointer">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 text-emerald-500"></i>
+                  </button>
+                  <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})" title="Delete Activity" class="p-0.5 text-slate-400 hover:text-rose-500 rounded transition cursor-pointer">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                  </button>
+                </div>
               ` : ''}
             </div>
 
           </div>
 
-          <!-- Column 4: Right Timeline Bar Area (flex-1) with Background Grid Lines Overlay -->
+          <!-- Right Timeline Bar Area (flex-1) with Background Grid Lines Overlay -->
           <div class="flex-1 relative h-9 px-0 flex items-center bg-slate-50/30 dark:bg-slate-900/20 overflow-hidden">
             <!-- Subtle Column Grid Lines Overlay for alignment with header columns -->
             <div class="absolute inset-0 flex pointer-events-none">
@@ -3815,15 +4195,18 @@ const app = {
       `;
     }).join('');
 
-    // 4. Render Project Milestones Pins if available
+    // 4. Render Project Milestones Checkpoint Pins on Timeline
     const milestones = this.state.currentProject?.milestones || [];
     let milestoneRowHtml = '';
     if (milestones.length > 0) {
       milestoneRowHtml = `
-        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2">
-          <div class="w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700 bg-amber-50/95 dark:bg-slate-850">
-            <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
-            <span>Project Milestones</span>
+        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-purple-50/20 dark:bg-purple-950/20 py-2 min-h-[40px]">
+          <div class="w-[380px] flex-shrink-0 px-3 py-1.5 text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-purple-50/90 dark:bg-slate-850 sticky left-0 z-20 shadow-sm">
+            <div class="flex items-center space-x-1.5">
+              <span class="text-purple-600 font-bold text-sm">◆</span>
+              <span>Milestone Checkpoints</span>
+            </div>
+            <span class="text-[10px] font-bold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded-full">${milestones.length}</span>
           </div>
           <div class="flex-1 relative h-7 px-0 flex items-center">
             ${milestones.map(m => {
@@ -3831,12 +4214,14 @@ const app = {
               const mDate = new Date(m.due_date + 'T12:00:00');
               const mOffset = Math.max(0, mDate - timelineMin);
               const mLeft = Math.min(99, Math.max(0, (mOffset / totalSpanMs) * 100));
+              const isAchieved = m.status === 'completed';
               return `
-                <div class="absolute -top-1 transform -translate-x-1/2 flex items-center space-x-1 cursor-pointer bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs"
+                <div class="absolute -top-1 transform -translate-x-1/2 flex items-center space-x-1 cursor-pointer ${isAchieved ? 'bg-emerald-600' : 'bg-purple-600'} text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs hover:scale-105 transition"
                   style="left: ${mLeft}%;"
-                  title="Milestone: ${this.escapeHtml(m.title)} (Target: ${m.due_date})">
-                  <i data-lucide="flag" class="w-2.5 h-2.5"></i>
-                  <span class="truncate max-w-[100px]">${this.escapeHtml(m.title)}</span>
+                  onclick="app.openMilestoneModal(${m.id})"
+                  title="Milestone: ${this.escapeHtml(m.title)} (Target: ${m.due_date})&#10;Status: ${m.status || 'pending'} (Click to view/edit)">
+                  <span>◆</span>
+                  <span class="truncate max-w-[110px]">${this.escapeHtml(m.title)}</span>
                 </div>
               `;
             }).join('')}
@@ -3845,28 +4230,31 @@ const app = {
       `;
     }
 
-    const minTimelineWidth = 540 + (totalCols * colMinWidth);
+    const minTimelineWidth = 380 + (totalCols * colMinWidth);
 
     container.innerHTML = `
-      <div class="min-w-[${Math.max(1150, minTimelineWidth)}px]">
+      <div class="min-w-[${Math.max(1050, minTimelineWidth)}px]">
         <!-- Sticky Two-Tier Header -->
         <div class="sticky top-0 z-20 shadow-xs select-none">
           <!-- Top Tier Header (Months/Years) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-            <div class="w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-              <span>Process Activities & Schedule</span>
-              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
+            <div class="w-[380px] flex-shrink-0 py-2 px-3 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 sticky left-0 z-30 shadow-xs">
+              <div class="flex items-center space-x-1.5">
+                <i data-lucide="calendar" class="w-3.5 h-3.5 text-blue-500"></i>
+                <span>Process Activities</span>
+              </div>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">${this.state.tasks.length} total</span>
             </div>
             <div class="flex-1 flex bg-slate-100 dark:bg-slate-800">${topHeaders.join('')}</div>
           </div>
           <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
-            <div class="w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
-              <div class="w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
-              <div class="w-[115px] flex-shrink-0 text-center">Start Date</div>
-              <div class="w-[25px] flex-shrink-0 text-center"></div>
-              <div class="w-[110px] flex-shrink-0 text-center">End Date</div>
-              <div class="w-[30px] flex-shrink-0 text-center"></div>
+            <div class="w-[380px] flex-shrink-0 py-1.5 px-3 flex items-center justify-between border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 dark:bg-slate-850 sticky left-0 z-30 shadow-xs">
+              <div>Activity / Owner / Dates</div>
+              <div class="flex items-center space-x-4 pr-1">
+                <span>Status</span>
+                <span>Prog.</span>
+              </div>
             </div>
             <div class="flex-1 flex bg-slate-50 dark:bg-slate-850">${bottomHeaders.join('')}</div>
           </div>
@@ -5736,6 +6124,21 @@ const app = {
     }
   },
 
+  toggleTaskAdvancedOptions(forceOpen = null) {
+    const container = document.getElementById('task-advanced-options-container');
+    const icon = document.getElementById('task-advanced-toggle-icon');
+    if (!container) return;
+    const isHidden = container.classList.contains('hidden');
+    const shouldOpen = forceOpen !== null ? forceOpen : isHidden;
+    if (shouldOpen) {
+      container.classList.remove('hidden');
+      if (icon) icon.classList.add('rotate-180');
+    } else {
+      container.classList.add('hidden');
+      if (icon) icon.classList.remove('rotate-180');
+    }
+  },
+
   async openTaskModal(params = {}) {
     if (this.isProgressOnly() && !params.id) {
       this.showToast('Activity creation is restricted to Project Manager and Admin.', 'warning');
@@ -5868,6 +6271,20 @@ const app = {
         if (delivSelectLocal) delivSelectLocal.value = localTask.deliverable_id ? String(localTask.deliverable_id) : '';
         this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
         this.renderTaskModalResourceChips(localTask.resources || []);
+
+        // Expand advanced section if detailed data exists
+        const hasAdvancedData = Boolean(
+          (localTask.description && localTask.description.trim()) ||
+          (localTask.estimated_hours && Number(localTask.estimated_hours) > 0) ||
+          (localTask.actual_hours && Number(localTask.actual_hours) > 0) ||
+          (localTask.tags && localTask.tags.length > 0) ||
+          (localTask.resources && localTask.resources.length > 0) ||
+          (localTask.subtasks_list && localTask.subtasks_list.length > 0) ||
+          (localTask.subtasks && localTask.subtasks.length > 0)
+        );
+        this.toggleTaskAdvancedOptions(hasAdvancedData);
+      } else {
+        this.toggleTaskAdvancedOptions(false);
       }
 
       this.updateTaskAssigneeDeleteBtnVisibility();
@@ -5917,6 +6334,10 @@ const app = {
           this.renderTaskModalResourceChips(task.resources || []);
           this.updateTaskAssigneeDeleteBtnVisibility();
           this.updateTaskModalDateBadges();
+
+          if (task.description || (task.subtasks && task.subtasks.length > 0) || (task.resources && task.resources.length > 0)) {
+            this.toggleTaskAdvancedOptions(true);
+          }
         }
       } catch (e) {
         console.error('Failed to load subtask details for modal:', e);
@@ -5952,6 +6373,9 @@ const app = {
       const delivSelectNew = document.getElementById('task-input-deliverable');
       if (delivSelectNew) delivSelectNew.value = params.deliverable_id ? String(params.deliverable_id) : '';
       this.renderTaskModalResourceChips([]);
+
+      // Collapse advanced options by default for new task
+      this.toggleTaskAdvancedOptions(false);
 
       if (params.insert_after_id && posSelect) {
         posSelect.value = `after_${params.insert_after_id}`;
