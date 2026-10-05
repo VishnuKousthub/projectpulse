@@ -372,7 +372,14 @@ const app = {
       </option>
     `).join('');
 
-    select.onchange = (e) => this.selectProject(Number(e.target.value));
+    select.onchange = (e) => {
+      const pid = Number(e.target.value);
+      if (this.state.activeView === 'projects') {
+        this.openProjectFromDirectory(pid);
+      } else {
+        this.selectProject(pid);
+      }
+    };
 
     // Update active project color dot indicator
     const current = (this.state.projects || []).find(p => Number(p.id) === Number(this.state.currentProjectId)) || this.state.currentProject;
@@ -391,7 +398,7 @@ const app = {
     if (!container) return;
     container.innerHTML = this.state.projects.map(p => `
       <div class="group/p flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${Number(p.id) === Number(this.state.currentProjectId) ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'}">
-        <button onclick="app.selectProject(${p.id})" class="flex items-center space-x-2 truncate flex-1 text-left min-w-0">
+        <button onclick="app.openProjectFromDirectory(${p.id})" class="flex items-center space-x-2 truncate flex-1 text-left min-w-0">
           <span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${p.color || '#3B82F6'}"></span>
           <span class="truncate">${this.escapeHtml(p.name)}</span>
         </button>
@@ -740,6 +747,10 @@ const app = {
     this.state.activeSubView = sub;
     this.state.activeView = (sub === 'project' || sub === 'library') ? 'resources' : sub;
 
+    // Unhide project tabs bar when entering any project view
+    const tabsBar = document.getElementById('project-tabs-bar');
+    if (tabsBar) tabsBar.classList.remove('hidden');
+
     // 1. Update Primary Tab button active classes
     document.querySelectorAll('#primary-project-tabs .project-tab').forEach(btn => {
       btn.classList.remove('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
@@ -846,8 +857,324 @@ const app = {
   },
 
   switchView(viewName) {
+    if (viewName === 'projects') {
+      this.switchProjectsView();
+      return;
+    }
     const primary = this._subViewToPrimary[viewName] || 'overview';
     this.switchPrimaryTab(primary, viewName);
+  },
+
+  switchProjectsView() {
+    this.state.activeView = 'projects';
+    this.state.activePrimaryTab = null;
+    this.state.activeSubView = null;
+
+    // 1. Hide all view panels and display projects directory container
+    document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
+    const projectsPanel = document.getElementById('view-projects-container');
+    if (projectsPanel) projectsPanel.classList.remove('hidden');
+
+    // 2. Hide project tab strip and secondary subnav since we are in global directory scope
+    const tabsBar = document.getElementById('project-tabs-bar');
+    if (tabsBar) tabsBar.classList.add('hidden');
+    const subnavBar = document.getElementById('secondary-subnav-bar');
+    if (subnavBar) subnavBar.classList.add('hidden');
+
+    // 3. Clear active tabs in primary strip
+    document.querySelectorAll('#primary-project-tabs .project-tab').forEach(btn => {
+      btn.classList.remove('bg-blue-50', 'text-blue-600', 'dark:bg-blue-950/60', 'dark:text-blue-400', 'border', 'border-blue-200', 'dark:border-blue-800/60', 'shadow-2xs');
+      btn.classList.add('text-slate-600', 'dark:text-slate-300');
+    });
+
+    // 4. Update Sidebar Active Item Highlighting
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.classList.remove('bg-blue-600', 'text-white', 'font-semibold', 'shadow-xs');
+      btn.classList.add('text-slate-300');
+    });
+    const navProj = document.getElementById('nav-projects');
+    if (navProj) {
+      navProj.classList.add('bg-blue-600', 'text-white', 'font-semibold', 'shadow-xs');
+      navProj.classList.remove('text-slate-300');
+    }
+
+    // 5. Update View Title
+    const vTitle = document.getElementById('view-title');
+    if (vTitle) vTitle.textContent = 'Projects Directory';
+
+    // 6. Render the projects view
+    this.renderProjectsView();
+    this.initLucide();
+  },
+
+  async openProjectFromDirectory(projectId) {
+    if (!projectId) return;
+    await this.selectProject(projectId);
+    this.switchPrimaryTab('overview');
+  },
+
+  renderProjectsView() {
+    this.applyRolePermissionsUI();
+    const projects = this.state.projects || [];
+
+    // 1. Populate Department Filter dropdown if needed (preserving selection)
+    const deptSelect = document.getElementById('projects-dept-filter');
+    if (deptSelect) {
+      const currentVal = deptSelect.value;
+      const depts = [...new Set(projects.map(p => p.department).filter(Boolean))].sort();
+      deptSelect.innerHTML = `<option value="">All Departments</option>` +
+        depts.map(d => `<option value="${this.escapeHtml(d)}" ${d === currentVal ? 'selected' : ''}>${this.escapeHtml(d)}</option>`).join('');
+    }
+
+    // 2. Render Portfolio Metric Cards Row (#projects-stats-row)
+    const statsRow = document.getElementById('projects-stats-row');
+    if (statsRow) {
+      const totalCount = projects.length;
+      const activeCount = projects.filter(p => p.status === 'active').length;
+      const planningCount = projects.filter(p => p.status === 'planning' || p.status === 'draft').length;
+      const completedCount = projects.filter(p => p.status === 'completed').length;
+      
+      let totalTasksAll = 0;
+      let completedTasksAll = 0;
+      projects.forEach(p => {
+        totalTasksAll += (p.total_tasks || 0);
+        completedTasksAll += (p.completed_tasks || 0);
+      });
+      const avgCompletion = totalTasksAll > 0 ? Math.round((completedTasksAll / totalTasksAll) * 100) : 0;
+
+      statsRow.innerHTML = `
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="folder-kanban" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-slate-400 truncate">Total Workspaces</p>
+            <p class="text-lg font-black text-slate-800 dark:text-slate-100">${totalCount}</p>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-slate-400 truncate">Active Execution</p>
+            <p class="text-lg font-black text-emerald-600 dark:text-emerald-400">${activeCount}</p>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="compass" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-slate-400 truncate">Planning & Setup</p>
+            <p class="text-lg font-black text-sky-600 dark:text-sky-400">${planningCount}</p>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-slate-400 truncate">Delivered</p>
+            <p class="text-lg font-black text-indigo-600 dark:text-indigo-400">${completedCount}</p>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="trending-up" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-slate-400 truncate">Delivery Velocity</p>
+            <p class="text-lg font-black text-amber-600 dark:text-amber-400">${avgCompletion}%</p>
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. Render Cards
+    this.renderProjectsCards();
+  },
+
+  handleProjectsFilter() {
+    this.renderProjectsCards();
+  },
+
+  renderProjectsCards() {
+    const container = document.getElementById('projects-grid-container');
+    if (!container) return;
+
+    const search = (document.getElementById('projects-search-input')?.value || '').trim().toLowerCase();
+    const statusFilter = document.getElementById('projects-status-filter')?.value || '';
+    const deptFilter = document.getElementById('projects-dept-filter')?.value || '';
+
+    let list = this.state.projects || [];
+
+    if (search) {
+      list = list.filter(p => 
+        (p.name && p.name.toLowerCase().includes(search)) ||
+        (p.project_code && p.project_code.toLowerCase().includes(search)) ||
+        (p.manager_name && p.manager_name.toLowerCase().includes(search)) ||
+        (p.department && p.department.toLowerCase().includes(search)) ||
+        (p.description && p.description.toLowerCase().includes(search))
+      );
+    }
+
+    if (statusFilter) {
+      list = list.filter(p => (p.status || '').toLowerCase() === statusFilter.toLowerCase());
+    }
+
+    if (deptFilter) {
+      list = list.filter(p => (p.department || '') === deptFilter);
+    }
+
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-full py-16 text-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/80 p-8">
+          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400">
+            <i data-lucide="folder-search" class="w-6 h-6"></i>
+          </div>
+          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200">No projects found</h3>
+          <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">No workspaces match the current search query or filter criteria.</p>
+          <div class="mt-4 flex items-center justify-center gap-2">
+            <button onclick="document.getElementById('projects-search-input').value = ''; document.getElementById('projects-status-filter').value = ''; document.getElementById('projects-dept-filter').value = ''; app.handleProjectsFilter();"
+              class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-lg transition cursor-pointer">
+              Clear Filters
+            </button>
+            <button onclick="app.openProjectModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white rounded-lg transition cursor-pointer">
+              Create New Project
+            </button>
+          </div>
+        </div>
+      `;
+      this.initLucide();
+      return;
+    }
+
+    const isMember = this.isMember();
+
+    container.innerHTML = list.map(p => {
+      const total = p.total_tasks || 0;
+      const completed = p.completed_tasks || 0;
+      const overdue = p.overdue_tasks || 0;
+      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      const isCurrentActive = Number(p.id) === Number(this.state.currentProjectId);
+
+      // Status badge styling
+      const status = (p.status || 'planning').toLowerCase();
+      let statusBadgeClass = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+      if (status === 'active') statusBadgeClass = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60';
+      else if (status === 'completed') statusBadgeClass = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60';
+      else if (status === 'planning') statusBadgeClass = 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400 border-sky-200 dark:border-sky-800/60';
+      else if (status === 'paused') statusBadgeClass = 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200 dark:border-amber-800/60';
+      else if (status === 'cancelled') statusBadgeClass = 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-200 dark:border-rose-800/60';
+
+      // Priority badge styling
+      const priority = (p.priority || 'medium').toLowerCase();
+      let prioBadge = '';
+      if (priority === 'critical') {
+        prioBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60">Critical</span>`;
+      } else if (priority === 'high') {
+        prioBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">High</span>`;
+      }
+
+      // Format date range
+      let dateRangeStr = 'No timeline set';
+      if (p.start_date || p.target_end_date) {
+        dateRangeStr = `${p.start_date || 'TBD'} &rarr; ${p.target_end_date || 'TBD'}`;
+      }
+
+      return `
+        <div class="bg-white dark:bg-slate-800 rounded-xl border ${isCurrentActive ? 'border-blue-500/80 ring-1 ring-blue-500/30' : 'border-slate-200 dark:border-slate-700/80'} p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+          
+          <div>
+            <!-- Header Row: Code & Department + Status Badges -->
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${p.color || '#3B82F6'}"></span>
+                <span class="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase">${this.escapeHtml(p.project_code || 'PRJ')}</span>
+                <span class="text-slate-300 dark:text-slate-600">&bull;</span>
+                <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[120px]">${this.escapeHtml(p.department || 'General')}</span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                ${prioBadge}
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusBadgeClass}">
+                  ${this.escapeHtml(p.status || 'Active')}
+                </span>
+              </div>
+            </div>
+
+            <!-- Title & Description -->
+            <h3 onclick="app.openProjectFromDirectory(${p.id})" 
+                class="text-sm font-bold text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer line-clamp-1 transition-colors"
+                title="${this.escapeHtml(p.name)}">
+              ${this.escapeHtml(p.name)}
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 mb-3.5 min-h-[32px]">
+              ${this.escapeHtml(p.description || 'Enterprise project workspace with planned activities and tracking.')}
+            </p>
+
+            <!-- Key Metadata Row -->
+            <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400 mb-3.5 pb-3 border-b border-slate-100 dark:border-slate-700/60">
+              <div class="flex items-center space-x-1.5 truncate">
+                <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
+                <span class="truncate">${this.escapeHtml(p.manager_name || 'Unassigned')}</span>
+              </div>
+              <div class="flex items-center space-x-1.5 truncate justify-end">
+                <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
+                <span class="truncate">${dateRangeStr}</span>
+              </div>
+            </div>
+
+            <!-- Task Progress Bar -->
+            <div class="space-y-1 mb-4">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="font-medium text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <span>${completed}/${total} Tasks</span>
+                  ${overdue > 0 ? `<span class="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-900/50">${overdue} Overdue</span>` : ''}
+                </span>
+                <span class="font-bold ${pct === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}">${pct}%</span>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                <div class="h-1.5 rounded-full transition-all duration-300 ${pct === 100 ? 'bg-emerald-500' : 'bg-blue-600'}" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Actions Row -->
+          <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
+            <button onclick="app.openProjectFromDirectory(${p.id})" 
+              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow-2xs transition cursor-pointer">
+              <span>Open Project</span>
+              <i data-lucide="arrow-right" class="w-3 h-3"></i>
+            </button>
+
+            <div class="flex items-center space-x-1">
+              ${!isMember ? `
+                <button onclick="app.openProjectModal(${p.id})" title="Edit Project Details"
+                  class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer">
+                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="app.openCloneProjectModal(${p.id})" title="Duplicate / Template"
+                  class="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="app.deleteProject(${p.id})" title="Delete Project"
+                  class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer">
+                  <i data-lucide="trash-2" class="w-3 h-3"></i>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+
+        </div>
+      `;
+    }).join('');
+
+    this.initLucide();
   },
 
   switchToMyTasks() {
@@ -884,6 +1211,9 @@ const app = {
   renderCurrentView() {
     this.applyRolePermissionsUI();
     switch (this.state.activeView) {
+      case 'projects':
+        this.renderProjectsView();
+        break;
       case 'overview':
         this.renderOverview();
         break;
@@ -6838,7 +7168,9 @@ const app = {
     this.closeProjectModal();
     this.showToast(`Project "${name}" deleted`, 'success');
 
-    if (this.state.currentProjectId) {
+    if (this.state.activeView === 'projects') {
+      this.renderProjectsView();
+    } else if (this.state.currentProjectId) {
       this.selectProject(this.state.currentProjectId);
     } else {
       this.renderCurrentView();
