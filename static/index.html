@@ -407,32 +407,98 @@
     <div id="project-tabs-bar" class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-2 flex-shrink-0 z-30 shadow-2xs">
       <!-- Project Metadata Header Row -->
       <div class="flex flex-wrap items-center justify-between gap-2.5 mb-2">
-        <div class="flex items-center space-x-2.5 min-w-0">
-          <span id="tab-strip-project-dot" class="w-3 h-3 rounded-full flex-shrink-0 bg-blue-500"></span>
+        <!-- Left: Project Identity & Key Attributes -->
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+          <span id="tab-strip-project-dot" class="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-blue-500"></span>
           <span id="tab-strip-project-code" class="px-2 py-0.5 rounded text-[11px] font-bold tracking-wide uppercase bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 flex-shrink-0">PRJ-001</span>
-          <h2 id="tab-strip-project-name" class="text-sm sm:text-base font-extrabold text-slate-800 dark:text-white truncate">Project Name</h2>
-          <span id="tab-strip-project-dept" class="hidden md:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">Engineering</span>
+          <h2 id="tab-strip-project-name" class="text-sm sm:text-base font-extrabold text-slate-800 dark:text-white truncate max-w-[200px] sm:max-w-xs md:max-w-md">Project Name</h2>
+          
+          <!-- Status Badge -->
+          <span id="tab-strip-project-status" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">ACTIVE</span>
+
+          <!-- Approval Badge -->
           <span id="tab-strip-approval-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">DRAFT</span>
+
+          <!-- Meta Pill: Manager -->
+          <span id="tab-strip-project-manager-chip" class="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <i data-lucide="user" class="w-3 h-3 text-slate-400"></i>
+            <span id="tab-strip-project-manager">--</span>
+          </span>
+
+          <!-- Meta Pill: Dept -->
+          <span id="tab-strip-project-dept-chip" class="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <i data-lucide="building" class="w-3 h-3 text-slate-400"></i>
+            <span id="tab-strip-project-dept">Engineering</span>
+          </span>
+
+          <!-- Meta Pill: Timeline Dates -->
+          <span id="tab-strip-project-dates-chip" class="hidden xl:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <i data-lucide="calendar" class="w-3 h-3 text-slate-400"></i>
+            <span id="tab-strip-project-dates">-- → --</span>
+          </span>
+
+          <!-- Compact Progress Indicator -->
+          <div id="tab-strip-progress-container" class="hidden 2xl:flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-700">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Progress</span>
+            <div class="w-16 bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+              <div id="tab-strip-header-progress-bar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <span id="tab-strip-header-progress-pct" class="text-xs font-extrabold text-blue-600 dark:text-blue-400">0%</span>
+          </div>
         </div>
 
+        <!-- Right: Primary Actions & More Dropdown -->
         <div class="flex items-center space-x-2 flex-shrink-0">
-          <!-- Generate Charter PDF Button -->
+          <!-- Primary: Generate Charter PDF Button -->
           <button onclick="app.openProjectCharterModal()" class="h-8 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer" title="Generate Executive Project Charter Document">
             <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
-            <span>Generate Project Charter PDF</span>
+            <span class="hidden sm:inline">Project Charter</span>
+            <span class="sm:hidden">Charter</span>
           </button>
 
-          <!-- Quick Print Charter -->
-          <button onclick="app.printProjectCharter()" class="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center space-x-1 border border-slate-200 dark:border-slate-700 transition cursor-pointer" title="Quick Print Charter">
-            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Print</span>
-          </button>
-
-          <!-- Edit Project Button -->
+          <!-- Primary: Edit Project Button -->
           <button onclick="app.openProjectModal(app.state.currentProjectId)" class="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center space-x-1 border border-slate-200 dark:border-slate-700 transition cursor-pointer" title="Edit Project Settings">
             <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Edit Project</span>
+            <span class="hidden sm:inline">Edit</span>
           </button>
+
+          <!-- Secondary Actions Dropdown Menu -->
+          <div class="relative inline-block text-left">
+            <button id="project-header-more-btn" onclick="app.toggleProjectHeaderMoreMenu()" class="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center space-x-1 border border-slate-200 dark:border-slate-700 transition cursor-pointer" title="More Project Actions">
+              <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+              <span class="hidden md:inline">More</span>
+            </button>
+            <div id="project-header-more-menu" class="hidden absolute right-0 mt-1.5 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-xs divide-y divide-slate-100 dark:divide-slate-700/60">
+              <div class="py-1">
+                <button onclick="app.printProjectCharter(); app.toggleProjectHeaderMoreMenu(false);" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center space-x-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+                  <i data-lucide="printer" class="w-3.5 h-3.5 text-slate-400"></i>
+                  <span>Print Charter Document</span>
+                </button>
+                <button onclick="app.openCloneProjectModal(app.state.currentProjectId); app.toggleProjectHeaderMoreMenu(false);" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center space-x-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+                  <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+                  <span>Clone Project Template</span>
+                </button>
+                <button onclick="app.switchPrimaryTab('reports'); app.switchSubTab('reports-activity'); app.toggleProjectHeaderMoreMenu(false);" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center space-x-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+                  <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-slate-400"></i>
+                  <span>Activity Status Report</span>
+                </button>
+                <button onclick="app.openGanttUploadModal(); app.toggleProjectHeaderMoreMenu(false);" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center space-x-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5 text-slate-400"></i>
+                  <span>Import Gantt / Excel</span>
+                </button>
+                <button onclick="app.openImportExportModal(); app.toggleProjectHeaderMoreMenu(false);" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 flex items-center space-x-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+                  <i data-lucide="database" class="w-3.5 h-3.5 text-slate-400"></i>
+                  <span>Project Backup & Export</span>
+                </button>
+              </div>
+              <div class="py-1">
+                <button onclick="app.deleteCurrentProject(); app.toggleProjectHeaderMoreMenu(false);" class="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2 text-rose-600 dark:text-rose-400 cursor-pointer">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  <span>Delete Project</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -480,94 +546,179 @@
       <!-- 0. PROJECT OVERVIEW VIEW -->
       <section id="view-overview-container" class="view-panel hidden space-y-5">
         
-        <!-- Executive KPI Banner -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <!-- Card 1: Status & Priority -->
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
-            <div>
-              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Project Status</span>
-              <div class="flex items-center space-x-2 mt-1">
-                <span id="overview-status-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">Planning</span>
-                <span id="overview-priority-badge" class="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">Medium</span>
-              </div>
-            </div>
-            <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-              <i data-lucide="activity" class="w-5 h-5"></i>
-            </div>
-          </div>
-
-          <!-- Card 2: Overall Progress -->
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+        <!-- A. 6 Clickable Executive KPI Metric Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <!-- KPI 1: Overall Progress % (Drill down to Gantt) -->
+          <div onclick="app.switchPrimaryTab('plan'); app.switchSubTab('gantt');" class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition cursor-pointer flex flex-col justify-between group">
             <div class="flex items-center justify-between">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Completion</span>
-              <span id="overview-progress-pct" class="text-sm font-extrabold text-blue-600 dark:text-blue-400">0%</span>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-blue-500 transition">Progress</span>
+              <div class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+              </div>
             </div>
-            <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mt-2 overflow-hidden">
-              <div id="overview-progress-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-            </div>
-            <div class="flex justify-between items-center text-[11px] text-slate-500 mt-1.5">
-              <span id="overview-tasks-count">0 of 0 Activities</span>
-              <span id="overview-deliverables-count">0 Deliverables</span>
+            <div class="mt-2">
+              <div class="flex items-baseline justify-between">
+                <span id="overview-progress-pct" class="text-lg font-extrabold text-blue-600 dark:text-blue-400">0%</span>
+                <span id="overview-schedule-status-text" class="text-[10px] font-semibold text-slate-400">On Track</span>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                <div id="overview-progress-bar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
             </div>
           </div>
 
-          <!-- Card 3: Timeline & Schedule -->
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
-            <div>
-              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Schedule Horizon</span>
-              <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 flex items-center space-x-1">
-                <span id="overview-start-date">--</span>
-                <span class="text-slate-400">→</span>
-                <span id="overview-end-date">--</span>
+          <!-- KPI 2: Tasks & Activities (Drill down to Tasks) -->
+          <div onclick="app.switchPrimaryTab('work'); app.switchSubTab('tasks');" class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-sm transition cursor-pointer flex flex-col justify-between group">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-emerald-500 transition">Tasks</span>
+              <div class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <i data-lucide="check-square" class="w-3.5 h-3.5"></i>
               </div>
-              <div id="overview-duration-days" class="text-[11px] text-slate-400 mt-0.5 font-medium">-- days remaining</div>
             </div>
-            <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-              <i data-lucide="calendar" class="w-5 h-5"></i>
+            <div class="mt-2">
+              <span id="overview-tasks-count" class="text-lg font-extrabold text-slate-800 dark:text-white">0 / 0</span>
+              <div class="text-[10px] text-slate-400 mt-1 truncate" id="overview-tasks-subtext">0 in progress</div>
             </div>
           </div>
 
-          <!-- Card 4: Governance & Sign-off -->
-          <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
-            <div>
-              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Charter Governance</span>
-              <div class="mt-1 flex items-center space-x-1.5">
-                <span id="overview-approval-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">DRAFT</span>
+          <!-- KPI 3: Key Deliverables (Drill down to Deliverables) -->
+          <div onclick="app.switchPrimaryTab('plan'); app.switchSubTab('deliverables');" class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm transition cursor-pointer flex flex-col justify-between group">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-indigo-500 transition">Deliverables</span>
+              <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <i data-lucide="package" class="w-3.5 h-3.5"></i>
               </div>
-              <div id="overview-governance-note" class="text-[11px] text-slate-400 mt-0.5">Pending Sign-off</div>
             </div>
-            <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-              <i data-lucide="award" class="w-5 h-5"></i>
+            <div class="mt-2">
+              <span id="overview-deliverables-count" class="text-lg font-extrabold text-slate-800 dark:text-white">0</span>
+              <div class="text-[10px] text-slate-400 mt-1 truncate" id="overview-deliverables-subtext">View deliverables</div>
+            </div>
+          </div>
+
+          <!-- KPI 4: Upcoming Milestones (Drill down to Milestones) -->
+          <div onclick="app.switchPrimaryTab('plan'); app.switchSubTab('milestones');" class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-sm transition cursor-pointer flex flex-col justify-between group">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-purple-500 transition">Milestones</span>
+              <div class="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <i data-lucide="flag" class="w-3.5 h-3.5"></i>
+              </div>
+            </div>
+            <div class="mt-2">
+              <span id="overview-milestones-count" class="text-lg font-extrabold text-slate-800 dark:text-white">0</span>
+              <div class="text-[10px] text-slate-400 mt-1 truncate" id="overview-milestones-subtext">Timeline checkpoints</div>
+            </div>
+          </div>
+
+          <!-- KPI 5: Active Risks (Drill down to Risks) -->
+          <div onclick="app.switchPrimaryTab('controls'); app.switchSubTab('risks');" class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-rose-300 dark:hover:border-rose-600 hover:shadow-sm transition cursor-pointer flex flex-col justify-between group">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-rose-500 transition">Open Risks</span>
+              <div class="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+              </div>
+            </div>
+            <div class="mt-2">
+              <span id="overview-risks-count" class="text-lg font-extrabold text-slate-800 dark:text-white">0</span>
+              <div class="text-[10px] text-slate-400 mt-1 truncate" id="overview-risks-subtext">Risk register</div>
+            </div>
+          </div>
+
+          <!-- KPI 6: Budget Status (Drill down to Budget) -->
+          <div onclick="app.switchPrimaryTab('controls'); app.switchSubTab('budget');" class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-sm transition cursor-pointer flex flex-col justify-between group">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-emerald-500 transition">Budget</span>
+              <div class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <i data-lucide="dollar-sign" class="w-3.5 h-3.5"></i>
+              </div>
+            </div>
+            <div class="mt-2">
+              <span id="overview-budget-status-val" class="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 block truncate">On Track</span>
+              <div class="text-[10px] text-slate-400 mt-1 truncate" id="overview-budget-summary-subtext">Cost details</div>
             </div>
           </div>
         </div>
 
-        <!-- 2-Column Responsive Body Layout -->
+        <!-- B. Project Health & Status Summary Strip -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+          <div class="flex items-center justify-between mb-2.5">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="shield-check" class="w-4 h-4 text-blue-500"></i>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Project Health & Governance</h3>
+            </div>
+            <span class="text-[10px] text-slate-400 font-medium">Single source of truth</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <!-- Schedule Health -->
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Schedule</span>
+              <div class="font-bold text-slate-800 dark:text-slate-100 mt-0.5 truncate">
+                <span id="overview-start-date">--</span> → <span id="overview-end-date">--</span>
+              </div>
+              <div id="overview-duration-days" class="text-[10px] text-slate-500 mt-0.5 font-medium">-- days remaining</div>
+            </div>
+
+            <!-- Budget Health -->
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Budget Health</span>
+              <div id="overview-budget-health-val" class="font-bold text-slate-800 dark:text-slate-100 mt-0.5 truncate">--</div>
+              <div id="overview-budget-health-badge" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">On Track</div>
+            </div>
+
+            <!-- Risk Exposure -->
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Risk Profile</span>
+              <div id="overview-risk-severity-val" class="font-bold text-slate-800 dark:text-slate-100 mt-0.5 truncate">Low Exposure</div>
+              <div id="overview-risk-severity-badge" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">Controlled</div>
+            </div>
+
+            <!-- Governance Status -->
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Governance</span>
+              <div class="mt-0.5">
+                <span id="overview-approval-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">DRAFT</span>
+              </div>
+              <div id="overview-governance-note" class="text-[10px] text-slate-400 mt-0.5 truncate">Pending Sign-off</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- C. Two-Column Dashboard Layout -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
           
-          <!-- LEFT COLUMN (2 Cols): Mission, Objectives, Scope, Deliverables -->
+          <!-- LEFT COLUMN (2 Cols): Mission/Scope/Objectives, Deliverables, Attention Tasks -->
           <div class="lg:col-span-2 space-y-5">
             
-            <!-- 1. Consolidated Project Description & Business Objective -->
+            <!-- 1. Consolidated Project Summary, Objectives & Scope (with Expand/Collapse) -->
             <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
               <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
                 <div class="flex items-center space-x-2.5">
                   <div class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                     <i data-lucide="target" class="w-4 h-4"></i>
                   </div>
-                  <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Description & Business Objective</h3>
+                  <div>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Summary & Mandate</h3>
+                    <p class="text-[11px] text-slate-400">Executive description and business purpose</p>
+                  </div>
                 </div>
-                <button onclick="app.openProjectModal(app.state.currentProjectId)" class="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center space-x-1 cursor-pointer">
-                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
-                  <span>Edit</span>
-                </button>
+                <div class="flex items-center space-x-2">
+                  <button onclick="app.toggleOverviewCharterDetails()" id="overview-charter-details-toggle" class="text-xs font-semibold text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 flex items-center space-x-1 cursor-pointer px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700">
+                    <span id="overview-charter-toggle-text">Show Details</span>
+                    <i data-lucide="chevron-down" id="overview-charter-toggle-icon" class="w-3.5 h-3.5 transition-transform duration-200"></i>
+                  </button>
+                  <button onclick="app.openProjectModal(app.state.currentProjectId)" class="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center space-x-1 cursor-pointer px-2 py-1">
+                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                    <span>Edit</span>
+                  </button>
+                </div>
               </div>
+
+              <!-- Executive Description / Problem Statement -->
               <p id="overview-description-text" class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                 No description provided yet. Click edit to define project mission and business goals.
               </p>
               
-              <!-- Metadata tags -->
-              <div class="flex flex-wrap gap-3 pt-2 text-xs text-slate-500 border-t border-slate-100 dark:border-slate-700/60">
+              <!-- Key Metadata Chips -->
+              <div class="flex flex-wrap gap-4 pt-2 text-xs text-slate-500 border-t border-slate-100 dark:border-slate-700/60">
                 <div class="flex items-center gap-1.5">
                   <span class="font-semibold text-slate-700 dark:text-slate-300">Manager:</span>
                   <span id="overview-manager-text" class="text-slate-600 dark:text-slate-400 font-medium">--</span>
@@ -580,86 +731,86 @@
                   <span class="font-semibold text-slate-700 dark:text-slate-300">Sponsor:</span>
                   <span id="overview-sponsor-text" class="text-slate-600 dark:text-slate-400 font-medium">--</span>
                 </div>
+                <!-- Hidden compatibility badges -->
+                <span id="overview-status-badge" class="hidden"></span>
+                <span id="overview-priority-badge" class="hidden"></span>
+              </div>
+
+              <!-- Collapsible Details: Objectives & Scope -->
+              <div id="overview-charter-expanded-content" class="hidden space-y-4 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                <!-- Objectives Section -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
+                      <span>Project Objectives & Success Criteria</span>
+                    </div>
+                    <button onclick="app.openObjectiveModal()" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer">
+                      <i data-lucide="plus" class="w-3 h-3"></i>
+                      <span>Add Objective</span>
+                    </button>
+                  </div>
+                  <div class="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-700">
+                    <table class="w-full text-xs text-left">
+                      <thead class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th class="py-2 px-3">Objective</th>
+                          <th class="py-2 px-3">Success Criteria / Target</th>
+                          <th class="py-2 px-3">Status</th>
+                          <th class="py-2 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="overview-objectives-body" class="divide-y divide-slate-100 dark:divide-slate-700/60 font-medium">
+                        <!-- Populated dynamically -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Scope Section -->
+                <div>
+                  <div class="flex items-center space-x-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
+                    <i data-lucide="compass" class="w-3.5 h-3.5 text-indigo-500"></i>
+                    <span>Scope Boundaries</span>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 space-y-1">
+                      <div class="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                        <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i>
+                        <span>In Scope</span>
+                      </div>
+                      <div id="overview-in-scope-text" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                        No in-scope items defined yet.
+                      </div>
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-800/40 space-y-1">
+                      <div class="flex items-center space-x-1.5 text-xs font-bold text-rose-700 dark:text-rose-400">
+                        <i data-lucide="x" class="w-3.5 h-3.5 text-rose-500"></i>
+                        <span>Out of Scope</span>
+                      </div>
+                      <div id="overview-out-of-scope-text" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                        No out-of-scope items defined yet.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Assumptions & Constraints (Retained in expanded section) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                    <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200">Assumptions:</span>
+                    <p id="overview-assumptions-text" class="text-[11px] text-slate-500 mt-0.5 line-clamp-3">None recorded</p>
+                  </div>
+                  <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                    <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200">Constraints:</span>
+                    <p id="overview-constraints-text" class="text-[11px] text-slate-500 mt-0.5 line-clamp-3">None recorded</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- 2. Project Objectives & Success Criteria Table -->
-            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
-                <div class="flex items-center space-x-2.5">
-                  <div class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                    <i data-lucide="check-circle" class="w-4 h-4"></i>
-                  </div>
-                  <div>
-                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Objectives</h3>
-                    <p class="text-[11px] text-slate-400">Measurable success criteria and target achievements</p>
-                  </div>
-                </div>
-                <button onclick="app.openObjectiveModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow-xs transition cursor-pointer">
-                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                  <span>Add Objective</span>
-                </button>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="w-full text-xs text-left">
-                  <thead class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 uppercase text-[10px] font-bold border-y border-slate-200 dark:border-slate-700">
-                    <tr>
-                      <th class="py-2.5 px-3">Objective</th>
-                      <th class="py-2.5 px-3">Success Criteria / Target</th>
-                      <th class="py-2.5 px-3">Status</th>
-                      <th class="py-2.5 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="overview-objectives-body" class="divide-y divide-slate-100 dark:divide-slate-700/60 font-medium">
-                    <!-- Populated dynamically -->
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- 3. Project Scope (In Scope vs Out of Scope) -->
-            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
-                <div class="flex items-center space-x-2.5">
-                  <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                    <i data-lucide="compass" class="w-4 h-4"></i>
-                  </div>
-                  <div>
-                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Scope</h3>
-                    <p class="text-[11px] text-slate-400">Boundary definitions: what is included and excluded</p>
-                  </div>
-                </div>
-                <button onclick="app.openProjectModal(app.state.currentProjectId)" class="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center space-x-1 cursor-pointer">
-                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
-                  <span>Edit Scope</span>
-                </button>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 space-y-2">
-                  <div class="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                    <i data-lucide="check" class="w-4 h-4 text-emerald-500"></i>
-                    <span>In Scope</span>
-                  </div>
-                  <div id="overview-in-scope-text" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
-                    No in-scope items defined yet.
-                  </div>
-                </div>
-
-                <div class="p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-800/40 space-y-2">
-                  <div class="flex items-center space-x-1.5 text-xs font-bold text-rose-700 dark:text-rose-400">
-                    <i data-lucide="x" class="w-4 h-4 text-rose-500"></i>
-                    <span>Out of Scope</span>
-                  </div>
-                  <div id="overview-out-of-scope-text" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
-                    No out-of-scope items defined yet.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 4. Deliverables Snapshot -->
+            <!-- 2. Key Deliverables Snapshot -->
             <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
               <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
                 <div class="flex items-center space-x-2.5">
@@ -667,12 +818,12 @@
                     <i data-lucide="package" class="w-4 h-4"></i>
                   </div>
                   <div>
-                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Core Deliverables</h3>
-                    <p class="text-[11px] text-slate-400">Execution deliverables linked to activities</p>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Key Deliverables</h3>
+                    <p class="text-[11px] text-slate-400">Core outputs and activity completion progress</p>
                   </div>
                 </div>
-                <button onclick="app.switchView('deliverables')" class="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center space-x-1 cursor-pointer">
-                  <span>View All</span>
+                <button onclick="app.switchPrimaryTab('plan'); app.switchSubTab('deliverables');" class="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center space-x-1 cursor-pointer">
+                  <span>View All Deliverables</span>
                   <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
                 </button>
               </div>
@@ -682,13 +833,36 @@
               </div>
             </div>
 
+            <!-- 3. Activities Requiring Attention (Overdue, Urgent, or In Progress) -->
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
+                <div class="flex items-center space-x-2.5">
+                  <div class="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                    <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Activities Requiring Attention</h3>
+                    <p class="text-[11px] text-slate-400">Overdue items, urgent priorities, and active work</p>
+                  </div>
+                </div>
+                <button onclick="app.switchPrimaryTab('work'); app.switchSubTab('tasks');" class="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center space-x-1 cursor-pointer">
+                  <span>View All Activities</span>
+                  <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <div id="overview-attention-tasks-list" class="space-y-2">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
           </div>
 
-          <!-- RIGHT COLUMN (1 Col): Charter Generation, Budget, Risks, Governance -->
+          <!-- RIGHT COLUMN (1 Col): Charter Generator, Upcoming Milestones, Active Risks, Budget -->
           <div class="space-y-5">
             
             <!-- Quick Actions: Project Charter Document Generator -->
-            <div class="bg-gradient-to-br from-blue-900 to-indigo-950 p-5 rounded-xl text-white shadow-md space-y-3 border border-blue-800/40">
+            <div class="bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 p-5 rounded-xl text-white shadow-md space-y-3 border border-blue-800/40">
               <div class="flex items-center space-x-2.5">
                 <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
                   <i data-lucide="file-text" class="w-5 h-5 text-sky-300"></i>
@@ -699,7 +873,7 @@
                 </div>
               </div>
               <p class="text-xs text-blue-100/90 leading-relaxed">
-                Automatically consolidated from project description, objectives, deliverables, budget, and governance sign-offs.
+                Consolidated document summarizing project mission, objectives, deliverables, budget, and governance sign-off.
               </p>
               <div class="pt-1 flex flex-col gap-2">
                 <button onclick="app.openProjectCharterModal()" class="w-full py-2 px-3 bg-white hover:bg-slate-100 text-blue-900 font-bold text-xs rounded-lg flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer">
@@ -713,14 +887,46 @@
               </div>
             </div>
 
-            <!-- Budget Snapshot -->
+            <!-- Upcoming Milestones Widget -->
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
+                <div class="flex items-center space-x-2">
+                  <i data-lucide="flag" class="w-4 h-4 text-purple-500"></i>
+                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Upcoming Milestones</h4>
+                </div>
+                <button onclick="app.switchPrimaryTab('plan'); app.switchSubTab('milestones');" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                  View All
+                </button>
+              </div>
+              <div id="overview-milestones-list" class="space-y-2 text-xs">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Active Risks Widget -->
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
+                <div class="flex items-center space-x-2">
+                  <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
+                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Active Risks</h4>
+                </div>
+                <button onclick="app.switchPrimaryTab('controls'); app.switchSubTab('risks');" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                  Register
+                </button>
+              </div>
+              <div id="overview-risks-list" class="space-y-2 text-xs">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Budget & Cost Snapshot Widget -->
             <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
               <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
                 <div class="flex items-center space-x-2">
                   <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-500"></i>
                   <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Budget Snapshot</h4>
                 </div>
-                <button onclick="app.switchView('budget')" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                <button onclick="app.switchPrimaryTab('controls'); app.switchSubTab('budget');" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
                   Details
                 </button>
               </div>
@@ -736,45 +942,6 @@
                 <div class="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-700">
                   <span class="text-slate-500">Variance:</span>
                   <span id="overview-budget-variance" class="font-bold text-emerald-600 dark:text-emerald-400">$0.00</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Risks Snapshot -->
-            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
-                <div class="flex items-center space-x-2">
-                  <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
-                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Active Risks</h4>
-                </div>
-                <button onclick="app.switchView('risks')" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
-                  Register
-                </button>
-              </div>
-              <div id="overview-risks-list" class="space-y-2 text-xs">
-                <!-- Dynamically populated -->
-              </div>
-            </div>
-
-            <!-- Assumptions & Constraints Snapshot -->
-            <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
-                <div class="flex items-center space-x-2">
-                  <i data-lucide="sliders" class="w-4 h-4 text-indigo-500"></i>
-                  <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Assumptions & Constraints</h4>
-                </div>
-                <button onclick="app.switchView('risks')" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
-                  Edit
-                </button>
-              </div>
-              <div class="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                <div>
-                  <div class="font-bold text-slate-700 dark:text-slate-200 text-[11px]">Assumptions:</div>
-                  <div id="overview-assumptions-text" class="text-[11px] text-slate-500 mt-0.5 line-clamp-3">None recorded</div>
-                </div>
-                <div class="pt-1.5 border-t border-slate-100 dark:border-slate-700/60">
-                  <div class="font-bold text-slate-700 dark:text-slate-200 text-[11px]">Constraints:</div>
-                  <div id="overview-constraints-text" class="text-[11px] text-slate-500 mt-0.5 line-clamp-3">None recorded</div>
                 </div>
               </div>
             </div>

@@ -230,6 +230,14 @@ const app = {
           sbCtrlPopover.classList.add('hidden');
         }
       }
+
+      const moreBtn = document.getElementById('project-header-more-btn');
+      const moreMenu = document.getElementById('project-header-more-menu');
+      if (moreMenu && !moreMenu.classList.contains('hidden')) {
+        if (!moreBtn?.contains(e.target) && !moreMenu.contains(e.target)) {
+          moreMenu.classList.add('hidden');
+        }
+      }
     });
   },
 
@@ -547,6 +555,33 @@ const app = {
       deptEl.textContent = p.department || 'Engineering';
     }
 
+    const mgrEl = document.getElementById('tab-strip-project-manager');
+    if (mgrEl) {
+      mgrEl.textContent = p.manager_name || '--';
+    }
+
+    const datesEl = document.getElementById('tab-strip-project-dates');
+    if (datesEl) {
+      const s = p.start_date || 'Start';
+      const e = p.target_end_date || 'End';
+      datesEl.textContent = `${s} → ${e}`;
+    }
+
+    const statusEl = document.getElementById('tab-strip-project-status');
+    if (statusEl) {
+      const st = (p.status || 'ACTIVE').toUpperCase();
+      statusEl.textContent = st;
+      if (st === 'COMPLETED') {
+        statusEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60';
+      } else if (st === 'PAUSED' || st === 'ON HOLD') {
+        statusEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60';
+      } else if (st === 'CANCELLED') {
+        statusEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60';
+      } else {
+        statusEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60';
+      }
+    }
+
     const approvalEl = document.getElementById('tab-strip-approval-badge');
     if (approvalEl) {
       const status = (p.approval_status || 'DRAFT').toUpperCase();
@@ -561,6 +596,50 @@ const app = {
         approvalEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60';
       }
     }
+
+    // Progress bar in project header
+    const totalTasks = this.state.tasks?.length || 0;
+    const completedTasks = this.state.tasks?.filter(t => t.status === 'done')?.length || 0;
+    const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const hBar = document.getElementById('tab-strip-header-progress-bar');
+    if (hBar) hBar.style.width = `${pct}%`;
+    const hPct = document.getElementById('tab-strip-header-progress-pct');
+    if (hPct) hPct.textContent = `${pct}%`;
+  },
+
+  toggleProjectHeaderMoreMenu(show = null) {
+    const menu = document.getElementById('project-header-more-menu');
+    if (!menu) return;
+    if (show === null) {
+      menu.classList.toggle('hidden');
+    } else if (show) {
+      menu.classList.remove('hidden');
+    } else {
+      menu.classList.add('hidden');
+    }
+  },
+
+  toggleOverviewCharterDetails() {
+    const content = document.getElementById('overview-charter-expanded-content');
+    const text = document.getElementById('overview-charter-toggle-text');
+    const icon = document.getElementById('overview-charter-toggle-icon');
+    if (!content) return;
+    const isHidden = content.classList.contains('hidden');
+    if (isHidden) {
+      content.classList.remove('hidden');
+      if (text) text.textContent = 'Hide Details';
+      if (icon) icon.style.transform = 'rotate(180deg)';
+    } else {
+      content.classList.add('hidden');
+      if (text) text.textContent = 'Show Details';
+      if (icon) icon.style.transform = 'rotate(0deg)';
+    }
+  },
+
+  deleteCurrentProject() {
+    if (!this.state.currentProjectId) return;
+    const p = this.state.currentProject;
+    this.deleteProject(this.state.currentProjectId, p ? p.name : '');
   },
 
   // ==================== PHASE 1: INFORMATION ARCHITECTURE & NAVIGATION ====================
@@ -945,44 +1024,84 @@ const app = {
     const p = this.state.currentProject;
     if (!p) return;
 
-    // Status & Priority Badges
-    const statusEl = document.getElementById('overview-status-badge');
-    if (statusEl) {
-      const st = (p.status || 'ACTIVE').toUpperCase();
-      statusEl.textContent = st;
-      statusEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ' +
-        (st === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
-         st === 'PAUSED' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200' :
-         st === 'CANCELLED' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
-         'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200');
-    }
+    // Synchronize compact header row
+    this.updateProjectTabStrip();
 
-    const priorityEl = document.getElementById('overview-priority-badge');
-    if (priorityEl) {
-      const pr = (p.priority || 'MEDIUM').toUpperCase();
-      priorityEl.textContent = pr;
-      priorityEl.className = 'px-2 py-0.5 rounded text-[11px] font-bold uppercase ' +
-        (pr === 'URGENT' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' :
-         pr === 'HIGH' ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300' :
-         pr === 'LOW' ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' :
-         'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300');
-    }
-
-    // Overall Progress & Task counts
+    // 1. Task & Progress Calculations
     const totalTasks = this.state.tasks?.length || 0;
     const completedTasks = this.state.tasks?.filter(t => t.status === 'done')?.length || 0;
+    const inProgressTasks = this.state.tasks?.filter(t => t.status === 'in_progress')?.length || 0;
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const today = new Date().toISOString().split('T')[0];
+    const overdueTasks = (this.state.tasks || []).filter(t => t.status !== 'done' && t.due_date && t.due_date < today);
 
+    // KPI 1: Overall Progress %
     const pctEl = document.getElementById('overview-progress-pct');
     if (pctEl) pctEl.textContent = `${pct}%`;
     const barEl = document.getElementById('overview-progress-bar');
     if (barEl) barEl.style.width = `${pct}%`;
-    const tasksCountEl = document.getElementById('overview-tasks-count');
-    if (tasksCountEl) tasksCountEl.textContent = `${completedTasks} of ${totalTasks} Activities`;
-    const delivCountEl = document.getElementById('overview-deliverables-count');
-    if (delivCountEl) delivCountEl.textContent = `${p.deliverables?.length || 0} Deliverables`;
+    const schedStatusEl = document.getElementById('overview-schedule-status-text');
+    if (schedStatusEl) {
+      if (overdueTasks.length > 0) {
+        schedStatusEl.textContent = `${overdueTasks.length} Overdue`;
+        schedStatusEl.className = 'text-[10px] font-bold text-rose-500';
+      } else if (pct === 100) {
+        schedStatusEl.textContent = 'Completed';
+        schedStatusEl.className = 'text-[10px] font-bold text-emerald-500';
+      } else {
+        schedStatusEl.textContent = 'On Track';
+        schedStatusEl.className = 'text-[10px] font-semibold text-slate-400';
+      }
+    }
 
-    // Schedule Horizon
+    // KPI 2: Tasks & Activities
+    const tasksCountEl = document.getElementById('overview-tasks-count');
+    if (tasksCountEl) tasksCountEl.textContent = `${completedTasks} / ${totalTasks}`;
+    const tasksSubEl = document.getElementById('overview-tasks-subtext');
+    if (tasksSubEl) tasksSubEl.textContent = `${inProgressTasks} in progress`;
+
+    // KPI 3: Key Deliverables
+    const deliverables = p.deliverables || [];
+    const delivCountEl = document.getElementById('overview-deliverables-count');
+    if (delivCountEl) delivCountEl.textContent = `${deliverables.length}`;
+    const delivDone = deliverables.filter(d => d.status === 'completed').length;
+    const delivSubEl = document.getElementById('overview-deliverables-subtext');
+    if (delivSubEl) delivSubEl.textContent = `${delivDone} completed`;
+
+    // KPI 4: Upcoming Milestones
+    const milestones = p.milestones || [];
+    const mCountEl = document.getElementById('overview-milestones-count');
+    if (mCountEl) mCountEl.textContent = `${milestones.length}`;
+    const mDone = milestones.filter(m => m.status === 'completed').length;
+    const mSubEl = document.getElementById('overview-milestones-subtext');
+    if (mSubEl) mSubEl.textContent = `${mDone} reached`;
+
+    // KPI 5: Active Risks
+    const risks = p.risks || [];
+    const openRisks = risks.filter(r => r.status !== 'closed' && r.status !== 'mitigated');
+    const critRisks = openRisks.filter(r => r.impact === 'critical' || r.impact === 'high');
+    const rCountEl = document.getElementById('overview-risks-count');
+    if (rCountEl) rCountEl.textContent = `${openRisks.length}`;
+    const rSubEl = document.getElementById('overview-risks-subtext');
+    if (rSubEl) rSubEl.textContent = `${critRisks.length} high/critical`;
+
+    // KPI 6: Budget Status
+    const budgets = p.budgets || [];
+    const totalEst = budgets.reduce((s, b) => s + (parseFloat(b.estimated_cost) || 0), 0);
+    const totalAct = budgets.reduce((s, b) => s + (parseFloat(b.actual_cost) || 0), 0);
+    const variance = totalEst - totalAct;
+
+    const bStatusEl = document.getElementById('overview-budget-status-val');
+    if (bStatusEl) {
+      bStatusEl.textContent = variance >= 0 ? 'On Track' : 'Over Budget';
+      bStatusEl.className = `text-sm font-extrabold ${variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} block truncate`;
+    }
+    const bSummarySubEl = document.getElementById('overview-budget-summary-subtext');
+    if (bSummarySubEl) {
+      bSummarySubEl.textContent = `$${Math.round(totalAct).toLocaleString()} spent of $${Math.round(totalEst).toLocaleString()}`;
+    }
+
+    // 2. Health & Status Summary Strip
     const startEl = document.getElementById('overview-start-date');
     if (startEl) startEl.textContent = p.start_date || '--';
     const endEl = document.getElementById('overview-end-date');
@@ -993,28 +1112,48 @@ const app = {
         const diffMs = new Date(p.target_end_date) - new Date();
         const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
         daysEl.textContent = diffDays >= 0 ? `${diffDays} days remaining` : `${Math.abs(diffDays)} days overdue`;
-        daysEl.className = diffDays < 0 ? 'text-[11px] text-rose-500 font-bold mt-0.5' : 'text-[11px] text-slate-400 mt-0.5 font-medium';
+        daysEl.className = diffDays < 0 ? 'text-[10px] text-rose-500 font-bold mt-0.5' : 'text-[10px] text-slate-500 mt-0.5 font-medium';
       } else {
         daysEl.textContent = 'No target date set';
       }
     }
 
-    // Governance & Approval
+    const bHealthVal = document.getElementById('overview-budget-health-val');
+    if (bHealthVal) {
+      bHealthVal.textContent = totalEst > 0 ? `${Math.round((totalAct / totalEst) * 100)}% Spent` : '$0.00 Planned';
+    }
+    const bHealthBadge = document.getElementById('overview-budget-health-badge');
+    if (bHealthBadge) {
+      bHealthBadge.textContent = variance >= 0 ? 'Under / On Target' : 'Cost Overrun';
+      bHealthBadge.className = `text-[10px] font-bold mt-0.5 ${variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`;
+    }
+
+    const rSevVal = document.getElementById('overview-risk-severity-val');
+    if (rSevVal) {
+      rSevVal.textContent = critRisks.length > 0 ? `${critRisks.length} Severe Exposure` : `${openRisks.length} Open Risks`;
+    }
+    const rSevBadge = document.getElementById('overview-risk-severity-badge');
+    if (rSevBadge) {
+      rSevBadge.textContent = critRisks.length > 0 ? 'Needs Attention' : 'Controlled';
+      rSevBadge.className = `text-[10px] font-bold mt-0.5 ${critRisks.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`;
+    }
+
     const apprBadge = document.getElementById('overview-approval-badge');
     const apprNote = document.getElementById('overview-governance-note');
     if (apprBadge) {
       const apprStatus = (p.approval_status || 'DRAFT').toUpperCase();
       apprBadge.textContent = apprStatus;
-      apprBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ' +
+      apprBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ' +
         (apprStatus === 'APPROVED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200' :
          apprStatus === 'REJECTED' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200' :
+         apprStatus === 'IN_REVIEW' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200' :
          'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200');
       if (apprNote) {
         apprNote.textContent = apprStatus === 'APPROVED' ? 'Sign-Off Complete' : apprStatus === 'REJECTED' ? 'Revision Requested' : 'Pending Sign-Off';
       }
     }
 
-    // Description & Business Objective
+    // 3. Project Summary & Metadata
     const descEl = document.getElementById('overview-description-text');
     if (descEl) descEl.textContent = p.description || 'No description provided yet. Click edit to define project mission and business goals.';
     const mgrEl = document.getElementById('overview-manager-text');
@@ -1024,7 +1163,7 @@ const app = {
     const sponsorEl = document.getElementById('overview-sponsor-text');
     if (sponsorEl) sponsorEl.textContent = p.sponsor || 'Executive Committee';
 
-    // Objectives table
+    // 4. Objectives Table
     const objTbody = document.getElementById('overview-objectives-body');
     if (objTbody) {
       const objectives = p.objectives || [];
@@ -1033,16 +1172,16 @@ const app = {
       } else {
         objTbody.innerHTML = objectives.map(obj => `
           <tr class="hover:bg-slate-50 dark:hover:bg-slate-750/50">
-            <td class="py-2.5 px-3 font-semibold text-slate-800 dark:text-white">${this.escapeHtml(obj.objective)}</td>
-            <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300 font-mono text-[11px]">${this.escapeHtml(obj.success_criteria || '--')}</td>
-            <td class="py-2.5 px-3">
+            <td class="py-2 px-3 font-semibold text-slate-800 dark:text-white">${this.escapeHtml(obj.objective)}</td>
+            <td class="py-2 px-3 text-slate-600 dark:text-slate-300 font-mono text-[11px]">${this.escapeHtml(obj.success_criteria || '--')}</td>
+            <td class="py-2 px-3">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                 obj.status === 'Achieved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' :
                 obj.status === 'At Risk' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' :
                 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
               }">${this.escapeHtml(obj.status || 'In Progress')}</span>
             </td>
-            <td class="py-2.5 px-3 text-right">
+            <td class="py-2 px-3 text-right">
               <div class="inline-flex items-center space-x-1">
                 <button onclick="app.openObjectiveModal(${obj.id})" class="p-1 text-slate-400 hover:text-blue-600 cursor-pointer" title="Edit Objective"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
                 <button onclick="app.deleteObjective(${obj.id})" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Delete Objective"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
@@ -1053,18 +1192,23 @@ const app = {
       }
     }
 
-    // In Scope / Out of Scope
+    // 5. Scope
     const inScopeEl = document.getElementById('overview-in-scope-text');
     if (inScopeEl) inScopeEl.textContent = p.in_scope || 'No in-scope items defined yet.';
     const outScopeEl = document.getElementById('overview-out-of-scope-text');
     if (outScopeEl) outScopeEl.textContent = p.out_of_scope || 'No out-of-scope items defined yet.';
 
-    // Deliverables snapshot list
+    // 6. Assumptions & Constraints
+    const assumpEl = document.getElementById('overview-assumptions-text');
+    if (assumpEl) assumpEl.textContent = p.assumptions || 'None recorded';
+    const constrEl = document.getElementById('overview-constraints-text');
+    if (constrEl) constrEl.textContent = p.constraints || 'None recorded';
+
+    // 7. Deliverables List (Snapshot)
     const delivListEl = document.getElementById('overview-deliverables-list');
     if (delivListEl) {
-      const deliverables = p.deliverables || [];
       if (deliverables.length === 0) {
-        delivListEl.innerHTML = `<div class="p-3 text-center text-slate-400 italic text-xs">No deliverables defined. Click "View All" to create deliverables.</div>`;
+        delivListEl.innerHTML = `<div class="p-3 text-center text-slate-400 italic text-xs">No deliverables defined. Click "View All Deliverables" to create deliverables.</div>`;
       } else {
         delivListEl.innerHTML = deliverables.slice(0, 4).map(d => {
           const dTasks = (this.state.tasks || []).filter(t => t.deliverable_id === d.id);
@@ -1088,30 +1232,109 @@ const app = {
       }
     }
 
-    // Budget Snapshot
-    const budgets = p.budgets || [];
-    const totalEst = budgets.reduce((s, b) => s + (parseFloat(b.estimated_cost) || 0), 0);
-    const totalAct = budgets.reduce((s, b) => s + (parseFloat(b.actual_cost) || 0), 0);
-    const variance = totalEst - totalAct;
+    // 8. Activities Requiring Attention (Overdue, Urgent, or In Progress)
+    const attentionEl = document.getElementById('overview-attention-tasks-list');
+    if (attentionEl) {
+      const allTasks = this.state.tasks || [];
+      const attentionTasks = [];
 
-    const bPlannedEl = document.getElementById('overview-budget-planned');
-    if (bPlannedEl) bPlannedEl.textContent = `$${totalEst.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const bActEl = document.getElementById('overview-budget-actual');
-    if (bActEl) bActEl.textContent = `$${totalAct.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const bVarEl = document.getElementById('overview-budget-variance');
-    if (bVarEl) {
-      bVarEl.textContent = `${variance >= 0 ? '+' : ''}$${variance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      bVarEl.className = variance >= 0 ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'font-bold text-rose-600 dark:text-rose-400';
+      // Priority 1: Overdue tasks not done
+      allTasks.filter(t => t.status !== 'done' && t.due_date && t.due_date < today).forEach(t => {
+        if (!attentionTasks.find(x => x.id === t.id)) attentionTasks.push({ ...t, attentionReason: 'overdue' });
+      });
+
+      // Priority 2: Urgent or High priority not done
+      allTasks.filter(t => t.status !== 'done' && (t.priority === 'urgent' || t.priority === 'high')).forEach(t => {
+        if (!attentionTasks.find(x => x.id === t.id)) attentionTasks.push({ ...t, attentionReason: 'priority' });
+      });
+
+      // Priority 3: Active in-progress tasks
+      allTasks.filter(t => t.status === 'in_progress').forEach(t => {
+        if (!attentionTasks.find(x => x.id === t.id)) attentionTasks.push({ ...t, attentionReason: 'in_progress' });
+      });
+
+      if (attentionTasks.length === 0) {
+        attentionEl.innerHTML = `
+          <div class="p-3.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 text-center text-xs text-emerald-700 dark:text-emerald-400">
+            <i data-lucide="check-circle" class="w-4 h-4 inline-block mr-1 -mt-0.5 text-emerald-500"></i>
+            All activities are on schedule. No overdue or urgent blockers.
+          </div>
+        `;
+      } else {
+        attentionEl.innerHTML = attentionTasks.slice(0, 5).map(t => {
+          const isOverdue = t.status !== 'done' && t.due_date && t.due_date < today;
+          const member = (this.state.members || []).find(m => m.id === t.assigned_to);
+          const assigneeName = member ? member.name : (t.assigned_to_name || 'Unassigned');
+          return `
+            <div onclick="app.openTaskModal({id: ${t.id}})" class="p-2.5 rounded-lg border border-slate-100 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-slate-50 dark:hover:bg-slate-750 transition cursor-pointer flex items-center justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center space-x-2">
+                  <h5 class="font-bold text-xs text-slate-800 dark:text-white truncate">${this.escapeHtml(t.title)}</h5>
+                  ${isOverdue ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200">Overdue</span>` : ''}
+                  <span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                    t.priority === 'urgent' ? 'bg-rose-100 text-rose-700' :
+                    t.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                    'bg-blue-100 text-blue-700'
+                  }">${t.priority || 'med'}</span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-1 flex items-center space-x-2">
+                  <span>Due: ${t.due_date || 'No date'}</span>
+                  <span>•</span>
+                  <span>${this.escapeHtml(assigneeName)}</span>
+                  <span>•</span>
+                  <span class="capitalize text-slate-500">${(t.status || 'todo').replace('_', ' ')}</span>
+                </div>
+              </div>
+              <button class="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex-shrink-0">
+                Edit
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
     }
 
-    // Risks Snapshot
+    // 9. Upcoming Milestones Widget (Chronological)
+    const mListEl = document.getElementById('overview-milestones-list');
+    if (mListEl) {
+      const sortedMilestones = milestones.slice().sort((a, b) => {
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date) - new Date(b.due_date);
+      });
+      if (sortedMilestones.length === 0) {
+        mListEl.innerHTML = `<div class="p-3 text-center text-slate-400 italic">No milestones recorded.</div>`;
+      } else {
+        mListEl.innerHTML = sortedMilestones.slice(0, 4).map(m => {
+          const isDone = m.status === 'completed';
+          return `
+            <div class="p-2 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div class="min-w-0 flex-1 pr-2">
+                <div class="font-semibold text-slate-800 dark:text-white truncate ${isDone ? 'line-through opacity-70' : ''}">${this.escapeHtml(m.title)}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">Target: ${m.due_date || 'TBD'}</div>
+              </div>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                isDone ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' :
+                'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400'
+              }">${isDone ? 'Reached' : 'Pending'}</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 10. Active Risks Widget
     const rListEl = document.getElementById('overview-risks-list');
     if (rListEl) {
-      const risks = p.risks || [];
-      if (risks.length === 0) {
-        rListEl.innerHTML = `<div class="text-slate-400 italic">No risks recorded in the register.</div>`;
+      if (openRisks.length === 0) {
+        rListEl.innerHTML = `<div class="text-slate-400 italic">No active risks recorded in the register.</div>`;
       } else {
-        rListEl.innerHTML = risks.slice(0, 3).map(r => `
+        // Critical and high risks first
+        const sortedRisks = openRisks.slice().sort((a, b) => {
+          const rank = { critical: 3, high: 2, medium: 1, low: 0 };
+          return (rank[b.impact] || 0) - (rank[a.impact] || 0);
+        });
+        rListEl.innerHTML = sortedRisks.slice(0, 3).map(r => `
           <div class="p-2 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
             <div class="flex items-center justify-between gap-1">
               <span class="font-semibold text-slate-800 dark:text-white truncate">${this.escapeHtml(r.description)}</span>
@@ -1126,11 +1349,16 @@ const app = {
       }
     }
 
-    // Assumptions & Constraints Snapshot
-    const assumpEl = document.getElementById('overview-assumptions-text');
-    if (assumpEl) assumpEl.textContent = p.assumptions || 'None recorded';
-    const constrEl = document.getElementById('overview-constraints-text');
-    if (constrEl) constrEl.textContent = p.constraints || 'None recorded';
+    // 11. Budget Snapshot
+    const bPlannedEl = document.getElementById('overview-budget-planned');
+    if (bPlannedEl) bPlannedEl.textContent = `$${totalEst.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const bActEl = document.getElementById('overview-budget-actual');
+    if (bActEl) bActEl.textContent = `$${totalAct.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const bVarEl = document.getElementById('overview-budget-variance');
+    if (bVarEl) {
+      bVarEl.textContent = `${variance >= 0 ? '+' : ''}$${variance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      bVarEl.className = variance >= 0 ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'font-bold text-rose-600 dark:text-rose-400';
+    }
 
     this.initLucide();
   },
