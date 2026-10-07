@@ -586,12 +586,13 @@ Object.assign(app, {
           <tbody>${delivRows}${delivNew}${delivEmpty}</tbody></table></div>
       </div>`;
 
-    // ---------- milestones (existing tasks, grouped by Technical / Non-technical tag)
+    // ---------- milestones (existing tasks, grouped by Technical / Both / Non-technical tag)
     const typeSel = (t) => `
       <select onchange="app.setTaskType(${t.id}, this.value)" class="${UI.input} !w-auto" ${canEdit ? '' : 'disabled'}>
         <option value="" ${!t.type ? 'selected' : ''}>Not set</option>
-        <option value="nontechnical" ${t.type === 'nontechnical' ? 'selected' : ''}>Non-technical</option>
         <option value="technical" ${t.type === 'technical' ? 'selected' : ''}>Technical</option>
+        <option value="both" ${t.type === 'both' ? 'selected' : ''}>Both</option>
+        <option value="nontechnical" ${t.type === 'nontechnical' ? 'selected' : ''}>Non-technical</option>
       </select>`;
     const msTable = (title, items, emptyText, bare) => `
       <div class="${bare ? '' : UI.card + ' overflow-hidden'}">
@@ -613,13 +614,15 @@ Object.assign(app, {
             </tr>`).join('') : `<tr><td colspan="6" class="py-5 text-center text-xs text-slate-400">${emptyText}</td></tr>`}
           </tbody></table></div>
       </div>`;
-    const nonTech = c.milestones.filter(t => t.type === 'nontechnical');
     const tech2 = c.milestones.filter(t => t.type === 'technical');
+    const both = c.milestones.filter(t => t.type === 'both');
+    const nonTech = c.milestones.filter(t => t.type === 'nontechnical');
     const untyped = c.milestones.filter(t => !t.type);
     const milestones = `
-      ${msTable('Project objectives / milestones — Non-technical', nonTech, 'Pick “Non-technical” in the Type column of an activity below to list it here.')}
       ${msTable('Project objectives / milestones — Technical', tech2, 'Pick “Technical” in the Type column of an activity below to list it here.')}
-      ${untyped.length ? `<details class="${UI.card} overflow-hidden" ${(!nonTech.length && !tech2.length) ? 'open' : ''}>
+      ${msTable('Project objectives / milestones — Both', both, 'Pick “Both” in the Type column of an activity below to list it here.')}
+      ${msTable('Project objectives / milestones — Non-technical', nonTech, 'Pick “Non-technical” in the Type column of an activity below to list it here.')}
+      ${untyped.length ? `<details class="${UI.card} overflow-hidden" ${(!tech2.length && !both.length && !nonTech.length) ? 'open' : ''}>
           <summary class="px-5 py-3 cursor-pointer text-sm font-bold text-slate-800 dark:text-white">Activities not classified yet <span class="text-slate-400 font-medium">· ${untyped.length}</span></summary>
           ${msTable('Not classified', untyped, '', true)}
         </details>` : ''}`;
@@ -745,13 +748,14 @@ Object.assign(app, {
     await this.renderCharter();
   },
 
-  // Technical / Non-technical is stored as a normal task tag, so it also shows in the Table Grid.
+  // Technical / Both / Non-technical is stored as a normal task tag, so it also shows in the Table Grid.
   async setTaskType(taskId, type) {
-    const TYPE_TAGS = ['technical', 'non-technical', 'nontechnical'];
+    const TYPE_TAGS = ['technical', 'non-technical', 'nontechnical', 'both'];
     let task = (this.state.tasks || []).find(t => Number(t.id) === Number(taskId));
     if (!task) task = await this.api(`/api/tasks/${taskId}`);
     const kept = (task.tags || []).filter(t => !TYPE_TAGS.includes(String(t).trim().toLowerCase()));
     if (type === 'technical') kept.push('Technical');
+    if (type === 'both') kept.push('Both');
     if (type === 'nontechnical') kept.push('Non-technical');
     await this.api(`/api/tasks/${taskId}`, { method: 'PUT', body: { tags: kept } });
     if (task) task.tags = kept;

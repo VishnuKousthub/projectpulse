@@ -36,12 +36,14 @@ def clean_assignee(name):
 
 
 def task_type(tags_json):
-    """'technical' | 'nontechnical' | None, derived from the task's tags."""
+    """'technical' | 'nontechnical' | 'both' | None, derived from the task's tags."""
     try:
         tags = json.loads(tags_json) if isinstance(tags_json, str) else (tags_json or [])
     except Exception:
         tags = []
     lowered = [str(t).strip().lower() for t in tags]
+    if "both" in lowered:
+        return "both"
     if "non-technical" in lowered or "nontechnical" in lowered:
         return "nontechnical"
     if "technical" in lowered:
