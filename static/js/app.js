@@ -1217,7 +1217,7 @@ const app = {
     // 2. Build timescale columns based on mode with 100% pixel-perfect top/bottom alignment
     if (scale === 'day') {
       // DAILY SCALE
-      colMinWidth = 38;
+      colMinWidth = 64;
       const baseStart = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate());
       timelineMin = new Date(baseStart.getTime() + (offset * 86400000));
       const daysCount = Math.max(Math.ceil((taskMax.getTime() - baseStart.getTime()) / 86400000) + 1, 7);
@@ -1265,7 +1265,7 @@ const app = {
 
     } else if (scale === 'week') {
       // WEEKLY SCALE (Synchronized with exact Monday start & midpoint Thursday month grouping)
-      colMinWidth = 110;
+      colMinWidth = 180;
       const dayOfWeek = taskMin.getDay();
       const mondayOffset = (dayOfWeek + 6) % 7; // 0 for Mon, 1 for Tue, ..., 6 for Sun
       const projectStartMonday = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate() - mondayOffset);
@@ -1323,7 +1323,7 @@ const app = {
 
     } else if (scale === 'month') {
       // MONTHLY SCALE
-      colMinWidth = 110;
+      colMinWidth = 160;
       const baseMonth = new Date(taskMin.getFullYear(), taskMin.getMonth() + offset, 1);
       timelineMin = baseMonth;
       
@@ -1368,7 +1368,7 @@ const app = {
 
     } else if (scale === 'year') {
       // YEARLY / MULTI-YEAR SCALE (Quarters)
-      colMinWidth = 90;
+      colMinWidth = 140;
       const startYear = taskMin.getFullYear() + offset;
       const endYear = Math.max(taskMax.getFullYear(), startYear);
       timelineMin = new Date(startYear, 0, 1);
@@ -1423,8 +1423,8 @@ const app = {
       return `
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
           
-          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px) -->
-          <div class="w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80">
+          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px, Sticky left-0) -->
+          <div class="sticky left-0 z-10 w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-750 transition">
             
             <!-- Column 1: Title & Assignee info (260px) -->
             <div class="w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
@@ -1542,7 +1542,7 @@ const app = {
               </div>
             ` : `
               <div class="gantt-bar absolute z-10 h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
-                style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%;"
+                style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%; min-width: 90px;"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h&#10;Click to open task details">
                 
@@ -1565,7 +1565,7 @@ const app = {
     if (milestones.length > 0) {
       milestoneRowHtml = `
         <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2">
-          <div class="w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700 bg-amber-50/95 dark:bg-slate-850">
+          <div class="sticky left-0 z-10 w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700 bg-amber-50/95 dark:bg-slate-850">
             <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
@@ -1597,7 +1597,7 @@ const app = {
         <div class="sticky top-0 z-20 shadow-xs select-none">
           <!-- Top Tier Header (Months/Years) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-            <div class="w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+            <div class="sticky left-0 z-30 w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
               <span>Process Activities & Schedule</span>
               <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
             </div>
@@ -1605,7 +1605,7 @@ const app = {
           </div>
           <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
           <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
-            <div class="w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
+            <div class="sticky left-0 z-30 w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
               <div class="w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
               <div class="w-[115px] flex-shrink-0 text-center">Start Date</div>
               <div class="w-[25px] flex-shrink-0 text-center"></div>
