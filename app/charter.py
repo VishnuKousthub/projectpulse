@@ -12,9 +12,9 @@ CHARTER_FIELDS = ("project_code", "cas_no", "project_manager",
                   "received_date", "delivery_date", "tech_pack")
 
 IMPACTS = ("low", "medium", "high")
-DELIVERABLE_STATUSES = ("pending", "in_progress", "done")
+DELIVERABLE_STATUSES = ("backlog", "todo", "in_progress", "in_review", "done")
 DONE_STATUSES = ("done", "completed")      # 'completed' comes from older builds
-RISK_STATUSES = ("open", "closed")
+RISK_STATUSES = ("backlog", "todo", "in_progress", "in_review", "done")
 
 
 def _d(value):
@@ -115,7 +115,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
         title = clean_text(data.get("title"))
         if not title:
             return json_response({"error": "Deliverable name is required"}, status=400)
-        status = data.get("status") if data.get("status") in DELIVERABLE_STATUSES else "pending"
+        status = data.get("status") if data.get("status") in DELIVERABLE_STATUSES else "todo"
         with get_db() as conn:
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
@@ -187,11 +187,12 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 n = conn.execute("SELECT COUNT(*) AS c FROM project_risks WHERE project_id = ?",
                                  (project_id,)).fetchone()["c"]
                 code = f"R{n + 1}"
+            status = data.get("status") if data.get("status") in RISK_STATUSES else "todo"
             cur = conn.execute("""
                 INSERT INTO project_risks (project_id, risk_code, description, impact, mitigation, owner, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (project_id, code, desc, impact, clean_text(data.get("mitigation")),
-                  clean_text(data.get("owner")), get_now_iso()))
+                  clean_text(data.get("owner")), status, get_now_iso()))
             record_activity(conn, project_id, "User", "Risk Added", f'Added risk {code}')
             return json_response(dict(conn.execute(
                 "SELECT * FROM project_risks WHERE id = ?", (cur.lastrowid,)).fetchone()), status=201)
@@ -247,12 +248,12 @@ def register(app, *, get_db, json_response, request, get_current_user,
             risks = conn.execute("""
                 SELECT r.*, p.name AS project_name FROM project_risks r
                 JOIN projects p ON p.id = r.project_id
-                WHERE r.status = 'open'
+                WHERE r.status != 'done'
             """).fetchall()
             deliverables = conn.execute("""
                 SELECT d.*, p.name AS project_name FROM deliverables d
                 JOIN projects p ON p.id = d.project_id
-                WHERE d.status NOT IN ('done', 'completed')
+                WHERE d.status != 'done'
             """).fetchall()
 
         by_project = {}

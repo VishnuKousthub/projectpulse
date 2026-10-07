@@ -6149,11 +6149,12 @@ const app = {
           ${rk.length ? `<div>
             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-700 mb-1.5">Project Risks</div>
             <table class="w-full text-left border-collapse border border-slate-200 dark:border-slate-700"><thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
-              <th class="${th}">ID</th><th class="${th}">Risk description</th><th class="${th}">Impact</th><th class="${th}">Mitigation plan</th><th class="${th}">Owner</th></tr></thead>
-              <tbody>${rk.map(x => `<tr class="border-t border-slate-100 dark:border-slate-700/60 ${x.status === 'closed' ? 'opacity-50' : ''}">
+              <th class="${th}">ID</th><th class="${th}">Risk description</th><th class="${th}">Impact</th><th class="${th}">Mitigation plan</th><th class="${th}">Owner</th><th class="${th}">Status</th></tr></thead>
+              <tbody>${rk.map(x => `<tr class="border-t border-slate-100 dark:border-slate-700/60 ${x.status === 'done' ? 'opacity-50' : ''}">
                 <td class="${td} font-mono font-bold">${this.escapeHtml(x.risk_code || '')}</td><td class="${td}">${this.escapeHtml(x.description)}</td>
                 <td class="${td} capitalize">${this.escapeHtml(x.impact)}</td><td class="${td}">${this.escapeHtml(x.mitigation || '—')}</td>
-                <td class="${td}">${this.escapeHtml(x.owner || '—')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+                <td class="${td}">${this.escapeHtml(x.owner || '—')}</td>
+                <td class="${td} capitalize">${this.escapeHtml(String(x.status || '').replace('_', ' '))}</td></tr>`).join('')}</tbody></table></div>` : ''}
         </div>`;
       })()}
 

@@ -65,8 +65,15 @@ class TestCharter(unittest.TestCase):
         code, d = call(f"/api/projects/{self.pid}/deliverables", "POST",
                        {"title": "AZADOL 1 kg", "quality": "99%", "quantity": "1 kg", "due_date": "2026-12-10"}, self.pm)
         self.assertEqual(code, 201)
+        self.assertEqual(d["status"], "todo")
         code, d2 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "in_progress"}, self.pm)
         self.assertEqual((code, d2["status"], d2["quantity"]), (200, "in_progress", "1 kg"))
+        code, d3 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "in_review"}, self.pm)
+        self.assertEqual(d3["status"], "in_review")
+        code, d4 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "done"}, self.pm)
+        self.assertEqual(d4["status"], "done")
+        code, d5 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "backlog"}, self.pm)
+        self.assertEqual(d5["status"], "backlog")
         code, _ = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "  "}, self.pm)
         self.assertEqual(code, 400)
         _, c = call(f"/api/projects/{self.pid}/charter")
@@ -76,11 +83,14 @@ class TestCharter(unittest.TestCase):
     def test_04_risk_crud_and_auto_code(self):
         code, r1 = call(f"/api/projects/{self.pid}/risks", "POST", {"description": "Raw material delay", "impact": "high"}, self.pm)
         self.assertEqual(code, 201)
+        self.assertEqual(r1["status"], "todo")
         _, r2 = call(f"/api/projects/{self.pid}/risks", "POST", {"description": "Low yield", "impact": "bogus"}, self.pm)
         self.assertNotEqual(r1["risk_code"], r2["risk_code"])
         self.assertEqual(r2["impact"], "medium")           # invalid impact falls back
-        _, upd = call(f"/api/risks/{r1['id']}", "PUT", {"status": "closed"}, self.pm)
-        self.assertEqual(upd["status"], "closed")
+        _, upd = call(f"/api/risks/{r1['id']}", "PUT", {"status": "done"}, self.pm)
+        self.assertEqual(upd["status"], "done")
+        _, upd2 = call(f"/api/risks/{r1['id']}", "PUT", {"status": "in_review"}, self.pm)
+        self.assertEqual(upd2["status"], "in_review")
         self.assertEqual(call(f"/api/projects/{self.pid}/risks", "POST", {"description": ""}, self.pm)[0], 400)
 
     def test_05_restricted_roles_cannot_edit_but_can_read(self):
@@ -113,6 +123,23 @@ class TestCharter(unittest.TestCase):
         self.assertIsNotNone(row["days_left"])
         self.assertGreaterEqual(d["kpis"]["open_high_risks"], 1)
         self.assertEqual(d["kpis"]["projects"], len(d["projects"]))
+
+    def test_08_migration_converts_old_statuses(self):
+        with get_db() as conn:
+            conn.execute("INSERT INTO deliverables (project_id, title, status, created_at) VALUES (?, 'Old Pending', 'pending', '2026-01-01')", (self.pid,))
+            conn.execute("INSERT INTO deliverables (project_id, title, status, created_at) VALUES (?, 'Old Completed', 'completed', '2026-01-01')", (self.pid,))
+            conn.execute("INSERT INTO project_risks (project_id, description, status, created_at) VALUES (?, 'Old Open', 'open', '2026-01-01')", (self.pid,))
+            conn.execute("INSERT INTO project_risks (project_id, description, status, created_at) VALUES (?, 'Old Closed', 'closed', '2026-01-01')", (self.pid,))
+        init_db()
+        with get_db() as conn:
+            d_p = conn.execute("SELECT status FROM deliverables WHERE title = 'Old Pending'").fetchone()["status"]
+            d_c = conn.execute("SELECT status FROM deliverables WHERE title = 'Old Completed'").fetchone()["status"]
+            r_o = conn.execute("SELECT status FROM project_risks WHERE description = 'Old Open'").fetchone()["status"]
+            r_c = conn.execute("SELECT status FROM project_risks WHERE description = 'Old Closed'").fetchone()["status"]
+        self.assertEqual(d_p, "todo")
+        self.assertEqual(d_c, "done")
+        self.assertEqual(r_o, "todo")
+        self.assertEqual(r_c, "done")
 
     @classmethod
     def tearDownClass(cls):

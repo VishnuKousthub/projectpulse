@@ -538,11 +538,31 @@ Object.assign(app, {
         </div>
       </div>`;
 
-    // ---------- deliverables
-    const statusSel = (id, val, handler) => `
-      <select onchange="${handler}" class="${UI.input} !w-auto" ${canEdit ? '' : 'disabled'}>
-        ${[['pending', 'Pending'], ['in_progress', 'In progress'], ['done', 'Done']].map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}
-      </select>`;
+    // ---------- deliverables & risks statuses
+    const STATUS_CHOICES = [
+      ['backlog', 'Backlog', 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'],
+      ['todo', 'To Do', 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'],
+      ['in_progress', 'In Progress', 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'],
+      ['in_review', 'In Review', 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'],
+      ['done', 'Done', 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'],
+    ];
+
+    const getStatusStyle = (st) => {
+      const norm = (st === 'pending' || st === 'open' ? 'todo' : (st === 'completed' || st === 'closed' || st === 'mitigated') ? 'done' : st) || 'todo';
+      const found = STATUS_CHOICES.find(([v]) => v === norm);
+      return found ? found[2] : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300';
+    };
+
+    const statusSel = (idAttr, val, handler) => {
+      const v = (val === 'pending' || val === 'open' ? 'todo' : (val === 'completed' || val === 'closed' || val === 'mitigated') ? 'done' : val) || 'todo';
+      const colorCls = getStatusStyle(v);
+      const idStr = idAttr ? `id="${idAttr}"` : '';
+      const onchangeStr = handler ? `onchange="${handler}"` : '';
+      return `
+        <select ${idStr} ${onchangeStr} class="text-xs font-semibold px-2 py-1 rounded-md border !w-auto cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${colorCls}" ${canEdit ? '' : 'disabled'}>
+          ${STATUS_CHOICES.map(([optVal, optLabel]) => `<option value="${optVal}" class="bg-white text-slate-900 dark:bg-slate-800 dark:text-white" ${optVal === v ? 'selected' : ''}>${optLabel}</option>`).join('')}
+        </select>`;
+    };
 
     const delivForm = (d) => `
       <tr class="border-t border-slate-100 dark:border-slate-700/60 bg-blue-50/40 dark:bg-slate-700/20">
@@ -550,7 +570,7 @@ Object.assign(app, {
         <td class="${UI.td}">${inp('cd-quality', d.quality, 'text', 'placeholder="e.g. Purity ≥ 99% by HPLC"')}</td>
         <td class="${UI.td}">${inp('cd-qty', d.quantity, 'text', 'placeholder="e.g. 1 kg"')}</td>
         <td class="${UI.td}">${inp('cd-due', d.due_date, 'date')}</td>
-        <td class="${UI.td}"></td>
+        <td class="${UI.td}">${statusSel('cd-status', d.status || 'todo', 'app.updateDropdownColor(this)')}</td>
         <td class="${UI.td} whitespace-nowrap text-right">
           <button onclick="app.saveDeliverable(${d.id || 0})" class="${UI.btn} ${UI.btnPrimary}">Save</button>
           <button onclick="app.cancelCharterRow()" class="${UI.btn} ${UI.btnGhost}">Cancel</button>
@@ -563,7 +583,7 @@ Object.assign(app, {
         <td class="${UI.td}">${esc(d.quality) || '<span class="text-slate-400">—</span>'}</td>
         <td class="${UI.td}">${esc(d.quantity) || '<span class="text-slate-400">—</span>'}</td>
         <td class="${UI.td} whitespace-nowrap">${this.fmtDate(d.due_date)}</td>
-        <td class="${UI.td}">${statusSel('', d.status === 'completed' ? 'done' : d.status, `app.setDeliverableStatus(${d.id}, this.value)`)}</td>
+        <td class="${UI.td}">${statusSel('', d.status, `app.setDeliverableStatus(${d.id}, this.value)`)}</td>
         <td class="${UI.td} text-right whitespace-nowrap">${canEdit ? `
           <button onclick="app.editCharterRow('deliverable', ${d.id})" class="${UI.iconBtn}" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button onclick="app.deleteDeliverable(${d.id})" class="${UI.iconBtn} hover:!text-rose-600" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}</td>
@@ -639,7 +659,7 @@ Object.assign(app, {
         <td class="${UI.td}"><select id="cr-impact" class="${UI.input}">${['high', 'medium', 'low'].map(v => `<option value="${v}" ${(r.impact || 'medium') === v ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></td>
         <td class="${UI.td}">${inp('cr-mit', r.mitigation, 'text', 'placeholder="Mitigation plan"')}</td>
         <td class="${UI.td}">${inp('cr-owner', r.owner, 'text', 'placeholder="Owner"')}</td>
-        <td class="${UI.td}"></td>
+        <td class="${UI.td}">${statusSel('cr-status', r.status || 'todo', 'app.updateDropdownColor(this)')}</td>
         <td class="${UI.td} whitespace-nowrap text-right">
           <button onclick="app.saveRisk(${r.id || 0})" class="${UI.btn} ${UI.btnPrimary}">Save</button>
           <button onclick="app.cancelCharterRow()" class="${UI.btn} ${UI.btnGhost}">Cancel</button>
@@ -647,14 +667,13 @@ Object.assign(app, {
       </tr>`;
     const riskRows = c.risks.map(r =>
       (edit.kind === 'risk' && edit.id === r.id) ? riskForm(r) : `
-      <tr class="border-t border-slate-100 dark:border-slate-700/60 ${r.status === 'closed' ? 'opacity-50' : ''}">
+      <tr class="border-t border-slate-100 dark:border-slate-700/60 ${r.status === 'done' ? 'opacity-50' : ''}">
         <td class="${UI.td} font-mono font-bold">${esc(r.risk_code)}</td>
         <td class="${UI.td}">${esc(r.description)}</td>
         <td class="${UI.td}">${impactBadge(r.impact)}</td>
         <td class="${UI.td}">${esc(r.mitigation) || '<span class="text-slate-400">—</span>'}</td>
         <td class="${UI.td}">${esc(r.owner) || '<span class="text-slate-400">—</span>'}</td>
-        <td class="${UI.td}"><select onchange="app.setRiskStatus(${r.id}, this.value)" class="${UI.input} !w-auto" ${canEdit ? '' : 'disabled'}>
-          <option value="open" ${(r.status === 'open') ? 'selected' : ''}>Open</option><option value="closed" ${(r.status === 'closed' || r.status === 'mitigated') ? 'selected' : ''}>Closed</option></select></td>
+        <td class="${UI.td}">${statusSel('', r.status, `app.setRiskStatus(${r.id}, this.value)`)}</td>
         <td class="${UI.td} text-right whitespace-nowrap">${canEdit ? `
           <button onclick="app.editCharterRow('risk', ${r.id})" class="${UI.iconBtn}" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button onclick="app.deleteRisk(${r.id})" class="${UI.iconBtn} hover:!text-rose-600" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}</td>
@@ -712,7 +731,13 @@ Object.assign(app, {
 
   async saveDeliverable(id) {
     const v = (x) => document.getElementById(x)?.value ?? '';
-    const body = { title: v('cd-title'), quality: v('cd-quality'), quantity: v('cd-qty'), due_date: v('cd-due') };
+    const body = {
+      title: v('cd-title'),
+      quality: v('cd-quality'),
+      quantity: v('cd-qty'),
+      due_date: v('cd-due'),
+      status: v('cd-status') || 'todo'
+    };
     if (!body.title.trim()) { this.showToast('Deliverable name is required', 'error'); return; }
     if (id) await this.api(`/api/deliverables/${id}`, { method: 'PUT', body });
     else await this.api(`/api/projects/${this.state.currentProjectId}/deliverables`, { method: 'POST', body });
@@ -731,12 +756,30 @@ Object.assign(app, {
 
   async saveRisk(id) {
     const v = (x) => document.getElementById(x)?.value ?? '';
-    const body = { risk_code: v('cr-code'), description: v('cr-desc'), impact: v('cr-impact'), mitigation: v('cr-mit'), owner: v('cr-owner') };
+    const body = {
+      risk_code: v('cr-code'),
+      description: v('cr-desc'),
+      impact: v('cr-impact'),
+      mitigation: v('cr-mit'),
+      owner: v('cr-owner'),
+      status: v('cr-status') || 'todo'
+    };
     if (!body.description.trim()) { this.showToast('Risk description is required', 'error'); return; }
     if (id) await this.api(`/api/risks/${id}`, { method: 'PUT', body });
     else await this.api(`/api/projects/${this.state.currentProjectId}/risks`, { method: 'POST', body });
     this.state.charterEdit = null;
     await this.renderCharter();
+  },
+  updateDropdownColor(el) {
+    const colors = {
+      backlog: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+      todo: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
+      in_progress: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
+      in_review: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800',
+      done: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+    };
+    const base = 'text-xs font-semibold px-2 py-1 rounded-md border !w-auto cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ';
+    el.className = base + (colors[el.value] || colors.todo);
   },
   async setRiskStatus(id, status) {
     await this.api(`/api/risks/${id}`, { method: 'PUT', body: { status } });

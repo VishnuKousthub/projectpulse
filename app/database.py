@@ -293,7 +293,7 @@ def init_db():
             quality TEXT,
             quantity TEXT,
             due_date TEXT,
-            status TEXT DEFAULT 'pending', -- 'pending', 'in_progress', 'done'
+            status TEXT DEFAULT 'todo', -- 'backlog', 'todo', 'in_progress', 'in_review', 'done'
             created_at TEXT NOT NULL,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )
@@ -308,7 +308,7 @@ def init_db():
             impact TEXT DEFAULT 'medium', -- 'low', 'medium', 'high'
             mitigation TEXT,
             owner TEXT,
-            status TEXT DEFAULT 'open', -- 'open', 'closed'
+            status TEXT DEFAULT 'todo', -- 'backlog', 'todo', 'in_progress', 'in_review', 'done'
             created_at TEXT NOT NULL,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )
@@ -326,6 +326,19 @@ def init_db():
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
             except Exception:
                 pass
+
+        # Idempotent migration for deliverables and risks statuses:
+        # pending -> todo, completed -> done
+        # open -> todo, closed -> done, mitigated -> done
+        # Rows already in ('backlog', 'todo', 'in_progress', 'in_review', 'done') are untouched.
+        try:
+            cursor.execute("UPDATE deliverables SET status = 'todo' WHERE status = 'pending'")
+            cursor.execute("UPDATE deliverables SET status = 'done' WHERE status = 'completed'")
+            cursor.execute("UPDATE project_risks SET status = 'todo' WHERE status = 'open'")
+            cursor.execute("UPDATE project_risks SET status = 'done' WHERE status IN ('closed', 'mitigated')")
+        except Exception:
+            pass
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deliverables_proj ON deliverables(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_risks_proj ON project_risks(project_id)")
 
