@@ -182,7 +182,108 @@ Object.assign(app, {
         </div>${body}
       </div>`;
 
+    const ds = d.deliverable_summary || { total: 0, by_status: {}, overdue: 0, due_next_7_days: 0, delivered_pct: 0 };
+    const rs = d.risk_summary || { total: 0, by_status: {}, open_total: 0, open_by_impact: { high: 0, medium: 0, low: 0 } };
+
+    const statusConfig = [
+      { key: 'backlog', label: 'Backlog', barBg: 'bg-slate-400 dark:bg-slate-500', dotBg: 'bg-slate-400 dark:bg-slate-500' },
+      { key: 'todo', label: 'To Do', barBg: 'bg-blue-500', dotBg: 'bg-blue-500' },
+      { key: 'in_progress', label: 'In Progress', barBg: 'bg-amber-500', dotBg: 'bg-amber-500' },
+      { key: 'in_review', label: 'In Review', barBg: 'bg-purple-500', dotBg: 'bg-purple-500' },
+      { key: 'done', label: 'Done', barBg: 'bg-emerald-500', dotBg: 'bg-emerald-500' },
+    ];
+
+    const makeStackedBar = (byStatus, total) => {
+      if (!total) return '';
+      const segs = statusConfig.map(cfg => {
+        const count = byStatus[cfg.key] || 0;
+        if (count <= 0) return '';
+        const pct = (count / total) * 100;
+        const pctLabel = Math.round(pct);
+        return `<div class="${cfg.barBg} h-full transition-all" style="width:${pct}%" title="${cfg.label}: ${count} (${pctLabel}%)"></div>`;
+      }).filter(Boolean).join('');
+      return `<div class="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700/80 overflow-hidden flex my-2">${segs}</div>`;
+    };
+
+    const makeLegend = (byStatus) => statusConfig.map(cfg => {
+      const count = byStatus[cfg.key] || 0;
+      const hideCls = count === 0 ? 'hidden sm:inline-flex' : 'inline-flex';
+      return `<span class="${hideCls} items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+        <span class="w-1.5 h-1.5 rounded-full ${cfg.dotBg} flex-shrink-0"></span>
+        <span>${cfg.label}</span>
+        <span class="font-bold text-slate-700 dark:text-slate-200">${count}</span>
+      </span>`;
+    }).join('');
+
+    const delivCard = `
+      <div class="${UI.card} p-3.5 flex flex-col justify-between min-h-[115px]">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5" title="Deliverables across all projects. Overdue = not marked done and past due date.">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-help">Deliverables status</h3>
+              <span class="text-[10px] text-slate-400 cursor-help">ⓘ</span>
+            </div>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">${ds.total} total</span>
+          </div>
+          ${ds.total === 0 ? `
+            <div class="py-5 text-center text-xs text-slate-400">No deliverables yet. Add them on a project's Charter page.</div>
+          ` : `
+            ${makeStackedBar(ds.by_status || {}, ds.total)}
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+              ${makeLegend(ds.by_status || {})}
+            </div>
+          `}
+        </div>
+        ${ds.total === 0 ? '' : `
+          <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/60 mt-2">
+            <span class="font-bold text-emerald-600 dark:text-emerald-400">Delivered: ${ds.delivered_pct}%</span>
+            <div class="flex items-center gap-3 text-[11px]">
+              <span class="${ds.overdue > 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}">Overdue: ${ds.overdue}</span>
+              <span class="${ds.due_next_7_days > 0 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-400 dark:text-slate-500'}">Due in 7 days: ${ds.due_next_7_days}</span>
+            </div>
+          </div>
+        `}
+      </div>`;
+
+    const riskCard = `
+      <div class="${UI.card} p-3.5 flex flex-col justify-between min-h-[115px]">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5" title="Risks across all projects. Open = status is not done.">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-help">Risks status</h3>
+              <span class="text-[10px] text-slate-400 cursor-help">ⓘ</span>
+            </div>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">${rs.total} total</span>
+          </div>
+          ${rs.total === 0 ? `
+            <div class="py-5 text-center text-xs text-slate-400">No risks logged yet.</div>
+          ` : `
+            ${makeStackedBar(rs.by_status || {}, rs.total)}
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+              ${makeLegend(rs.by_status || {})}
+            </div>
+          `}
+        </div>
+        ${rs.total === 0 ? '' : `
+          <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/60 mt-2">
+            <span class="font-bold ${rs.open_total > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}">Open risks: ${rs.open_total}</span>
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              <span class="${(rs.open_by_impact?.high || 0) > 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}">High: ${rs.open_by_impact?.high || 0}</span>
+              <span class="text-slate-300 dark:text-slate-600">|</span>
+              <span class="${(rs.open_by_impact?.medium || 0) > 0 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-400 dark:text-slate-500'}">Med: ${rs.open_by_impact?.medium || 0}</span>
+              <span class="text-slate-300 dark:text-slate-600">|</span>
+              <span class="text-slate-500 dark:text-slate-400 font-medium">Low: ${rs.open_by_impact?.low || 0}</span>
+            </div>
+          </div>
+        `}
+      </div>`;
+
     root.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        ${delivCard}
+        ${riskCard}
+      </div>
+
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
         ${tile('Projects', k.projects, `${k.total_tasks} tasks in total`)}
         ${tile('Overdue tasks', k.overdue_tasks, 'past their due date', k.overdue_tasks ? 'text-rose-600' : '')}
