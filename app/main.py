@@ -9,6 +9,7 @@ from bottle import Bottle, request, response, static_file, run
 from app.database import get_db, init_db, hash_password, verify_password, normalize_project_task_order
 from app.seed import seed_database
 from app import charter as charter_module
+from app import users as users_module
 from app.gantt_parser import (
     parse_gantt_file, generate_sample_gantt_csv, generate_sample_gantt_excel, AVATAR_COLORS
 )
@@ -118,11 +119,14 @@ def get_current_user():
     
     with get_db() as conn:
         session = conn.execute("""
-            SELECT s.*, u.id as user_id, u.username, u.email, u.full_name, u.role, u.avatar_color
+            SELECT s.*, u.id as user_id, u.username, u.email, u.full_name, u.role, u.avatar_color,
+                   COALESCE(u.is_active, 1) as is_active
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token = ? AND s.expires_at > datetime('now')
         """, (token,)).fetchone()
+        if session and session.get("is_active") == 0:
+            return None
         return session
 
 def get_user_role(user=None):
@@ -252,6 +256,10 @@ def auth_login():
 
         if not user or not verify_password(password, user["password_hash"]):
             return json_response({"error": "Invalid username or password"}, status=401)
+
+        is_active = user["is_active"] if "is_active" in user.keys() and user["is_active"] is not None else 1
+        if is_active == 0:
+            return json_response({"error": "This account has been disabled"}, status=403)
 
         token = secrets.token_hex(32)
         now_dt = datetime.now(timezone.utc)
@@ -2980,6 +2988,14 @@ charter_module.register(
     get_db=get_db, json_response=json_response, request=request,
     get_current_user=get_current_user, is_full_access=is_full_access,
     get_now_iso=get_now_iso, record_activity=record_activity, clean_text=clean_text,
+)
+
+# ==================== USER MANAGEMENT (ADMIN ONLY) ====================
+
+users_module.register(
+    app,
+    get_db=get_db, json_response=json_response, request=request,
+    get_current_user=get_current_user, clean_text=clean_text, get_now_iso=get_now_iso,
 )
 
 # ==================== EXPORT & IMPORT ====================

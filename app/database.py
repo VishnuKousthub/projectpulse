@@ -160,9 +160,6 @@ def seed_default_users(cursor):
                 INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (username, email, hash_password(pwd), full_name, role, color, now_str))
-        else:
-            # Keep roles synchronized with standard definitions
-            cursor.execute("UPDATE users SET role = ?, full_name = ? WHERE id = ?", (role, full_name, existing["id"]))
 
 def init_db():
     with get_db() as conn:
@@ -183,6 +180,7 @@ def init_db():
             full_name TEXT NOT NULL,
             role TEXT DEFAULT 'manager', -- 'admin', 'manager', 'member', 'viewer'
             avatar_color TEXT DEFAULT '#3B82F6',
+            is_active INTEGER DEFAULT 1,
             created_at TEXT NOT NULL,
             last_login TEXT
         )
@@ -336,6 +334,16 @@ def init_db():
             cursor.execute("UPDATE deliverables SET status = 'done' WHERE status = 'completed'")
             cursor.execute("UPDATE project_risks SET status = 'todo' WHERE status = 'open'")
             cursor.execute("UPDATE project_risks SET status = 'done' WHERE status IN ('closed', 'mitigated')")
+        except Exception:
+            pass
+
+        # Additive migration: users.is_active INTEGER DEFAULT 1 (add column only if missing; existing users stay active)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        try:
+            cursor.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
         except Exception:
             pass
 
