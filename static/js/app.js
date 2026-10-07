@@ -12,7 +12,7 @@ const app = {
     currentProjectId: null,
     currentProject: null,
     tasks: [],
-    activeView: 'kanban',
+    activeView: 'dashboard',
     ganttScale: 'week', // 'day' | 'week' | 'month' | 'year'
     ganttOffset: 0,
     searchQuery: '',
@@ -37,6 +37,7 @@ const app = {
   },
 
   async init() {
+    this.applySimpleMode();
     this.initTheme();
     this.initSidebarMode();
     this.initKeyboardShortcuts();
@@ -182,6 +183,9 @@ const app = {
     if (ganttImportBtn) ganttImportBtn.style.display = isProgress ? 'none' : '';
     if (resAddBtn) resAddBtn.style.display = isProgress ? 'none' : '';
     if (resMapBtn) resMapBtn.style.display = isProgress ? 'none' : '';
+
+    // Simple mode re-hides what this method may have just un-hidden (e.g. Reset Demo Data)
+    this.applySimpleMode();
   },
 
   initClickOutside() {
@@ -310,6 +314,10 @@ const app = {
           if (!exists) targetId = projects[0].id;
         }
         await this.selectProject(targetId);
+        if (!this._landed) {
+          this._landed = true;
+          this.switchView(FEATURES.landingView);
+        }
       } else {
         this.openProjectModal();
       }
@@ -499,8 +507,11 @@ const app = {
     document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
     const targetPanel = document.getElementById(`view-${viewName}-container`);
     if (targetPanel) targetPanel.classList.remove('hidden');
+    document.querySelector('.app-main')?.scrollTo(0, 0);
 
     const titles = {
+      dashboard: 'Dashboard',
+      charter: 'Project Charter',
       kanban: 'Kanban Board',
       gantt: 'Gantt & Timeline',
       table: 'Table Grid',
@@ -519,6 +530,12 @@ const app = {
   renderCurrentView() {
     this.applyRolePermissionsUI();
     switch (this.state.activeView) {
+      case 'dashboard':
+        this.renderDashboard();
+        break;
+      case 'charter':
+        this.renderCharter();
+        break;
       case 'kanban':
         this.renderKanban();
         break;
@@ -3105,7 +3122,7 @@ const app = {
   async inspectProjectFromPortfolio(projectId) {
     if (!projectId) return;
     await this.selectProject(Number(projectId));
-    this.switchView('kanban');
+    this.switchView('table');
   },
 
   renderPortfolioProjectsChart(projects = []) {
@@ -5498,6 +5515,11 @@ const app = {
       container.classList.add('hidden');
     }
     this.hideAuthError();
+    // Land on the Dashboard the first time the user gets in
+    if (!this._landed) {
+      this._landed = true;
+      this.switchView(FEATURES.landingView);
+    }
   },
 
   switchAuthTab(tab = 'login') {
@@ -6066,7 +6088,7 @@ const app = {
         </div>
 
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400 font-medium">
-          <div>Report Ref: <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'} (Rev 1)</strong></div>
+          <div>Report Ref: <strong class="text-slate-900 dark:text-white font-mono">${this.escapeHtml(p.project_code || ('PRJ-2026-' + (p.id || '101')))} (Rev 1)</strong></div>
           <span class="text-slate-300 dark:text-slate-600">|</span>
           <div>Linked Project: <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.name || 'Project')}</strong></div>
           <span class="text-slate-300 dark:text-slate-600">|</span>
@@ -6086,10 +6108,10 @@ const app = {
           <div class="text-xs font-black text-slate-900 dark:text-white truncate pb-0.5">
             ${this.escapeHtml(p.name || 'Project')}
           </div>
-          <div><span class="text-slate-500">Attention / Lead:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(lead.name || 'Alex Morgan')}</strong> (${this.escapeHtml(lead.role || 'Project Lead')})</div>
-          <div><span class="text-slate-500">Email:</span> <span class="font-mono">${this.escapeHtml(lead.email || 'lead@chemtatva.com')}</span></div>
-          <div><span class="text-slate-500">Workspace / Site:</span> Chemtatva R&D & Reactor Facility A</div>
-          <div><span class="text-slate-500">Project Scope:</span> ${this.escapeHtml(p.description || 'Full-cycle enterprise delivery, synthesis, validation and architecture execution.')}</div>
+          <div><span class="text-slate-500">Project Manager:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.project_manager || lead.name || '—')}</strong></div>
+          ${(!p.project_manager && lead.email) ? `<div><span class="text-slate-500">Email:</span> <span class="font-mono">${this.escapeHtml(lead.email)}</span></div>` : ''}
+          <div><span class="text-slate-500">CAS No.:</span> ${this.escapeHtml(p.cas_no || '—')}</div>
+          <div><span class="text-slate-500">Project Scope:</span> ${this.escapeHtml(p.description || '—')}</div>
         </div>
 
         <!-- Right Panel: Project & Schedule Terms -->
@@ -6097,14 +6119,43 @@ const app = {
           <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-1.5">
             Project & Commercial Terms
           </div>
-          <div><span class="text-slate-500">Project Code:</span> <strong class="text-slate-900 dark:text-white font-mono">PRJ-2026-${p.id || '101'}</strong></div>
-          <div><span class="text-slate-500">Execution Site:</span> Reactor Facility A, Hyderabad</div>
-          <div><span class="text-slate-500">Delivery Target:</span> Chemtatva Global Client Supply, Basel / Global</div>
+          <div><span class="text-slate-500">Project Code:</span> <strong class="text-slate-900 dark:text-white font-mono">${this.escapeHtml(p.project_code || ('PRJ-2026-' + (p.id || '101')))}</strong></div>
+          <div><span class="text-slate-500">Project Received:</span> ${this.fmtDate(p.received_date)}</div>
+          <div><span class="text-slate-500">Project Delivery:</span> ${this.fmtDate(p.delivery_date)}</div>
+          <div><span class="text-slate-500">Tech Pack:</span> ${this.escapeHtml(p.tech_pack || '—')}</div>
           <div><span class="text-slate-500">Total Activities in Scope:</span> <strong>${k.total_activities || 0} Activities</strong></div>
           <div><span class="text-slate-500">Schedule Status:</span> ${k.overdue > 0 ? `<strong class="text-rose-600">${k.overdue} Overdue Activities</strong>` : '<strong class="text-emerald-600">On Track (All Deliverables Current)</strong>'}</div>
         </div>
 
       </div>
+
+      <!-- ==================== CHARTER: DELIVERABLES & RISKS ==================== -->
+      ${(() => {
+        const ch = data.charter || {};
+        const dl = ch.deliverables || [];
+        const rk = ch.risks || [];
+        if (!dl.length && !rk.length) return '';
+        const th = 'py-2 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-600';
+        const td = 'py-2 px-3 text-xs align-top';
+        return `<div id="report-sec-charter" class="space-y-3">
+          ${dl.length ? `<div>
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-700 mb-1.5">Project Deliverables</div>
+            <table class="w-full text-left border-collapse border border-slate-200 dark:border-slate-700"><thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
+              <th class="${th}">Deliverable</th><th class="${th}">Quality</th><th class="${th}">Quantity</th><th class="${th}">Due</th><th class="${th}">Status</th></tr></thead>
+              <tbody>${dl.map(x => `<tr class="border-t border-slate-100 dark:border-slate-700/60">
+                <td class="${td} font-semibold">${this.escapeHtml(x.title)}</td><td class="${td}">${this.escapeHtml(x.quality || '—')}</td>
+                <td class="${td}">${this.escapeHtml(x.quantity || '—')}</td><td class="${td}">${this.fmtDate(x.due_date)}</td>
+                <td class="${td} capitalize">${this.escapeHtml(String(x.status || '').replace('_', ' '))}</td></tr>`).join('')}</tbody></table></div>` : ''}
+          ${rk.length ? `<div>
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-700 mb-1.5">Project Risks</div>
+            <table class="w-full text-left border-collapse border border-slate-200 dark:border-slate-700"><thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
+              <th class="${th}">ID</th><th class="${th}">Risk description</th><th class="${th}">Impact</th><th class="${th}">Mitigation plan</th><th class="${th}">Owner</th></tr></thead>
+              <tbody>${rk.map(x => `<tr class="border-t border-slate-100 dark:border-slate-700/60 ${x.status === 'closed' ? 'opacity-50' : ''}">
+                <td class="${td} font-mono font-bold">${this.escapeHtml(x.risk_code || '')}</td><td class="${td}">${this.escapeHtml(x.description)}</td>
+                <td class="${td} capitalize">${this.escapeHtml(x.impact)}</td><td class="${td}">${this.escapeHtml(x.mitigation || '—')}</td>
+                <td class="${td}">${this.escapeHtml(x.owner || '—')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        </div>`;
+      })()}
 
       <!-- ==================== ACTIVITY & SPECIFICATION REGISTER ==================== -->
       <div id="report-sec-register" class="space-y-2.5">

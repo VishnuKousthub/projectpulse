@@ -8,6 +8,7 @@ from bottle import Bottle, request, response, static_file, run
 
 from app.database import get_db, init_db, hash_password, verify_password, normalize_project_task_order
 from app.seed import seed_database
+from app import charter as charter_module
 from app.gantt_parser import (
     parse_gantt_file, generate_sample_gantt_csv, generate_sample_gantt_excel, AVATAR_COLORS
 )
@@ -537,7 +538,13 @@ def update_project(project_id):
             UPDATE projects SET name = ?, description = ?, color = ?, updated_at = ?
             WHERE id = ?
         """, (name, desc, color, now_str, project_id))
-        
+
+        # Charter fields (optional; only touched when sent)
+        for field in charter_module.CHARTER_FIELDS:
+            if field in data:
+                conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?",
+                             (clean_text(data[field]) or None, project_id))
+
         record_activity(conn, project_id, "User", "Project Updated", "Updated project settings")
         updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         return json_response(updated)
@@ -2638,7 +2645,20 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
             "name": project["name"],
             "description": project["description"] or "",
             "created_at": project["created_at"],
-            "updated_at": project["updated_at"]
+            "updated_at": project["updated_at"],
+            "project_code": project["project_code"],
+            "cas_no": project["cas_no"],
+            "project_manager": project["project_manager"],
+            "received_date": project["received_date"],
+            "delivery_date": project["delivery_date"],
+            "tech_pack": project["tech_pack"],
+        },
+        "charter": {
+            "deliverables": [dict(r) for r in conn.execute(
+                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
+                (project_id,)).fetchall()],
+            "risks": [dict(r) for r in conn.execute(
+                "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()],
         },
         "metadata": {
             "generated_at": now_iso,
@@ -2952,6 +2972,15 @@ def export_cumulative_report_endpoint(project_id):
         response.content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         response.set_header("Content-Disposition", f'attachment; filename="{filename}"')
         return excel_bytes
+
+# ==================== PROJECT CHARTER & DASHBOARD ====================
+
+charter_module.register(
+    app,
+    get_db=get_db, json_response=json_response, request=request,
+    get_current_user=get_current_user, is_full_access=is_full_access,
+    get_now_iso=get_now_iso, record_activity=record_activity, clean_text=clean_text,
+)
 
 # ==================== EXPORT & IMPORT ====================
 

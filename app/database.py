@@ -277,6 +277,58 @@ def init_db():
         except Exception:
             pass
 
+        # ---- Project Charter (additive only; nothing is auto-filled) ----
+        for col in ("project_code", "cas_no", "project_manager",
+                    "received_date", "delivery_date", "tech_pack"):
+            try:
+                cursor.execute(f"ALTER TABLE projects ADD COLUMN {col} TEXT")
+            except Exception:
+                pass
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS deliverables (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            quality TEXT,
+            quantity TEXT,
+            due_date TEXT,
+            status TEXT DEFAULT 'pending', -- 'pending', 'in_progress', 'done'
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_risks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            risk_code TEXT,
+            description TEXT NOT NULL,
+            impact TEXT DEFAULT 'medium', -- 'low', 'medium', 'high'
+            mitigation TEXT,
+            owner TEXT,
+            status TEXT DEFAULT 'open', -- 'open', 'closed'
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        )
+        """)
+        # Databases that already hold a `deliverables` / `project_risks` table from another
+        # build are upgraded in place (columns added only when missing).
+        for table, col, ddl in (
+            ("deliverables", "quality", "TEXT"),
+            ("deliverables", "quantity", "TEXT"),
+            ("project_risks", "risk_code", "TEXT"),
+            ("project_risks", "mitigation", "TEXT"),
+            ("project_risks", "owner", "TEXT"),
+        ):
+            try:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            except Exception:
+                pass
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deliverables_proj ON deliverables(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_risks_proj ON project_risks(project_id)")
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS subtasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
