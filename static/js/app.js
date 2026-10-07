@@ -492,6 +492,17 @@ const app = {
   },
 
   switchView(viewName) {
+    const role = this.getUserRole();
+    const isAdmin = (role === 'admin');
+    const isProgress = this.isProgressOnly();
+
+    if (viewName === 'users' && !isAdmin) {
+      return this.switchView(this.getLandingView ? this.getLandingView() : 'dashboard');
+    }
+    if (viewName === 'dashboard' && isProgress) {
+      return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
+    }
+
     this.state.activeView = viewName;
 
     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -512,6 +523,7 @@ const app = {
     const titles = {
       dashboard: 'Dashboard',
       charter: 'Project Charter',
+      users: 'Users',
       kanban: 'Kanban Board',
       gantt: 'Gantt & Timeline',
       table: 'Table Grid',
@@ -535,6 +547,9 @@ const app = {
         break;
       case 'charter':
         this.renderCharter();
+        break;
+      case 'users':
+        if (this.renderUsers) this.renderUsers();
         break;
       case 'kanban':
         this.renderKanban();

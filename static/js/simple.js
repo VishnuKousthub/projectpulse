@@ -24,6 +24,14 @@ const UI = {
 
 Object.assign(app, {
   // ------------------------------------------------------------------ setup
+  getLandingView() {
+    const role = this.getUserRole();
+    if (role === 'lead' || role === 'assignee' || role === 'member' || role === 'developer') {
+      return 'table';
+    }
+    return FEATURES.landingView || 'dashboard';
+  },
+
   applySimpleMode() {
     if (FEATURES.advancedViews) return;
     ['kanban', 'calendar', 'resources', 'analytics'].forEach(v => {
@@ -32,8 +40,27 @@ Object.assign(app, {
     });
     const reset = document.getElementById('sidebar-reset-demo-btn');
     if (reset) reset.style.display = 'none';
+
+    const role = this.getUserRole();
+    const isAdmin = (role === 'admin');
+    const isProgress = this.isProgressOnly();
+
+    const navUsers = document.getElementById('nav-users');
+    if (navUsers) {
+      navUsers.style.display = isAdmin ? '' : 'none';
+    }
+
+    const navDashboard = document.getElementById('nav-dashboard');
+    if (navDashboard) {
+      navDashboard.style.display = isProgress ? 'none' : '';
+    }
+
     const count = document.getElementById('core-views-count');
-    if (count) count.textContent = '4';
+    if (count) {
+      if (isAdmin) count.textContent = '5';
+      else if (isProgress) count.textContent = '3';
+      else count.textContent = '4';
+    }
   },
 
   fmtDate(value) {
@@ -1056,5 +1083,301 @@ Object.assign(app, {
       }
     };
     requestAnimationFrame(animate);
+  },
+
+  // ---------------------------------------------------------------- users (admin only)
+  async renderUsers() {
+    const root = document.getElementById('view-users-container');
+    if (!root) return;
+
+    const role = this.getUserRole();
+    if (role !== 'admin') {
+      this.switchView(this.getLandingView());
+      return;
+    }
+
+    try {
+      const users = await this.api('/api/users');
+      this.state.usersList = users || [];
+    } catch (e) {
+      this.showToast(e.message || 'Failed to load users', 'error');
+      this.state.usersList = [];
+    }
+
+    this.paintUsers();
+  },
+
+  paintUsers() {
+    const root = document.getElementById('view-users-container');
+    if (!root) return;
+
+    const users = this.state.usersList || [];
+    const currentUserId = this.state.user?.id;
+    const showAddForm = !!this.state.showAddUserForm;
+    const esc = (s) => this.escapeHtml(s || '');
+
+    root.innerHTML = `
+      <div class="space-y-4">
+        <!-- Header -->
+        <div class="${UI.card} p-5">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2.5">
+                <h2 class="text-lg font-black text-slate-900 dark:text-white">Users</h2>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
+                  ${users.length} account${users.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <span class="font-bold text-slate-700 dark:text-slate-300">Roles:</span>
+                Admin = everything, including Users and the advanced views; PM = everything except Users; Lead and Assignee = view only, plus progress and hours.
+              </p>
+            </div>
+            <div>
+              <button onclick="app.toggleAddUserForm(${!showAddForm})" class="${UI.btn} ${UI.btnPrimary}">
+                <i data-lucide="${showAddForm ? 'x' : 'user-plus'}" class="w-4 h-4"></i>
+                <span>${showAddForm ? 'Close form' : 'Add user'}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Inline Add User Form Row -->
+          ${showAddForm ? `
+            <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-3 flex items-center gap-1.5">
+                <i data-lucide="user-plus" class="w-3.5 h-3.5 text-blue-500"></i>
+                <span>Add new user account</span>
+              </div>
+              <form onsubmit="event.preventDefault(); app.submitCreateUser();" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Full Name *</label>
+                  <input type="text" id="new-user-fullname" required placeholder="e.g. Alex Morgan" class="${UI.input}">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Username *</label>
+                  <input type="text" id="new-user-username" required placeholder="e.g. alex" class="${UI.input}">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email *</label>
+                  <input type="email" id="new-user-email" required placeholder="alex@company.com" class="${UI.input}">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Temp Password (min 8) *</label>
+                  <input type="password" id="new-user-password" required minlength="8" placeholder="••••••••" class="${UI.input}">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Role *</label>
+                  <select id="new-user-role" class="${UI.input} font-semibold">
+                    <option value="assignee">Assignee</option>
+                    <option value="lead">Lead</option>
+                    <option value="pm">PM</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div class="sm:col-span-2 lg:col-span-5 flex items-center justify-end gap-2 pt-2">
+                  <button type="button" onclick="app.toggleAddUserForm(false)" class="${UI.btn} ${UI.btnGhost}">Cancel</button>
+                  <button type="submit" class="${UI.btn} ${UI.btnPrimary}">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                    <span>Create account</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Users Table Card -->
+        <div class="${UI.card} overflow-hidden">
+          <div class="overflow-x-auto min-w-[720px]">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th class="${UI.th}">Name & Username</th>
+                  <th class="${UI.th}">Email</th>
+                  <th class="${UI.th}">Role</th>
+                  <th class="${UI.th}">Status</th>
+                  <th class="${UI.th}">Last Login</th>
+                  <th class="${UI.th} text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 dark:divide-slate-700/60">
+                ${users.map(u => {
+                  const isSelf = (Number(u.id) === Number(currentUserId));
+                  const active = (u.is_active !== 0);
+                  const roleCls = {
+                    admin: 'border-blue-500 text-blue-600 dark:text-blue-400 font-bold',
+                    pm: 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-bold',
+                    lead: 'border-purple-500 text-purple-600 dark:text-purple-400 font-bold',
+                    assignee: 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold'
+                  }[u.role] || '';
+
+                  return `
+                    <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td class="${UI.td}">
+                        <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <span>${esc(u.full_name)}</span>
+                          ${isSelf ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">You</span>` : ''}
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-mono">@${esc(u.username)}</div>
+                      </td>
+                      <td class="${UI.td} font-mono text-[11px]">
+                        ${esc(u.email)}
+                      </td>
+                      <td class="${UI.td}">
+                        <select
+                          onchange="app.changeUserRole(${u.id}, this.value, this, '${u.role}')"
+                          class="${UI.input} !w-auto font-semibold ${roleCls}"
+                          ${isSelf ? 'disabled title="Administrators cannot change their own role"' : ''}>
+                          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                          <option value="pm" ${u.role === 'pm' ? 'selected' : ''}>PM</option>
+                          <option value="lead" ${u.role === 'lead' ? 'selected' : ''}>Lead</option>
+                          <option value="assignee" ${u.role === 'assignee' ? 'selected' : ''}>Assignee</option>
+                        </select>
+                      </td>
+                      <td class="${UI.td}">
+                        <button
+                          type="button"
+                          onclick="app.toggleUserStatus(${u.id}, ${!active}, this, ${active})"
+                          class="px-2.5 py-1 rounded-full text-[11px] font-bold border transition flex items-center gap-1.5 ${
+                            active
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                              : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 hover:bg-rose-100'
+                          } ${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}"
+                          ${isSelf ? 'disabled title="Administrators cannot disable their own account"' : ''}>
+                          <span class="w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+                          <span>${active ? 'Active' : 'Disabled'}</span>
+                        </button>
+                      </td>
+                      <td class="${UI.td} text-[11px] text-slate-400">
+                        ${u.last_login ? this.fmtDate(u.last_login) : '<span class="italic text-slate-400">Never</span>'}
+                      </td>
+                      <td class="${UI.td} text-right">
+                        <button
+                          type="button"
+                          onclick="app.promptResetPassword(${u.id}, '${esc(u.username)}')"
+                          class="${UI.btn} ${UI.btnGhost} !h-7 !px-2.5 !text-[11px]"
+                          title="Reset temporary password">
+                          <i data-lucide="key" class="w-3 h-3 text-slate-500"></i>
+                          <span>Reset password</span>
+                        </button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.initLucide();
+  },
+
+  toggleAddUserForm(show) {
+    this.state.showAddUserForm = show;
+    this.paintUsers();
+    if (show) {
+      document.getElementById('new-user-fullname')?.focus();
+    }
+  },
+
+  async submitCreateUser() {
+    const fullName = document.getElementById('new-user-fullname')?.value?.trim();
+    const username = document.getElementById('new-user-username')?.value?.trim();
+    const email = document.getElementById('new-user-email')?.value?.trim();
+    const password = document.getElementById('new-user-password')?.value;
+    const role = document.getElementById('new-user-role')?.value;
+
+    if (!fullName || !username || !email || !password || !role) {
+      this.showToast('Please fill in all required fields', 'error');
+      return;
+    }
+    if (password.length < 8) {
+      this.showToast('Password must be at least 8 characters', 'error');
+      return;
+    }
+
+    try {
+      await this.api('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          full_name: fullName,
+          username: username,
+          email: email,
+          password: password,
+          role: role
+        })
+      });
+      this.showToast(`User account @${username} created successfully`, 'success');
+      this.state.showAddUserForm = false;
+      await this.renderUsers();
+    } catch (e) {
+      this.showToast(e.message || 'Failed to create user', 'error');
+    }
+  },
+
+  async changeUserRole(userId, newRole, selectEl, oldRole) {
+    const isToAdmin = (newRole === 'admin');
+    const isFromAdmin = (oldRole === 'admin');
+    if (isToAdmin || isFromAdmin) {
+      const msg = isToAdmin
+        ? `Are you sure you want to promote this user to Administrator? They will have full system access.`
+        : `Are you sure you want to change this Administrator's role to ${newRole.toUpperCase()}?`;
+      if (!confirm(msg)) {
+        if (selectEl) selectEl.value = oldRole;
+        return;
+      }
+    }
+
+    try {
+      await this.api(`/api/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ role: newRole })
+      });
+      this.showToast('User role updated successfully', 'success');
+      await this.renderUsers();
+    } catch (e) {
+      if (selectEl) selectEl.value = oldRole;
+      this.showToast(e.message || 'Failed to update user role', 'error');
+    }
+  },
+
+  async toggleUserStatus(userId, newStatus, btnEl, oldStatus) {
+    if (!newStatus) {
+      if (!confirm('Are you sure you want to disable this account? Any active sessions will be terminated immediately.')) {
+        return;
+      }
+    }
+
+    try {
+      await this.api(`/api/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: newStatus ? 1 : 0 })
+      });
+      this.showToast(newStatus ? 'Account enabled successfully' : 'Account disabled successfully', 'success');
+      await this.renderUsers();
+    } catch (e) {
+      this.showToast(e.message || 'Failed to update account status', 'error');
+    }
+  },
+
+  async promptResetPassword(userId, username) {
+    const newPassword = prompt(`Enter new temporary password for @${username} (min 8 characters):`);
+    if (newPassword === null) return;
+    if (newPassword.length < 8) {
+      this.showToast('Password must be at least 8 characters long', 'error');
+      return;
+    }
+
+    try {
+      await this.api(`/api/users/${userId}/reset_password`, {
+        method: 'POST',
+        body: JSON.stringify({ new_password: newPassword })
+      });
+      this.showToast(`Password reset for @${username}. All existing sessions were invalidated.`, 'success');
+    } catch (e) {
+      this.showToast(e.message || 'Failed to reset password', 'error');
+    }
   },
 });
