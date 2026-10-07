@@ -238,7 +238,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
         with get_db() as conn:
             projects = conn.execute("SELECT * FROM projects ORDER BY name COLLATE NOCASE").fetchall()
             tasks = conn.execute("""
-                SELECT t.id, t.project_id, t.title, t.status, t.due_date, t.progress_pct,
+                SELECT t.id, t.project_id, t.title, t.status, t.priority, t.due_date, t.progress_pct,
                        m.name AS assignee_name
                 FROM tasks t LEFT JOIN members m ON t.assignee_id = m.id
             """).fetchall()
@@ -269,19 +269,21 @@ def register(app, *, get_db, json_response, request, get_current_user,
         for p in projects:
             pts = by_project.get(p["id"], [])
             total = len(pts)
-            done = sum(1 for t in pts if t["status"] == "done")
+            done = 0
             overdue = 0
+            in_progress = 0
+            todo = 0
             next_due = None
             for t in pts:
-                if t["status"] == "done":
-                    continue
+                st = (t["status"] or "todo").lower()
                 dd = _d(t["due_date"])
+                if st in ("done", "completed"):
+                    done += 1
+                    continue
                 name = clean_assignee(t["assignee_name"])
                 w = workload.setdefault(name, {"name": name, "open": 0, "overdue": 0})
                 w["open"] += 1
-                if dd is None:
-                    continue
-                if dd < today:
+                if dd is not None and dd < today:
                     overdue += 1
                     w["overdue"] += 1
                     overdue_list.append({
@@ -290,10 +292,15 @@ def register(app, *, get_db, json_response, request, get_current_user,
                         "due_date": str(t["due_date"])[:10], "days_late": (today - dd).days,
                     })
                 else:
-                    if (dd - today).days <= 7:
-                        due_this_week += 1
-                    if next_due is None or dd < next_due[0]:
-                        next_due = (dd, t["title"])
+                    if st in ("in_progress", "in progress", "doing"):
+                        in_progress += 1
+                    else:
+                        todo += 1
+                    if dd is not None:
+                        if (dd - today).days <= 7:
+                            due_this_week += 1
+                        if next_due is None or dd < next_due[0]:
+                            next_due = (dd, t["title"])
 
             pct = round(done / total * 100) if total else 0
             delivery = _d(p["delivery_date"])
@@ -318,12 +325,42 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 "delivery_date": p["delivery_date"], "days_left": days_left,
                 "total_tasks": total, "done_tasks": done, "progress": pct,
                 "overdue_tasks": overdue,
+                "status_counts": {
+                    "done": done,
+                    "in_progress": in_progress,
+                    "todo": todo,
+                    "overdue": overdue,
+                },
                 "next_due": ({"date": next_due[0].isoformat(), "title": next_due[1]} if next_due else None),
                 "open_risks": len(risks_by_project.get(p["id"], [])), "open_high_risks": open_high,
                 "health": health,
             })
 
         overdue_list.sort(key=lambda x: -x["days_late"])
+
+        project_name_map = {p["id"]: p["name"] for p in projects}
+        key_tasks_list = []
+        for t in tasks:
+            st = (t["status"] or "todo").lower()
+            if st in ("done", "completed"):
+                continue
+            prio = str(t["priority"] or "").lower()
+            if prio in ("urgent", "high"):
+                dd = _d(t["due_date"])
+                key_tasks_list.append({
+                    "task_id": t["id"],
+                    "project_id": t["project_id"],
+                    "project_name": project_name_map.get(t["project_id"], "Unknown Project"),
+                    "title": t["title"],
+                    "priority": prio,
+                    "due_date": str(t["due_date"])[:10] if t["due_date"] else None,
+                    "progress_pct": int(t["progress_pct"] or 0),
+                    "assignee": clean_assignee(t["assignee_name"]),
+                    "_sort_date": dd or date(9999, 12, 31)
+                })
+        key_tasks_list.sort(key=lambda x: (x["_sort_date"], x["title"]))
+        for item in key_tasks_list:
+            item.pop("_sort_date", None)
 
         upcoming = []
         for d in deliverables:
@@ -355,6 +392,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 "total_tasks": tot_tasks,
             },
             "projects": project_rows,
+            "key_tasks": key_tasks_list[:8],
             "overdue": overdue_list[:10],
             "overdue_total": len(overdue_list),
             "deliverables": upcoming[:8],

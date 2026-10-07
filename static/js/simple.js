@@ -164,6 +164,38 @@ Object.assign(app, {
         ${tile('High risks open', k.open_high_risks, 'from project charters', k.open_high_risks ? 'text-rose-600' : '')}
       </div>
 
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="${UI.card} p-4 flex flex-col">
+          <div class="mb-2">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Health</h3>
+            <div class="text-[11px] text-slate-400">Projects by delivery status</div>
+          </div>
+          <div id="dashboard-health-chart-container" class="relative flex-1 min-h-[200px] max-h-[230px] flex items-center justify-center">
+            <canvas id="dashboardHealthChart" class="w-full max-h-[220px]"></canvas>
+          </div>
+        </div>
+
+        <div class="${UI.card} p-4 flex flex-col">
+          <div class="mb-2">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Task Status by Project</h3>
+            <div class="text-[11px] text-slate-400">Done, in progress, to do and overdue</div>
+          </div>
+          <div id="dashboard-status-chart-container" class="relative flex-1 min-h-[200px] max-h-[230px] flex items-center justify-center">
+            <canvas id="dashboardStatusChart" class="w-full max-h-[220px]"></canvas>
+          </div>
+        </div>
+
+        <div class="${UI.card} p-4 flex flex-col">
+          <div class="mb-2">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Key Tasks</h3>
+            <div class="text-[11px] text-slate-400">Urgent & high priority open work</div>
+          </div>
+          <div id="dashboard-key-tasks-chart-container" class="relative flex-1 min-h-[200px] max-h-[230px] flex items-center justify-center">
+            <canvas id="dashboardKeyTasksChart" class="w-full max-h-[220px]"></canvas>
+          </div>
+        </div>
+      </div>
+
       ${panel('Projects', 'Click a project to open its task table', `
         <div class="overflow-x-auto"><table class="w-full">
           <thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
@@ -182,7 +214,254 @@ Object.assign(app, {
         ${panel('Open tasks per person', 'Red = overdue', `<div class="p-4 space-y-2">${workload}</div>`)}
         ${panel('Open high-impact risks', '', `<div class="px-4 py-2">${risks}</div>`)}
       </div>`;
+    this.renderDashboardCharts(d);
     this.initLucide();
+  },
+
+  renderDashboardCharts(d) {
+    if (typeof Chart === 'undefined') return;
+    if (!this.state.charts) this.state.charts = {};
+
+    ['dashboardHealth', 'dashboardStatus', 'dashboardKeyTasks'].forEach(k => {
+      if (this.state.charts[k]) {
+        this.state.charts[k].destroy();
+        delete this.state.charts[k];
+      }
+    });
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? '#94A3B8' : '#64748B';
+    const gridColor = isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.7)';
+    const tooltipBg = isDark ? '#1E293B' : '#0F172A';
+
+    // 1. Doughnut: Projects by Health
+    const healthCounts = { on_track: 0, at_risk: 0, delayed: 0, done: 0 };
+    (d.projects || []).forEach(p => {
+      if (healthCounts[p.health] !== undefined) healthCounts[p.health]++;
+      else healthCounts.on_track++;
+    });
+    const totalProjects = (d.projects || []).length;
+    const healthCanvas = document.getElementById('dashboardHealthChart');
+    if (healthCanvas) {
+      if (totalProjects === 0) {
+        const c = document.getElementById('dashboard-health-chart-container');
+        if (c) c.innerHTML = '<div class="py-12 text-center text-xs text-slate-400">Nothing to show yet</div>';
+      } else {
+        this.state.charts.dashboardHealth = new Chart(healthCanvas, {
+          type: 'doughnut',
+          data: {
+            labels: ['On track', 'At risk', 'Delayed', 'Done'],
+            datasets: [{
+              data: [healthCounts.on_track, healthCounts.at_risk, healthCounts.delayed, healthCounts.done],
+              backgroundColor: ['#10B981', '#F59E0B', '#F43F5E', '#3B82F6'],
+              borderColor: isDark ? '#1E293B' : '#FFFFFF',
+              borderWidth: 2,
+              hoverOffset: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { boxWidth: 10, padding: 8, font: { size: 10 }, color: textColor }
+              },
+              tooltip: {
+                backgroundColor: tooltipBg,
+                callbacks: {
+                  label: (ctx) => ` ${ctx.label}: ${ctx.raw} (${totalProjects ? Math.round(ctx.raw / totalProjects * 100) : 0}%)`
+                }
+              }
+            },
+            cutout: '70%'
+          },
+          plugins: [{
+            id: 'healthCenterCount',
+            beforeDraw(chart) {
+              const { width, height, ctx } = chart;
+              ctx.save();
+              const legendH = chart.legend ? chart.legend.height : 0;
+              const centerY = (height - legendH) / 2;
+              ctx.font = 'bold 22px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = isDark ? '#F8FAFC' : '#0F172A';
+              ctx.fillText(String(totalProjects), width / 2, centerY - 8);
+
+              ctx.font = '10px sans-serif';
+              ctx.fillStyle = isDark ? '#94A3B8' : '#64748B';
+              ctx.fillText(totalProjects === 1 ? 'project' : 'projects', width / 2, centerY + 12);
+              ctx.restore();
+            }
+          }]
+        });
+      }
+    }
+
+    // 2. Horizontal Stacked Bar: Task Status by Project
+    const sortedProjects = [...(d.projects || [])]
+      .sort((a, b) => (b.overdue_tasks || 0) - (a.overdue_tasks || 0) || (b.total_tasks || 0) - (a.total_tasks || 0))
+      .slice(0, 8);
+    const statusCanvas = document.getElementById('dashboardStatusChart');
+    if (statusCanvas) {
+      if (sortedProjects.length === 0 || sortedProjects.every(p => p.total_tasks === 0)) {
+        const c = document.getElementById('dashboard-status-chart-container');
+        if (c) c.innerHTML = '<div class="py-12 text-center text-xs text-slate-400">Nothing to show yet</div>';
+      } else {
+        this.state.charts.dashboardStatus = new Chart(statusCanvas, {
+          type: 'bar',
+          data: {
+            labels: sortedProjects.map(p => p.name.length > 18 ? p.name.slice(0, 17) + '…' : p.name),
+            datasets: [
+              {
+                label: 'Done',
+                data: sortedProjects.map(p => p.status_counts ? p.status_counts.done : p.done_tasks || 0),
+                backgroundColor: '#10B981'
+              },
+              {
+                label: 'In progress',
+                data: sortedProjects.map(p => p.status_counts ? p.status_counts.in_progress : 0),
+                backgroundColor: '#3B82F6'
+              },
+              {
+                label: 'To do',
+                data: sortedProjects.map(p => p.status_counts ? p.status_counts.todo : 0),
+                backgroundColor: '#94A3B8'
+              },
+              {
+                label: 'Overdue',
+                data: sortedProjects.map(p => p.status_counts ? p.status_counts.overdue : p.overdue_tasks || 0),
+                backgroundColor: '#F43F5E'
+              }
+            ]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            onClick: (evt, elements) => {
+              if (elements && elements.length > 0) {
+                const idx = elements[0].index;
+                const proj = sortedProjects[idx];
+                if (proj) this.openProjectFromDashboard(proj.id, 'table');
+              }
+            },
+            onHover: (evt, elements) => {
+              evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+            },
+            scales: {
+              x: {
+                stacked: true,
+                grid: { color: gridColor },
+                ticks: { color: textColor, precision: 0 }
+              },
+              y: {
+                stacked: true,
+                grid: { display: false },
+                ticks: { color: textColor, font: { size: 10 } }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { boxWidth: 10, padding: 8, font: { size: 10 }, color: textColor }
+              },
+              tooltip: {
+                backgroundColor: tooltipBg,
+                callbacks: {
+                  title: (items) => {
+                    const idx = items[0].dataIndex;
+                    return sortedProjects[idx]?.name || '';
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // 3. Horizontal Bar: Key Tasks
+    const keyTasks = d.key_tasks || [];
+    const keyTasksCanvas = document.getElementById('dashboardKeyTasksChart');
+    if (keyTasksCanvas) {
+      if (keyTasks.length === 0) {
+        const c = document.getElementById('dashboard-key-tasks-chart-container');
+        if (c) c.innerHTML = '<div class="py-12 text-center text-xs text-slate-400">Nothing to show yet</div>';
+      } else {
+        this.state.charts.dashboardKeyTasks = new Chart(keyTasksCanvas, {
+          type: 'bar',
+          data: {
+            labels: keyTasks.map(t => {
+              const tTitle = t.title.length > 16 ? t.title.slice(0, 15) + '…' : t.title;
+              const pName = t.project_name.length > 12 ? t.project_name.slice(0, 11) + '…' : t.project_name;
+              const due = t.due_date ? t.due_date.slice(5) : 'No due';
+              return `${tTitle} (${pName} · ${due})`;
+            }),
+            datasets: [{
+              label: 'Progress %',
+              data: keyTasks.map(t => t.progress_pct || 0),
+              backgroundColor: keyTasks.map(t => {
+                const pct = t.progress_pct || 0;
+                if (pct >= 80) return '#10B981';
+                if (pct >= 40) return '#3B82F6';
+                return '#F59E0B';
+              }),
+              borderRadius: 4
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            onClick: (evt, elements) => {
+              if (elements && elements.length > 0) {
+                const idx = elements[0].index;
+                const task = keyTasks[idx];
+                if (task) this.openProjectFromDashboard(task.project_id, 'table');
+              }
+            },
+            onHover: (evt, elements) => {
+              evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+            },
+            scales: {
+              x: {
+                min: 0,
+                max: 100,
+                grid: { color: gridColor },
+                ticks: {
+                  color: textColor,
+                  callback: (v) => v + '%'
+                }
+              },
+              y: {
+                grid: { display: false },
+                ticks: { color: textColor, font: { size: 10 } }
+              }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: tooltipBg,
+                callbacks: {
+                  title: (items) => {
+                    const idx = items[0].dataIndex;
+                    const t = keyTasks[idx];
+                    return `${t.title} [${t.project_name}]`;
+                  },
+                  label: (ctx) => {
+                    const t = keyTasks[ctx.dataIndex];
+                    const prio = (t.priority || '').toUpperCase();
+                    return ` ${ctx.raw}% complete · Priority: ${prio} · Due: ${t.due_date || 'None'}`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+    }
   },
 
   async openProjectFromDashboard(projectId, view) {
