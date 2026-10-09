@@ -557,6 +557,11 @@
                 <i data-lucide="upload-cloud" class="w-4 h-4"></i>
                 <span>Import Excel</span>
               </button>
+
+              <!-- Project Budget Chip (Admin & PM only) -->
+              <div id="gantt-budget-chip" class="hidden h-9 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition" title="Project Budget (Charter)">
+                <span id="gantt-budget-chip-text">Budget: not set</span>
+              </div>
             </div>
           </div>
 
@@ -601,7 +606,7 @@
       <section id="view-table-container" class="view-panel hidden space-y-4">
         
         <!-- Table KPI Metrics Bar -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div id="table-kpi-bar" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           <div class="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
             <div>
               <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Activities Completed</div>
@@ -643,6 +648,18 @@
             </div>
             <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <!-- 5th Tile: Project Budget (Admin & PM only) -->
+          <div id="table-stat-budget-card" class="hidden bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Project Budget</div>
+              <div class="text-lg font-extrabold text-slate-800 dark:text-white mt-0.5" id="table-stat-budget">₹0</div>
+              <div class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400" id="table-stat-budget-sub">Charter Allocation</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <i data-lucide="indian-rupee" class="w-5 h-5"></i>
             </div>
           </div>
         </div>

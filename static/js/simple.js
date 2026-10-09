@@ -75,7 +75,7 @@ Object.assign(app, {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   },
 
-  fmtRupee(amount) {
+  formatINR(amount) {
     if (amount == null || amount === '' || isNaN(Number(amount))) return '₹0';
     const num = Math.round(Number(amount));
     const isNeg = num < 0;
@@ -86,6 +86,10 @@ Object.assign(app, {
       s = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
     }
     return (isNeg ? '-' : '') + '₹' + s;
+  },
+
+  fmtRupee(amount) {
+    return this.formatINR(amount);
   },
 
   daysLabel(days) {
@@ -584,7 +588,7 @@ Object.assign(app, {
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'))}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'))}
           ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'placeholder="e.g. 500 g or 10 kg"'))}
-          ${field('Project budget', this.fmtRupee(p.project_budget), inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'))}
+          ${field('Project budget', this.formatINR(p.project_budget), inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'))}
         </div>
       </div>`;
 
@@ -852,6 +856,12 @@ Object.assign(app, {
       // refresh project list (name may have changed) and this page
       const list = await this.api('/api/projects');
       this.state.projects = list;
+      if (this.state.currentProjectId) {
+        const updatedP = list.find(x => x.id === this.state.currentProjectId);
+        if (updatedP) {
+          this.state.currentProject = { ...(this.state.currentProject || {}), ...updatedP };
+        }
+      }
       this.renderProjectsDropdown();
       this.renderProjectsSidebar();
       await this.renderCharter();

@@ -124,7 +124,7 @@ const app = {
     return role === 'lead' || role === 'team lead' || role === 'assignee' || role === 'member' || role === 'developer';
   },
 
-  fmtRupee(amount) {
+  formatINR(amount) {
     if (amount == null || amount === '' || isNaN(Number(amount))) return '₹0';
     const num = Math.round(Number(amount));
     const isNeg = num < 0;
@@ -135,6 +135,28 @@ const app = {
       s = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
     }
     return (isNeg ? '-' : '') + '₹' + s;
+  },
+
+  fmtRupee(amount) {
+    return this.formatINR(amount);
+  },
+
+  updateGanttBudgetChip() {
+    const chip = document.getElementById('gantt-budget-chip');
+    const textEl = document.getElementById('gantt-budget-chip-text');
+    if (!chip) return;
+    if (!this.isFullAccess()) {
+      chip.classList.add('hidden');
+      return;
+    }
+    chip.classList.remove('hidden');
+    const p = this.state.currentProject;
+    const b = p?.project_budget;
+    if (b != null && b !== '' && !isNaN(Number(b)) && Number(b) > 0) {
+      if (textEl) textEl.textContent = `Budget ${this.formatINR(b)}`;
+    } else {
+      if (textEl) textEl.textContent = 'Budget: not set';
+    }
   },
 
   syncTaskProgressSlider(val) {
@@ -1175,6 +1197,7 @@ const app = {
   },
 
   renderGantt() {
+    this.updateGanttBudgetChip();
     const container = document.getElementById('gantt-timeline-render');
     const tasksCount = document.getElementById('gantt-tasks-count');
     const rangeLabel = document.getElementById('gantt-timeline-range-label');
@@ -1749,6 +1772,30 @@ const app = {
     if (statTodo) statTodo.textContent = `${pendingCount} Pending / Review`;
     if (statCrit) statCrit.textContent = `${criticalCount} High / Urgent`;
     if (statOver) statOver.textContent = `${overdueCount} Overdue`;
+
+    const statBudgetCard = document.getElementById('table-stat-budget-card');
+    const statBudget = document.getElementById('table-stat-budget');
+    const statBudgetSub = document.getElementById('table-stat-budget-sub');
+    const kpiBar = document.getElementById('table-kpi-bar');
+
+    if (this.isFullAccess()) {
+      if (statBudgetCard) statBudgetCard.classList.remove('hidden');
+      if (kpiBar) {
+        kpiBar.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5';
+      }
+      const b = this.state.currentProject?.project_budget;
+      if (statBudget) {
+        statBudget.textContent = this.formatINR(b);
+      }
+      if (statBudgetSub) {
+        statBudgetSub.textContent = (b != null && b !== '' && Number(b) > 0) ? 'Charter Allocation' : 'Budget not set';
+      }
+    } else {
+      if (statBudgetCard) statBudgetCard.classList.add('hidden');
+      if (kpiBar) {
+        kpiBar.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5';
+      }
+    }
 
     // 2. Filter Tasks
     const q = this.state.tableFilterQuery || '';

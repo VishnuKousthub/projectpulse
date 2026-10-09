@@ -399,6 +399,26 @@ class TestRolePermissions(unittest.TestCase):
                       "total_deliverable_quantity", "project_budget", "tech_pack"):
                 self.assertNotIn(f, rep_p, f"{role_name} should not see {f} in report project")
 
+    # 8. Test admin and pm see budget in project object, restricted roles do not
+    def test_08_budget_visibility_by_role(self):
+        for token, role_name in [(self.admin_token, "Admin"), (self.pm_token, "PM")]:
+            status_p, p = self._request("/api/projects/1", token=token)
+            self.assertEqual(status_p, 200)
+            self.assertIn("project_budget", p, f"{role_name} should see project_budget")
+
+            status_list, plist = self._request("/api/projects", token=token)
+            self.assertEqual(status_list, 200)
+            self.assertIn("project_budget", plist[0], f"{role_name} should see project_budget in list")
+
+        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
+            status_p, p = self._request("/api/projects/1", token=token)
+            self.assertEqual(status_p, 200)
+            self.assertNotIn("project_budget", p, f"{role_name} should NOT see project_budget")
+
+            status_list, plist = self._request("/api/projects", token=token)
+            self.assertEqual(status_list, 200)
+            self.assertNotIn("project_budget", plist[0], f"{role_name} should NOT see project_budget in list")
+
 
 if __name__ == "__main__":
     unittest.main()
