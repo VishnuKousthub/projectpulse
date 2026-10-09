@@ -980,7 +980,7 @@ Object.assign(app, {
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 <span class="font-bold text-slate-700 dark:text-slate-300">Roles:</span>
-                Admin = everything, including Users and the advanced views; PM = everything except Users; Lead and Assignee = view only, plus progress and hours.
+                Admin = everything, including Users and the advanced views; PM = everything except Users; Lead and Assignee = limited edit (status, assignee, dates, progress, hours, risks).
               </p>
             </div>
             <div>

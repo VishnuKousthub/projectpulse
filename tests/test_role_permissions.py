@@ -128,33 +128,140 @@ class TestRolePermissions(unittest.TestCase):
         self.assertEqual(data_ass["progress_pct"], 80)
         self.assertEqual(data_ass["actual_hours"], 18.0)
 
-    # 3. Test Lead/Assignee CANNOT change status (Returns 403 Forbidden)
-    def test_03_lead_and_assignee_forbidden_status_change(self):
-        status, tasks = self._request("/api/projects/1/tasks", token=self.lead_token)
+    # 3. Test Lead & Assignee allowed fields on tasks (200)
+    def test_03_lead_and_assignee_allowed_task_fields(self):
+        status, tasks = self._request("/api/projects/1/tasks", token=self.pm_token)
         target_task = tasks[0]
         task_id = target_task["id"]
-        current_status = target_task["status"]
-        new_status = "done" if current_status != "done" else "in_progress"
 
-        # Lead attempt to change status
-        status_lead, data_lead = self._request(
-            f"/api/tasks/{task_id}",
-            method="PUT",
-            token=self.lead_token,
-            body={"status": new_status, "progress_pct": 90}
-        )
-        self.assertEqual(status_lead, 403)
-        self.assertIn("Permission Denied", data_lead["error"])
+        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
+            # status
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"status": "in_progress"})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update status: {res}")
+            self.assertEqual(res["status"], "in_progress")
 
-        # Assignee attempt to change status
-        status_ass, data_ass = self._request(
-            f"/api/tasks/{task_id}",
-            method="PUT",
-            token=self.assignee_token,
-            body={"status": new_status, "progress_pct": 90}
-        )
-        self.assertEqual(status_ass, 403)
-        self.assertIn("Permission Denied", data_ass["error"])
+            # progress_pct
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"progress_pct": 55})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update progress_pct: {res}")
+            self.assertEqual(res["progress_pct"], 55)
+
+            # actual_hours
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"actual_hours": 9.5})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update actual_hours: {res}")
+            self.assertEqual(res["actual_hours"], 9.5)
+
+            # estimated_hours
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"estimated_hours": 16.0})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update estimated_hours: {res}")
+            self.assertEqual(res["estimated_hours"], 16.0)
+
+            # start_date
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"start_date": "2026-05-01", "due_date": "2026-05-15"})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update start_date: {res}")
+            self.assertEqual(res["start_date"], "2026-05-01")
+
+            # due_date
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"due_date": "2026-05-20"})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update due_date: {res}")
+            self.assertEqual(res["due_date"], "2026-05-20")
+
+            # assignee_id (existing project member)
+            st_code, members = self._request("/api/projects/1/members", token=self.pm_token)
+            self.assertEqual(st_code, 200)
+            if members:
+                mid = members[0]["id"]
+                st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"assignee_id": mid})
+                self.assertEqual(st_code, 200, f"{role_name} should be allowed to update assignee_id: {res}")
+                self.assertEqual(res["assignee_id"], mid)
+
+    # 3b. Test Lead & Assignee forbidden fields on tasks (403)
+    def test_03b_lead_and_assignee_forbidden_task_fields(self):
+        status, tasks = self._request("/api/projects/1/tasks", token=self.pm_token)
+        task_id = tasks[0]["id"]
+
+        cur_priority = tasks[0].get("priority")
+        diff_priority = "low" if cur_priority != "low" else "urgent"
+
+        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
+            for forbidden_body, field_name in [
+                ({"title": "Altered Title"}, "title"),
+                ({"description": "Altered Description"}, "description"),
+                ({"priority": diff_priority}, "priority"),
+                ({"sprint_id": 2}, "sprint_id"),
+                ({"tags": ["custom-tag"]}, "tags"),
+            ]:
+                st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body=forbidden_body)
+                self.assertEqual(st_code, 403, f"{role_name} should be blocked from updating {field_name}: {res}")
+
+    # 3c. Test validation errors: assignee outside project (400), end date before start (400)
+    def test_03c_validation_errors_restricted_roles(self):
+        status, tasks = self._request("/api/projects/1/tasks", token=self.pm_token)
+        task_id = tasks[0]["id"]
+
+        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
+            # Assignee outside project (assignee_id 999999)
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"assignee_id": 999999})
+            self.assertEqual(st_code, 400, f"{role_name} should get 400 for assignee outside project")
+
+            # Assignee name outside project
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"assignee_name": "Nonexistent Person 12345"})
+            self.assertEqual(st_code, 400, f"{role_name} should get 400 for assignee name outside project")
+
+            # End date before start date
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"start_date": "2026-06-15", "due_date": "2026-06-01"})
+            self.assertEqual(st_code, 400, f"{role_name} should get 400 for end date before start date")
+
+    # 3d. Test project risk permissions: lead/assignee can create/edit (200), cannot delete (403), pm/admin can do all (200)
+    def test_03d_risk_permissions_by_role(self):
+        status, tasks = self._request("/api/projects/1/tasks", token=self.pm_token)
+        task_id = tasks[0]["id"]
+
+        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
+            # Create risk linked to task -> 201
+            st_create, r_data = self._request(
+                f"/api/tasks/{task_id}/risks",
+                method="POST",
+                token=token,
+                body={"description": f"Risk by {role_name}", "impact": "high"}
+            )
+            self.assertEqual(st_create, 201, f"{role_name} failed to create task risk: {r_data}")
+            risk_id = r_data["id"]
+
+            # Edit risk -> 200
+            st_edit, edit_data = self._request(
+                f"/api/risks/{risk_id}",
+                method="PUT",
+                token=token,
+                body={"description": f"Risk by {role_name} (Updated)", "impact": "low"}
+            )
+            self.assertEqual(st_edit, 200, f"{role_name} failed to edit risk: {edit_data}")
+            self.assertEqual(edit_data["impact"], "low")
+
+            # Delete risk -> 403 for lead/assignee
+            st_del, del_res = self._request(f"/api/risks/{risk_id}", method="DELETE", token=token)
+            self.assertEqual(st_del, 403, f"{role_name} should get 403 on risk delete: {del_res}")
+
+        # PM and Admin can create, edit, and delete
+        for token, role_name in [(self.pm_token, "PM"), (self.admin_token, "Admin")]:
+            st_create, r_data = self._request(
+                f"/api/tasks/{task_id}/risks",
+                method="POST",
+                token=token,
+                body={"description": f"Risk by {role_name}", "impact": "medium"}
+            )
+            self.assertEqual(st_create, 201)
+            risk_id = r_data["id"]
+
+            st_edit, edit_data = self._request(
+                f"/api/risks/{risk_id}",
+                method="PUT",
+                token=token,
+                body={"description": f"Risk by {role_name} updated"}
+            )
+            self.assertEqual(st_edit, 200)
+
+            st_del, _ = self._request(f"/api/risks/{risk_id}", method="DELETE", token=token)
+            self.assertEqual(st_del, 200, f"{role_name} should be able to delete risk")
 
     # 4. Test Lead/Assignee CANNOT create or delete tasks (403 Forbidden)
     def test_04_lead_and_assignee_forbidden_task_create_delete(self):

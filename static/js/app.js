@@ -1845,9 +1845,9 @@ const app = {
                   <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
                 </div>
               ` : ''}
-              <button ${isProgress ? '' : `onclick="app.inlineUpdateTask(${t.id}, 'status', '${isDone ? 'in_progress' : 'done'}')"`}
-                class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition ${isDone ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'} ${isProgress ? 'cursor-not-allowed opacity-75' : 'hover:border-blue-500'}"
-                title="${isProgress ? 'Status modification restricted to PM/Admin' : (isDone ? 'Mark as in progress' : 'Mark as completed')}">
+              <button onclick="app.inlineUpdateTask(${t.id}, 'status', '${isDone ? 'in_progress' : 'done'}')"
+                class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition ${isDone ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'} hover:border-blue-500"
+                title="${isDone ? 'Mark as in progress' : 'Mark as completed'}">
                 ${isDone ? '<i data-lucide="check" class="w-3 h-3"></i>' : ''}
               </button>
               
@@ -1885,8 +1885,8 @@ const app = {
           <!-- 2. Status Dropdown -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[120px]">
-              <select ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"`}
-                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${statusConfig.color} ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
+              <select onchange="app.inlineUpdateTask(${t.id}, 'status', this.value)"
+                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${statusConfig.color} cursor-pointer">
                 <option value="backlog" ${t.status === 'backlog' ? 'selected' : ''}>Backlog</option>
                 <option value="todo" ${t.status === 'todo' ? 'selected' : ''}>To Do</option>
                 <option value="in_progress" ${t.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
@@ -1912,13 +1912,15 @@ const app = {
           <!-- 4. Assignee / Role -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[170px]">
-              <select ${isProgress ? 'disabled' : `onchange="app.handleTableAssigneeChange(${t.id}, this.value)"`}
-                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
+              <select onchange="app.handleTableAssigneeChange(${t.id}, this.value)"
+                class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate cursor-pointer">
                 <option value="">Unassigned</option>
                 ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
                 ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(t.assignee_name)} (Custom)</option>` : ''}
+                ${!isProgress ? `
                 <option value="__add_new__" class="font-bold text-blue-600 dark:text-blue-400">+ Type Custom Assignee...</option>
                 <option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>
+                ` : ''}
               </select>
             </div>
           </td>
@@ -1940,21 +1942,19 @@ const app = {
             ${t.start_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
                 <input type="date" value="${t.start_date}"
-                  ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)"`}
-                  class="w-full bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
-                ${!isProgress ? `
+                  onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)"
+                  class="w-full bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono">
                 <button onclick="app.inlineUpdateTask(${t.id}, 'start_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
                   <i data-lucide="x" class="w-3 h-3"></i>
                 </button>
-                ` : ''}
               </div>
             ` : `
               <div class="relative group/date inline-flex items-center">
-                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40'} transition">
+                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
                   <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
                   <span>Not Declared</span>
                 </div>
-                ${!isProgress ? `<input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)" title="Click to declare start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">` : ''}
+                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'start_date', this.value)" title="Click to declare start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
               </div>
             `}
           </td>
@@ -1964,21 +1964,19 @@ const app = {
             ${t.due_date ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
                 <input type="date" value="${t.due_date}"
-                  ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)"`}
-                  class="w-full text-xs rounded-lg px-2 py-1 border focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'} ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
-                ${!isProgress ? `
+                  onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)"
+                  class="w-full text-xs rounded-lg px-2 py-1 border focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'}">
                 <button onclick="app.inlineUpdateTask(${t.id}, 'due_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
                   <i data-lucide="x" class="w-3 h-3"></i>
                 </button>
-                ` : ''}
               </div>
             ` : `
               <div class="relative group/date inline-flex items-center">
-                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40'} transition">
+                <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
                   <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
                   <span>Not Declared</span>
                 </div>
-                ${!isProgress ? `<input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">` : ''}
+                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
               </div>
             `}
           </td>
@@ -1987,9 +1985,9 @@ const app = {
           <td class="px-3.5 py-2.5">
             <div class="flex items-center space-x-1">
               <input type="number" step="0.5" min="0" value="${estH}"
-                ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'estimated_hours', parseFloat(this.value) || 0)"`}
-                title="${isProgress ? 'Estimated hours locked to PM/Admin' : 'Estimated Hours'}"
-                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center ${isProgress ? 'cursor-not-allowed opacity-80' : ''}">
+                onchange="app.inlineUpdateTask(${t.id}, 'estimated_hours', parseFloat(this.value) || 0)"
+                title="Estimated Hours"
+                class="w-12 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-1.5 py-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center cursor-pointer">
               <span class="text-slate-400">/</span>
               <input type="number" step="0.5" min="0" value="${actH}"
                 onchange="app.inlineUpdateTask(${t.id}, 'actual_hours', parseFloat(this.value) || 0)"
@@ -2054,8 +2052,9 @@ const app = {
   },
 
   async inlineUpdateTask(taskId, field, value, extraPayload = {}) {
-    if (this.isProgressOnly() && field !== 'actual_hours' && field !== 'progress_pct') {
-      this.showToast('You only have permission to update activity progress and hours.', 'warning');
+    const allowedRestricted = ['status', 'assignee_id', 'start_date', 'due_date', 'end_date', 'progress_pct', 'estimated_hours', 'actual_hours'];
+    if (this.isProgressOnly() && !allowedRestricted.includes(field)) {
+      this.showToast('You do not have permission to edit this field.', 'warning');
       return;
     }
     const numId = Number(taskId);
@@ -3577,22 +3576,21 @@ const app = {
           userRoleSpan.textContent = this.state.user?.role || 'Lead';
         }
       }
-      [titleInput, descInput, statusSelect, prioritySelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, tagsInput, posSelect].forEach(el => {
+      [titleInput, descInput, prioritySelect, manualAssigneeInput, tagsInput, posSelect].forEach(el => {
         if (el) {
           el.disabled = true;
           el.classList.add('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
         }
       });
+      [statusSelect, assigneeSelect, startInput, dueInput, estInput, actInput, progressNum, progressSlider].forEach(el => {
+        if (el) {
+          el.disabled = false;
+          el.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
+        }
+      });
       if (delBtn) delBtn.classList.add('hidden');
       if (posWrapper) posWrapper.classList.add('hidden');
-      if (saveBtn) saveBtn.textContent = 'Update Activity Progress';
-
-      if (progressNum) progressNum.disabled = false;
-      if (progressSlider) progressSlider.disabled = false;
-      if (actInput) {
-        actInput.disabled = false;
-        actInput.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
-      }
+      if (saveBtn) saveBtn.textContent = 'Save Changes';
     } else {
       if (roleBanner) roleBanner.classList.add('hidden');
       [titleInput, descInput, statusSelect, prioritySelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, tagsInput, posSelect, progressNum, progressSlider].forEach(el => {
@@ -3605,8 +3603,8 @@ const app = {
     }
 
     if (params.id) {
-      document.getElementById('task-modal-title').textContent = isProgress ? 'Update Activity Progress' : 'Edit Task Details';
-      document.getElementById('task-modal-type-badge').textContent = 'Task #' + params.id;
+      document.getElementById('task-modal-title').textContent = isProgress ? 'Edit Activity (Limited edit)' : 'Edit Task Details';
+      document.getElementById('task-modal-type-badge').textContent = isProgress ? 'Limited edit' : ('Task #' + params.id);
       if (delBtn) {
         if (isProgress) delBtn.classList.add('hidden');
         else delBtn.classList.remove('hidden');
@@ -3801,10 +3799,13 @@ const app = {
 
     if (assigneeSelect && p) {
       const curVal = assigneeSelect.value;
+      const isProgress = this.isProgressOnly();
       assigneeSelect.innerHTML = `<option value="">Unassigned</option>` +
         uniqueMembers.map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('') +
-        `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>` +
-        `<option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>`;
+        (!isProgress ? (
+          `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>` +
+          `<option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>`
+        ) : '');
       if (curVal && curVal !== '__manual__' && curVal !== '__manage__') {
         assigneeSelect.value = curVal;
       }
@@ -3820,7 +3821,9 @@ const app = {
     const deleteBtn = document.getElementById('task-assignee-delete-btn');
     if (selectEl && deleteBtn) {
       const val = selectEl.value;
-      if (val && val !== '__manual__' && val !== '__manage__') {
+      if (this.isProgressOnly()) {
+        deleteBtn.classList.add('hidden');
+      } else if (val && val !== '__manual__' && val !== '__manage__') {
         deleteBtn.classList.remove('hidden');
       } else {
         deleteBtn.classList.add('hidden');
@@ -4376,41 +4379,41 @@ const app = {
         this.showToast('You do not have permission to create activities', 'error');
         return;
       }
+      const status = document.getElementById('task-input-status')?.value || 'todo';
+      const selectAssigneeVal = document.getElementById('task-input-assignee')?.value;
+      const assigneeId = (selectAssigneeVal && selectAssigneeVal !== '__manual__' && selectAssigneeVal !== '__manage__') ? Number(selectAssigneeVal) : null;
+      const startDate = document.getElementById('task-input-startdate')?.value || null;
+      const dueDate = document.getElementById('task-input-duedate')?.value || null;
+      const estHours = parseFloat(document.getElementById('task-input-esthours')?.value || 0);
+
       this.closeTaskModal();
       const localTask = this.state.tasks.find(t => t.id === numTaskId);
-      const prevProgress = localTask ? localTask.progress_pct : 0;
-      const prevAct = localTask ? localTask.actual_hours : 0;
 
-      if (localTask) {
-        localTask.progress_pct = progressPct;
-        localTask.actual_hours = isNaN(actHours) ? 0.0 : actHours;
-        this.renderCurrentView();
-        this.syncCurrentProjectCache();
-      }
-      this.showToast('Activity progress updated', 'success');
+      const payload = {
+        progress_pct: progressPct,
+        status: status,
+        assignee_id: assigneeId,
+        start_date: startDate,
+        due_date: dueDate,
+        estimated_hours: isNaN(estHours) ? 0.0 : estHours,
+        actual_hours: isNaN(actHours) ? 0.0 : actHours
+      };
 
       try {
         const updated = await this.api(`/api/tasks/${numTaskId}`, {
           method: 'PUT',
-          body: {
-            progress_pct: progressPct,
-            actual_hours: isNaN(actHours) ? 0.0 : actHours
-          }
+          body: payload
         });
         if (localTask && updated) {
           Object.assign(localTask, updated);
           this.syncCurrentProjectCache();
           this.renderCurrentView();
         }
+        this.showToast('Activity updated successfully', 'success');
       } catch (e) {
-        console.error('Failed to update task progress:', e);
-        if (localTask) {
-          localTask.progress_pct = prevProgress;
-          localTask.actual_hours = prevAct;
-          this.syncCurrentProjectCache();
-          this.renderCurrentView();
-        }
-        this.showToast(e.message || 'Failed to update activity progress', 'error');
+        console.error('Failed to update task:', e);
+        this.showToast(e.message || 'Failed to update activity', 'error');
+        this.renderCurrentView();
       }
       return;
     }

@@ -1549,13 +1549,19 @@ def update_task(task_id):
 
         # Check for restricted role (Lead / Assignee / Member)
         if user and not is_full_access(user):
-            # Lead and Assignee can ONLY update progress (% and actual_hours)
-            # Check if any forbidden field is being changed
+            # Whitelisted keys for restricted roles:
+            # progress %, status, assignee, start date, end date, estimated hours, actual hours
+            ALLOWED_KEYS = {
+                "progress_pct", "progress",
+                "status",
+                "assignee_id", "assignee_name", "new_assignee_name",
+                "start_date", "end_date", "due_date",
+                "estimated_hours",
+                "actual_hours",
+                "id", "task_id",
+            }
             forbidden_attempted = False
-            
-            # Check status change
-            if "status" in data and data["status"] and str(data["status"]).strip() != str(task["status"]).strip():
-                forbidden_attempted = True
+
             # Check title change
             if "title" in data and clean_text(data["title"]) and clean_text(data["title"]) != task["title"]:
                 forbidden_attempted = True
@@ -1565,62 +1571,122 @@ def update_task(task_id):
             # Check priority change
             if "priority" in data and data["priority"] and str(data["priority"]).strip() != str(task["priority"]).strip():
                 forbidden_attempted = True
-            # Check start_date change
-            if "start_date" in data:
-                sd = str(data["start_date"]).strip() if data["start_date"] and str(data["start_date"]).strip() not in ("", "null", "undefined", "None") else None
-                if sd != task["start_date"]:
-                    forbidden_attempted = True
-            # Check due_date change
-            if "due_date" in data:
-                dd = str(data["due_date"]).strip() if data["due_date"] and str(data["due_date"]).strip() not in ("", "null", "undefined", "None") else None
-                if dd != task["due_date"]:
-                    forbidden_attempted = True
             # Check sprint_id change
             if "sprint_id" in data:
                 sp = safe_int(data["sprint_id"])
                 sp = sp if (sp and sp > 0) else None
                 if sp != task["sprint_id"]:
                     forbidden_attempted = True
-            # Check assignee change
-            if "assignee_id" in data:
-                aid = safe_int(data["assignee_id"])
-                aid = aid if (aid and aid > 0) else None
-                if aid != task["assignee_id"]:
-                    forbidden_attempted = True
-            if data.get("assignee_name") or data.get("new_assignee_name"):
-                forbidden_attempted = True
             # Check resource_ids change
             if "resource_ids" in data and isinstance(data["resource_ids"], list):
-                curr_res = [r["resource_id"] for r in conn.execute("SELECT resource_id FROM task_resources WHERE task_id = ?", (task_id,)).fetchall()]
-                new_res = [int(r) for r in data["resource_ids"] if str(r).isdigit()]
-                if sorted(curr_res) != sorted(new_res):
+                curr_res = sorted([r["resource_id"] for r in conn.execute("SELECT resource_id FROM task_resources WHERE task_id = ?", (task_id,)).fetchall()])
+                new_res = sorted([int(r) for r in data["resource_ids"] if str(r).isdigit()])
+                if curr_res != new_res:
                     forbidden_attempted = True
+            # Check tags change
+            if "tags" in data:
+                try:
+                    curr_tags = json.loads(task["tags"]) if task["tags"] else []
+                except Exception:
+                    curr_tags = []
+                raw_tags = data["tags"]
+                if isinstance(raw_tags, list):
+                    new_tags = [str(t).strip().lstrip('#') for t in raw_tags if str(t).strip()]
+                elif isinstance(raw_tags, str):
+                    new_tags = [t.strip().lstrip('#') for t in raw_tags.split(',') if t.strip()]
+                else:
+                    new_tags = []
+                if sorted([t.lower() for t in curr_tags]) != sorted([t.lower() for t in new_tags]):
+                    forbidden_attempted = True
+            # Check subtasks change
+            if "subtasks" in data and data["subtasks"]:
+                forbidden_attempted = True
+            # Check order_index change
+            if "order_index" in data and safe_int(data["order_index"]) != task["order_index"]:
+                forbidden_attempted = True
+            # Check any other keys in data
+            for k in data.keys():
+                if k not in ALLOWED_KEYS and data[k] is not None:
+                    if k in task.keys() and data[k] != task[k]:
+                        forbidden_attempted = True
+                    elif k not in task.keys():
+                        forbidden_attempted = True
 
             if forbidden_attempted:
                 return json_response({
-                    "error": f"Permission Denied: User role '{user.get('role')}' can only update activity progress (% and hours). Activity status, title, dates, assignees, and resources can only be modified by PM or Admin."
+                    "error": f"Permission Denied: User role '{user.get('role')}' can only edit progress %, status, assignee, start date, end date, estimated hours, and actual hours."
                 }, status=403)
 
-            # Proceed to update only progress_pct and actual_hours
-            progress_pct = safe_int(data.get("progress_pct"), task["progress_pct"] if "progress_pct" in task.keys() else 0)
-            if progress_pct is not None:
-                progress_pct = max(0, min(100, progress_pct))
-            else:
-                progress_pct = task["progress_pct"] if "progress_pct" in task.keys() else 0
+            # Assignee validation for restricted roles: must be an existing member of that project or empty (never create a new member)
+            if data.get("assignee_name") or data.get("new_assignee_name"):
+                aname = clean_text(data.get("assignee_name") or data.get("new_assignee_name"))
+                if aname:
+                    m_row = conn.execute("SELECT id FROM members WHERE project_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", (project_id, aname)).fetchone()
+                    if not m_row:
+                        return json_response({"error": f"Assignee '{aname}' is not an existing member of this project."}, status=400)
+                    data["assignee_id"] = m_row["id"]
+                    data.pop("assignee_name", None)
+                    data.pop("new_assignee_name", None)
+                else:
+                    data["assignee_id"] = None
+            if "assignee_id" in data:
+                aid_val = safe_int(data["assignee_id"])
+                if aid_val and aid_val > 0:
+                    m_row = conn.execute("SELECT id FROM members WHERE id = ? AND project_id = ?", (aid_val, project_id)).fetchone()
+                    if not m_row:
+                        return json_response({"error": "Assignee must be an existing member of this project."}, status=400)
 
-            act_hours = safe_float(data["actual_hours"], safe_float(task["actual_hours"], 0.0)) if "actual_hours" in data else safe_float(task["actual_hours"], 0.0)
+            # Status validation
+            if "status" in data and data["status"]:
+                st_val = str(data["status"]).strip().lower()
+                if st_val not in ("backlog", "todo", "in_progress", "in_review", "done"):
+                    return json_response({"error": f"Invalid status '{data['status']}'. Must be backlog, todo, in_progress, in_review, or done."}, status=400)
 
-            conn.execute("""
-                UPDATE tasks SET progress_pct = ?, actual_hours = ?, updated_at = ?
-                WHERE id = ?
-            """, (progress_pct, act_hours, now_str, task_id))
+            # Dates validation: start <= end
+            sd_check = data["start_date"] if "start_date" in data else task["start_date"]
+            sd_clean = str(sd_check).strip() if sd_check and str(sd_check).strip() not in ("", "null", "undefined", "None") else None
+            dd_check = data.get("due_date", data.get("end_date")) if ("due_date" in data or "end_date" in data) else task["due_date"]
+            dd_clean = str(dd_check).strip() if dd_check and str(dd_check).strip() not in ("", "null", "undefined", "None") else None
 
-            actor_name = user.get("full_name") or user.get("username") or user.get("role", "User")
-            record_activity(conn, project_id, actor_name, "Progress Updated", f'Updated activity "{task["title"]}" progress to {progress_pct}%', task_id=task_id)
+            if "start_date" in data and sd_clean:
+                try:
+                    datetime.strptime(sd_clean[:10], "%Y-%m-%d")
+                except ValueError:
+                    return json_response({"error": "Invalid start date format. Must be YYYY-MM-DD."}, status=400)
+            if ("due_date" in data or "end_date" in data) and dd_clean:
+                try:
+                    datetime.strptime(dd_clean[:10], "%Y-%m-%d")
+                except ValueError:
+                    return json_response({"error": "Invalid end date format. Must be YYYY-MM-DD."}, status=400)
 
-            task_res = get_task_dict(conn, task_id)
-            return json_response(task_res)
-        
+            if sd_clean and dd_clean and dd_clean[:10] < sd_clean[:10]:
+                return json_response({"error": "End date cannot be earlier than start date."}, status=400)
+
+            # Hours validation
+            if "estimated_hours" in data and data["estimated_hours"] is not None:
+                try:
+                    if float(data["estimated_hours"]) < 0:
+                        return json_response({"error": "Estimated hours must be greater than or equal to 0."}, status=400)
+                except (ValueError, TypeError):
+                    return json_response({"error": "Estimated hours must be a valid number."}, status=400)
+
+            if "actual_hours" in data and data["actual_hours"] is not None:
+                try:
+                    if float(data["actual_hours"]) < 0:
+                        return json_response({"error": "Actual hours must be greater than or equal to 0."}, status=400)
+                except (ValueError, TypeError):
+                    return json_response({"error": "Actual hours must be a valid number."}, status=400)
+
+            # Progress validation
+            if ("progress_pct" in data and data["progress_pct"] is not None) or ("progress" in data and data["progress"] is not None):
+                raw_p = data.get("progress_pct") if "progress_pct" in data else data.get("progress")
+                try:
+                    p_num = int(raw_p)
+                    if p_num < 0 or p_num > 100:
+                        return json_response({"error": "Progress percentage must be between 0 and 100."}, status=400)
+                except (ValueError, TypeError):
+                    return json_response({"error": "Progress percentage must be a valid number between 0 and 100."}, status=400)
+
         # 1. Text & Enum fields
         title = clean_text(data["title"]) if "title" in data and clean_text(data["title"]) else task["title"]
         desc = str(data["description"]) if "description" in data and data["description"] is not None else task["description"]
@@ -1675,8 +1741,8 @@ def update_task(task_id):
         else:
             start_date = task["start_date"]
 
-        if "due_date" in data:
-            dd = data["due_date"]
+        if "due_date" in data or "end_date" in data:
+            dd = data.get("due_date", data.get("end_date"))
             due_date = str(dd).strip() if dd and str(dd).strip() not in ("", "null", "undefined", "None") else None
         else:
             due_date = task["due_date"]
@@ -1698,11 +1764,16 @@ def update_task(task_id):
             act_hours = safe_float(task["actual_hours"], 0.0)
 
         # Progress %
-        progress_pct = safe_int(data.get("progress_pct"), task["progress_pct"] if "progress_pct" in task.keys() else 0)
+        progress_pct = safe_int(data.get("progress_pct", data.get("progress")), task["progress_pct"] if "progress_pct" in task.keys() else 0)
         if progress_pct is not None:
             progress_pct = max(0, min(100, progress_pct))
         else:
             progress_pct = task["progress_pct"] if "progress_pct" in task.keys() else 0
+
+        if status == "done" and "progress_pct" not in data and "progress" not in data:
+            progress_pct = 100
+        elif progress_pct == 100 and "status" not in data:
+            status = "done"
 
         # 6. Tags
         if "tags" in data:
@@ -1766,7 +1837,8 @@ def update_task(task_id):
             changes.append(f'assignee_id: {task["assignee_id"]} -> {assignee_id}')
         
         details = ", ".join(changes) if changes else "Updated task fields"
-        record_activity(conn, project_id, "User", "Task Updated", f'Task "{title}": {details}', task_id=task_id)
+        actor_name = user.get("full_name") or user.get("username") or user.get("role", "User") if user else "User"
+        record_activity(conn, project_id, actor_name, "Task Updated", f'Task "{title}": {details}', task_id=task_id)
 
         # Trigger Action 4 (Task Assignment) if assignee changed
         if assignee_id and assignee_id != task["assignee_id"]:
@@ -1778,7 +1850,7 @@ def update_task(task_id):
         # Trigger Action 5 (Task Completed) if status changed to done
         if status == "done" and task["status"] != "done":
             try:
-                notify_task_completed(conn, task_id, actor_name="User")
+                notify_task_completed(conn, task_id, actor_name=actor_name)
             except Exception as e:
                 print(f"[Notifier] Error sending completion notification: {e}")
 
