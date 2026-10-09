@@ -372,7 +372,7 @@ Object.assign(app, {
       }
     }
 
-    // 2. Horizontal Stacked Bar: Task Status by Project
+    // 2. Vertical Stacked Bar: Task Status by Project
     const sortedProjects = [...(d.projects || [])]
       .sort((a, b) => (b.overdue_tasks || 0) - (a.overdue_tasks || 0) || (b.total_tasks || 0) - (a.total_tasks || 0))
       .slice(0, 8);
@@ -385,32 +385,40 @@ Object.assign(app, {
         this.state.charts.dashboardStatus = new Chart(statusCanvas, {
           type: 'bar',
           data: {
-            labels: sortedProjects.map(p => p.name.length > 18 ? p.name.slice(0, 17) + '…' : p.name),
+            labels: sortedProjects.map(p => p.name.length > 14 ? p.name.slice(0, 13) + '…' : p.name),
             datasets: [
               {
                 label: 'Done',
                 data: sortedProjects.map(p => p.status_counts ? p.status_counts.done : p.done_tasks || 0),
-                backgroundColor: '#10B981'
+                backgroundColor: '#10B981',
+                borderRadius: { topLeft: 4, topRight: 4 },
+                barPercentage: 0.6
               },
               {
                 label: 'In progress',
                 data: sortedProjects.map(p => p.status_counts ? p.status_counts.in_progress : 0),
-                backgroundColor: '#3B82F6'
+                backgroundColor: '#3B82F6',
+                borderRadius: { topLeft: 4, topRight: 4 },
+                barPercentage: 0.6
               },
               {
                 label: 'To do',
                 data: sortedProjects.map(p => p.status_counts ? p.status_counts.todo : 0),
-                backgroundColor: '#94A3B8'
+                backgroundColor: '#94A3B8',
+                borderRadius: { topLeft: 4, topRight: 4 },
+                barPercentage: 0.6
               },
               {
                 label: 'Overdue',
                 data: sortedProjects.map(p => p.status_counts ? p.status_counts.overdue : p.overdue_tasks || 0),
-                backgroundColor: '#F43F5E'
+                backgroundColor: '#F43F5E',
+                borderRadius: { topLeft: 4, topRight: 4 },
+                barPercentage: 0.6
               }
             ]
           },
           options: {
-            indexAxis: 'y',
+            indexAxis: 'x',
             responsive: true,
             maintainAspectRatio: false,
             onClick: (evt, elements) => {
@@ -426,19 +434,28 @@ Object.assign(app, {
             scales: {
               x: {
                 stacked: true,
-                grid: { color: gridColor },
-                ticks: { color: textColor, precision: 0 }
+                grid: { display: false },
+                ticks: { color: textColor, font: { size: 10 } }
               },
               y: {
                 stacked: true,
-                grid: { display: false },
-                ticks: { color: textColor, font: { size: 10 } }
+                grid: { color: gridColor, borderDash: [4, 4], drawBorder: false },
+                ticks: { color: textColor, precision: 0, font: { size: 10 } }
               }
             },
             plugins: {
               legend: {
-                position: 'bottom',
-                labels: { boxWidth: 10, padding: 8, font: { size: 10 }, color: textColor }
+                position: 'top',
+                align: 'end',
+                labels: {
+                  usePointStyle: true,
+                  pointStyle: 'circle',
+                  boxWidth: 6,
+                  boxHeight: 6,
+                  padding: 12,
+                  font: { size: 10, weight: '500' },
+                  color: textColor
+                }
               },
               tooltip: {
                 backgroundColor: tooltipBg,
@@ -446,6 +463,18 @@ Object.assign(app, {
                   title: (items) => {
                     const idx = items[0].dataIndex;
                     return sortedProjects[idx]?.name || '';
+                  },
+                  label: (ctx) => {
+                    const p = sortedProjects[ctx.dataIndex];
+                    const tot = p.total_tasks || 0;
+                    const val = ctx.raw || 0;
+                    const pct = tot ? Math.round((val / tot) * 100) : 0;
+                    return ` ${ctx.dataset.label}: ${val} (${pct}%)`;
+                  },
+                  footer: (items) => {
+                    const idx = items[0].dataIndex;
+                    const p = sortedProjects[idx];
+                    return `Total: ${p.total_tasks || 0} tasks`;
                   }
                 }
               }
