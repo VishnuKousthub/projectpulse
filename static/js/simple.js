@@ -541,31 +541,63 @@ Object.assign(app, {
     const edit = this.state.charterEdit || {};   // {kind, id}
 
     // ---------- header block
-    const field = (label, view, inputHtml, wide) => `
-      <div class="${wide ? 'sm:col-span-2 lg:col-span-3' : ''}">
-        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">${label}</div>
-        ${editing ? inputHtml : `<div class="text-xs text-slate-800 dark:text-slate-100 break-words">${view || '<span class="text-slate-400">Not set</span>'}</div>`}
-      </div>`;
+    const notSetPill = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-lg border border-dashed border-amber-400 dark:border-amber-500/70 bg-amber-50/70 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 text-base font-bold">Not set</span>`;
+    const charterInputClass = 'w-full px-3 py-2 text-base font-semibold rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition';
+
+    const field = (label, view, inputHtml, groupColor = 'blue', variant = 'standard', wide = false) => {
+      const borderLClass = {
+        blue: 'border-l-blue-500',
+        violet: 'border-l-violet-500',
+        emerald: 'border-l-emerald-500',
+        amber: 'border-l-amber-500'
+      }[groupColor] || 'border-l-blue-500';
+
+      let valueHtml;
+      if (editing) {
+        valueHtml = inputHtml;
+      } else if (!view || view === '—' || view === '₹0') {
+        valueHtml = notSetPill;
+      } else if (variant === 'project-name') {
+        valueHtml = `<div class="text-xl font-black text-slate-900 dark:text-white break-words tracking-tight">${view}</div>`;
+      } else if (variant === 'quantity') {
+        valueHtml = `<div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 break-words tracking-tight">${view}</div>`;
+      } else if (variant === 'budget') {
+        valueHtml = `<div class="text-2xl font-black text-amber-600 dark:text-amber-400 break-words tracking-tight">${view}</div>`;
+      } else {
+        valueHtml = `<div class="text-lg font-extrabold text-slate-900 dark:text-white break-words">${view}</div>`;
+      }
+
+      return `
+        <div class="bg-slate-50 dark:bg-slate-800/60 p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 ${borderLClass} shadow-2xs transition-all flex flex-col justify-between ${wide ? 'sm:col-span-2 lg:col-span-3' : ''}">
+          <div class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">${label}</div>
+          <div class="min-h-[28px] flex items-center">${valueHtml}</div>
+        </div>
+      `;
+    };
+
     const inp = (id, val, type = 'text', extra = '') =>
-      `<input id="${id}" type="${type}" value="${esc(type === 'date' ? String(val || '').slice(0, 10) : val)}" class="${UI.input}" ${extra}>`;
+      `<input id="${id}" type="${type}" value="${esc(type === 'date' ? String(val || '').slice(0, 10) : val)}" class="${charterInputClass}" ${extra}>`;
 
     const chemistsList = this.state.chemists || [];
     const chemistSelect = `
-      <div class="flex items-center gap-1.5">
-        <select id="cf-chemist" class="${UI.input} flex-1" onchange="if(this.value==='__NEW__'){app.promptNewChemist();}">
+      <div class="flex items-center gap-2">
+        <select id="cf-chemist" class="${charterInputClass} flex-1" onchange="if(this.value==='__NEW__'){app.promptNewChemist();}">
           <option value="">Select Chemist…</option>
           ${chemistsList.map(ch => `<option value="${esc(ch.name)}" ${ch.name === p.chemist_name ? 'selected' : ''}>${esc(ch.name)}</option>`).join('')}
-          <option value="__NEW__" class="font-bold text-blue-600">+ Add new chemist…</option>
+          <option value="__NEW__" class="font-bold text-blue-600 dark:text-blue-400">+ Add new chemist…</option>
         </select>
-        <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !px-2.5" title="Add new chemist">+</button>
+        <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !h-10 !px-3 text-sm font-bold" title="Add new chemist">+</button>
       </div>`;
 
     const header = `
       <div class="${UI.card} p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div>
-            <h2 class="text-base font-extrabold text-slate-800 dark:text-white">Project Charter</h2>
-            <div class="text-[11px] text-slate-400">Project Scope</div>
+            <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Project Charter</h2>
+            <div class="flex items-center gap-2 mt-1.5">
+              <span class="w-1 h-3.5 bg-blue-600 dark:bg-blue-400 rounded-full inline-block"></span>
+              <span class="text-sm font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400">Project Scope</span>
+            </div>
           </div>
           <div class="flex items-center gap-2">
             <button onclick="app.openProjectReportModal()" class="${UI.btn} ${UI.btnGhost}"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>Project Report</button>
@@ -576,18 +608,18 @@ Object.assign(app, {
           </div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          ${field('Project name', esc(p.name), inp('cf-name', p.name))}
-          ${field('Project code', esc(p.project_code), inp('cf-code', p.project_code))}
-          ${field('CAS no.', esc(p.cas_no), inp('cf-cas', p.cas_no))}
-          ${field('Customer name', esc(p.customer_name), inp('cf-customer', p.customer_name))}
+          ${field('Project name', esc(p.name), inp('cf-name', p.name), 'blue', 'project-name')}
+          ${field('Project code', esc(p.project_code), inp('cf-code', p.project_code), 'blue', 'standard')}
+          ${field('CAS no.', esc(p.cas_no), inp('cf-cas', p.cas_no), 'blue', 'standard')}
+          ${field('Customer name', esc(p.customer_name), inp('cf-customer', p.customer_name), 'blue', 'standard')}
           ${field('Project manager', esc(p.project_manager),
               inp('cf-pm', p.project_manager, 'text', 'list="cf-members"') +
-              `<datalist id="cf-members">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`)}
-          ${field('Chemist name', esc(p.chemist_name), chemistSelect)}
-          ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'))}
-          ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'))}
-          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-50 dark:bg-slate-800 text-slate-500"'))}
-          ${field('Project budget', this.formatINR(p.project_budget), inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'))}
+              `<datalist id="cf-members">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
+          ${field('Chemist name', esc(p.chemist_name), chemistSelect, 'violet', 'standard')}
+          ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'), 'emerald', 'standard')}
+          ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'), 'emerald', 'standard')}
+          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold opacity-80"'), 'emerald', 'quantity')}
+          ${field('Project budget', (p.project_budget != null && Number(p.project_budget) > 0) ? this.formatINR(p.project_budget) : '', inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'), 'amber', 'budget')}
         </div>
       </div>`;
 
@@ -646,49 +678,49 @@ Object.assign(app, {
           <div class="flex items-start justify-between gap-2 mb-2">
             <div class="flex items-center gap-2">
               <span class="text-xl">📦</span>
-              <h4 class="text-xs font-bold text-slate-900 dark:text-white leading-snug">${esc(d.title)}</h4>
+              <h4 class="text-sm font-extrabold text-slate-900 dark:text-white leading-snug">${esc(d.title)}</h4>
             </div>
             ${canEdit ? `
-              <div class="flex items-center -mr-1 -mt-1 opacity-70 hover:opacity-100">
+              <div class="flex items-center -mr-1 -mt-1 opacity-80 hover:opacity-100">
                 <button onclick="app.editCharterRow('deliverable', ${d.id})" class="${UI.iconBtn} !p-1" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
                 <button onclick="app.deleteDeliverable(${d.id})" class="${UI.iconBtn} !p-1 hover:!text-rose-600" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
               </div>` : ''}
           </div>
-          <div class="text-[11px] text-slate-500 dark:text-slate-400 space-y-1 mb-3">
-            <div><span class="text-slate-400 font-medium">Quantity:</span> <strong class="text-slate-700 dark:text-slate-300">${esc(d.quantity || '—')}</strong></div>
-            <div><span class="text-slate-400 font-medium">Quality:</span> <strong class="text-slate-700 dark:text-slate-300">${esc(d.quality || '—')}</strong></div>
+          <div class="text-xs text-slate-600 dark:text-slate-300 space-y-1 mb-3">
+            <div><span class="text-slate-700 dark:text-slate-200 font-extrabold uppercase text-[10px] tracking-wider">Quantity:</span> <strong class="text-slate-900 dark:text-white font-bold">${esc(d.quantity || '—')}</strong></div>
+            <div><span class="text-slate-700 dark:text-slate-200 font-extrabold uppercase text-[10px] tracking-wider">Quality:</span> <strong class="text-slate-900 dark:text-white font-bold">${esc(d.quality || '—')}</strong></div>
           </div>
         </div>
         <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
           <div>${renderDispatchChip(d.dispatch_date || d.due_date)}</div>
-          <div class="text-[10px] text-slate-400 font-mono">${this.fmtDate(d.dispatch_date || d.due_date)}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400 font-mono font-semibold">${this.fmtDate(d.dispatch_date || d.due_date)}</div>
         </div>
       </div>`;
 
     const editingDeliv = edit.kind === 'deliverable' ? (c.deliverables.find(x => x.id === edit.id) || {}) : null;
     const formHtml = editingDeliv ? `
-      <div class="m-4 p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-slate-800/80 shadow-sm">
+      <div class="m-4 p-4 rounded-xl border-2 border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-slate-900/80 shadow-sm">
         <div class="flex items-center justify-between mb-3">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300">
+          <h4 class="text-sm font-black uppercase tracking-wider text-blue-900 dark:text-blue-300">
             ${editingDeliv.id ? `Edit Deliverable #${editingDeliv.id}` : 'Add New Deliverable'}
           </h4>
           <button onclick="app.cancelCharterRow()" class="${UI.iconBtn}"><i data-lucide="x" class="w-4 h-4"></i></button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Deliverable *</label>
+            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1">Deliverable *</label>
             ${inp('cd-title', editingDeliv.title, 'text', 'placeholder="e.g. AZADOL Batch"')}
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quantity</label>
-            ${inp('cd-qty', editingDeliv.quantity, 'text', 'placeholder="e.g. 1 kg"')}
+            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1">Quantity (with unit) *</label>
+            ${inp('cd-qty', editingDeliv.quantity, 'text', 'placeholder="e.g. 1 kg, 500 g"')}
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quality</label>
+            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1">Quality</label>
             ${inp('cd-quality', editingDeliv.quality, 'text', 'placeholder="e.g. Purity ≥ 99%"')}
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Dispatch date</label>
+            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1">Dispatch date</label>
             ${inp('cd-dispatch', editingDeliv.dispatch_date || editingDeliv.due_date, 'date')}
           </div>
         </div>
@@ -703,17 +735,17 @@ Object.assign(app, {
     const emptyState = `
       <div class="p-10 text-center flex flex-col items-center justify-center">
         <div class="text-4xl mb-3">📦</div>
-        <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-1">No deliverables logged yet</h4>
-        <p class="text-xs text-slate-400 max-w-sm mb-4">Track deliverable batches, quantities, quality specifications, and dispatch dates.</p>
+        <h4 class="text-base font-black text-slate-900 dark:text-white mb-1">No deliverables logged yet</h4>
+        <p class="text-sm font-bold text-slate-600 dark:text-slate-300 max-w-sm mb-4">Track deliverable batches, quantities, quality specifications, and dispatch dates.</p>
         ${canEdit ? `<button onclick="app.editCharterRow('deliverable', 0)" class="${UI.btn} ${UI.btnPrimary}"><i data-lucide="plus" class="w-4 h-4"></i>Add your first deliverable</button>` : ''}
       </div>`;
 
     const deliverables = `
       <div class="${UI.card} overflow-hidden">
-        <div class="px-5 py-3 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60">
+        <div class="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700/60">
           <div>
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project deliverables</h3>
-            <div class="text-[11px] text-slate-400">Batches, specifications, quantities and dispatch dates</div>
+            <h3 class="text-xl font-black text-slate-900 dark:text-white">Project deliverables</h3>
+            <div class="text-sm font-semibold text-slate-600 dark:text-slate-300 mt-0.5">Batches, specifications, quantities and dispatch dates</div>
           </div>
           ${canEdit ? `<button onclick="app.editCharterRow('deliverable', 0)" class="${UI.btn} ${UI.btnGhost}"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Add deliverable</button>` : ''}
         </div>
@@ -735,22 +767,27 @@ Object.assign(app, {
       </select>`;
     const msTable = (title, items, emptyText, bare) => `
       <div class="${bare ? '' : UI.card + ' overflow-hidden'}">
-        ${bare ? '' : `<div class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/60">
+        ${bare ? '' : `<div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-700/60">
           <h3 class="text-sm font-bold text-slate-800 dark:text-white">${title} <span class="text-slate-400 font-medium">· ${items.length}</span></h3>
         </div>`}
         <div class="overflow-x-auto"><table class="w-full">
-          <thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
-            <th class="${UI.th} w-10">#</th><th class="${UI.th}">Objective / activity / milestone</th><th class="${UI.th}">Timeline</th>
-            <th class="${UI.th}">Task owner</th><th class="${UI.th}">Status</th><th class="${UI.th}">Type</th></tr></thead>
+          <thead class="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700"><tr>
+            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 w-10">#</th>
+            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Objective / activity / milestone</th>
+            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Timeline</th>
+            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Task owner</th>
+            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Status</th>
+            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Type</th>
+          </tr></thead>
           <tbody>${items.length ? items.map((t, i) => `
-            <tr class="border-t border-slate-100 dark:border-slate-700/60">
-              <td class="${UI.td} text-slate-400">${i + 1}</td>
-              <td class="${UI.td} font-semibold text-slate-900 dark:text-white">${esc(t.title)}</td>
-              <td class="${UI.td} whitespace-nowrap">${t.start_date || t.due_date ? `${this.fmtDate(t.start_date)} → ${this.fmtDate(t.due_date)}` : '<span class="text-slate-400">Not declared</span>'}</td>
+            <tr class="border-t border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+              <td class="${UI.td} text-slate-400 font-bold">${i + 1}</td>
+              <td class="${UI.td} font-bold text-slate-900 dark:text-white">${esc(t.title)}</td>
+              <td class="${UI.td} whitespace-nowrap">${t.start_date || t.due_date ? `${this.fmtDate(t.start_date)} → ${this.fmtDate(t.due_date)}` : '<span class="text-slate-400 font-medium">Not declared</span>'}</td>
               <td class="${UI.td}">${esc(t.assignee_name) || '<span class="text-slate-400">Unassigned</span>'}</td>
               <td class="${UI.td}">${esc(String(t.status || '').replace('_', ' '))}</td>
               <td class="${UI.td}">${typeSel(t)}</td>
-            </tr>`).join('') : `<tr><td colspan="6" class="py-5 text-center text-xs text-slate-400">${emptyText}</td></tr>`}
+            </tr>`).join('') : `<tr><td colspan="6" class="py-5 text-center text-xs font-semibold text-slate-400">${emptyText}</td></tr>`}
           </tbody></table></div>
       </div>`;
     const tech2 = c.milestones.filter(t => t.type === 'technical');
