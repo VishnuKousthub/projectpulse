@@ -75,6 +75,19 @@ Object.assign(app, {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   },
 
+  fmtRupee(amount) {
+    if (amount == null || amount === '' || isNaN(Number(amount))) return '₹0';
+    const num = Math.round(Number(amount));
+    const isNeg = num < 0;
+    let s = Math.abs(num).toString();
+    if (s.length > 3) {
+      const lastThree = s.slice(-3);
+      const otherNumbers = s.slice(0, -3);
+      s = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
+    }
+    return (isNeg ? '-' : '') + '₹' + s;
+  },
+
   daysLabel(days) {
     if (days === null || days === undefined) return '';
     if (days === 0) return 'today';
@@ -502,7 +515,12 @@ Object.assign(app, {
     }
     let c;
     try {
-      c = await this.api(`/api/projects/${pid}/charter`);
+      const [charterData, chemists] = await Promise.all([
+        this.api(`/api/projects/${pid}/charter`),
+        this.api('/api/chemists').catch(() => [])
+      ]);
+      c = charterData;
+      this.state.chemists = chemists || [];
     } catch (e) { return; }
     if (this.state.activeView !== 'charter' || Number(this.state.currentProjectId) !== Number(pid)) return;
     this.state.charter = c;
@@ -527,16 +545,24 @@ Object.assign(app, {
       </div>`;
     const inp = (id, val, type = 'text', extra = '') =>
       `<input id="${id}" type="${type}" value="${esc(type === 'date' ? String(val || '').slice(0, 10) : val)}" class="${UI.input}" ${extra}>`;
-    const tech = p.tech_pack
-      ? (/^https?:\/\//i.test(p.tech_pack) ? `<a href="${esc(p.tech_pack)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">${esc(p.tech_pack)}</a>` : esc(p.tech_pack))
-      : '';
+
+    const chemistsList = this.state.chemists || [];
+    const chemistSelect = `
+      <div class="flex items-center gap-1.5">
+        <select id="cf-chemist" class="${UI.input} flex-1" onchange="if(this.value==='__NEW__'){app.promptNewChemist();}">
+          <option value="">Select Chemist…</option>
+          ${chemistsList.map(ch => `<option value="${esc(ch.name)}" ${ch.name === p.chemist_name ? 'selected' : ''}>${esc(ch.name)}</option>`).join('')}
+          <option value="__NEW__" class="font-bold text-blue-600">+ Add new chemist…</option>
+        </select>
+        <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !px-2.5" title="Add new chemist">+</button>
+      </div>`;
 
     const header = `
       <div class="${UI.card} p-5">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 class="text-base font-extrabold text-slate-800 dark:text-white">Project Charter</h2>
-            <div class="text-[11px] text-slate-400">Scope, key dates and tech pack for this project</div>
+            <div class="text-[11px] text-slate-400">Project Scope</div>
           </div>
           <div class="flex items-center gap-2">
             <button onclick="app.openProjectReportModal()" class="${UI.btn} ${UI.btnGhost}"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>Project Report</button>
@@ -550,13 +576,15 @@ Object.assign(app, {
           ${field('Project name', esc(p.name), inp('cf-name', p.name))}
           ${field('Project code', esc(p.project_code), inp('cf-code', p.project_code))}
           ${field('CAS no.', esc(p.cas_no), inp('cf-cas', p.cas_no))}
+          ${field('Customer name', esc(p.customer_name), inp('cf-customer', p.customer_name))}
           ${field('Project manager', esc(p.project_manager),
               inp('cf-pm', p.project_manager, 'text', 'list="cf-members"') +
               `<datalist id="cf-members">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`)}
+          ${field('Chemist name', esc(p.chemist_name), chemistSelect)}
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'))}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'))}
-          ${field('Tech pack (link or reference)', tech, inp('cf-tech', p.tech_pack), true)}
-          ${field('Project scope', esc(p.description), `<textarea id="cf-scope" rows="3" class="${UI.input} h-auto py-1.5">${esc(p.description)}</textarea>`, true)}
+          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'placeholder="e.g. 500 g or 10 kg"'))}
+          ${field('Project budget', this.fmtRupee(p.project_budget), inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'))}
         </div>
       </div>`;
 
@@ -861,27 +889,95 @@ Object.assign(app, {
   // -- header edit
   editCharterHeader() { this.state.charterEditHeader = true; this.paintCharter(); },
   cancelCharterHeader() { this.state.charterEditHeader = false; this.paintCharter(); },
+  async promptNewChemist() {
+    const sel = document.getElementById('cf-chemist');
+    const name = (prompt('Enter new chemist name:') || '').trim();
+    if (!name) {
+      if (sel && sel.value === '__NEW__') sel.value = '';
+      return;
+    }
+    try {
+      let savedName = name;
+      try {
+        const res = await this.api('/api/chemists', {
+          method: 'POST',
+          body: { name }
+        });
+        savedName = res.name || name;
+        this.showToast(`Chemist '${savedName}' added`, 'success');
+      } catch (err) {
+        if (err.message && err.message.includes('already exists')) {
+          this.showToast(err.message, 'info');
+        } else {
+          throw err;
+        }
+      }
+      const chemists = await this.api('/api/chemists').catch(() => []);
+      this.state.chemists = chemists;
+      if (sel) {
+        sel.innerHTML = `
+          <option value="">Select Chemist…</option>
+          ${chemists.map(ch => `<option value="${this.escapeHtml(ch.name)}">${this.escapeHtml(ch.name)}</option>`).join('')}
+          <option value="__NEW__" class="font-bold text-blue-600">+ Add new chemist…</option>
+        `;
+        const matched = chemists.find(c => c.name.toLowerCase() === savedName.toLowerCase());
+        sel.value = matched ? matched.name : '';
+      }
+    } catch (e) {
+      this.showToast(e.message || 'Failed to add chemist', 'error');
+      if (sel && sel.value === '__NEW__') sel.value = '';
+    }
+  },
   async saveCharterHeader() {
     const v = (id) => document.getElementById(id)?.value ?? '';
     const name = v('cf-name').trim();
     if (!name) { this.showToast('Project name is required', 'error'); return; }
+
+    const rec = v('cf-received');
+    const del = v('cf-delivery');
+    if (rec && del && del < rec) {
+      this.showToast('Project delivery date must be on or after received date', 'error');
+      return;
+    }
+
+    const budgetRaw = v('cf-budget');
+    const budget = budgetRaw !== '' ? Number(budgetRaw) : 0;
+    if (isNaN(budget) || budget < 0) {
+      this.showToast('Project budget must be a non-negative number', 'error');
+      return;
+    }
+
+    let chemistVal = v('cf-chemist');
+    if (chemistVal === '__NEW__') chemistVal = '';
+
     const pid = this.state.currentProjectId;
-    await this.api(`/api/projects/${pid}`, {
-      method: 'PUT',
-      body: {
-        name, description: v('cf-scope'),
-        project_code: v('cf-code'), cas_no: v('cf-cas'), project_manager: v('cf-pm'),
-        received_date: v('cf-received'), delivery_date: v('cf-delivery'), tech_pack: v('cf-tech'),
-      },
-    });
-    this.state.charterEditHeader = false;
-    this.showToast('Charter saved', 'success');
-    // refresh project list (name may have changed) and this page
-    const list = await this.api('/api/projects');
-    this.state.projects = list;
-    this.renderProjectsDropdown();
-    this.renderProjectsSidebar();
-    await this.renderCharter();
+    try {
+      await this.api(`/api/projects/${pid}`, {
+        method: 'PUT',
+        body: {
+          name,
+          project_code: v('cf-code'),
+          cas_no: v('cf-cas'),
+          customer_name: v('cf-customer'),
+          project_manager: v('cf-pm'),
+          chemist_name: chemistVal,
+          received_date: rec,
+          delivery_date: del,
+          total_deliverable_quantity: v('cf-quantity'),
+          project_budget: budget,
+        },
+      });
+      this.state.charterEditHeader = false;
+      this.showToast('Charter saved', 'success');
+      // refresh project list (name may have changed) and this page
+      const list = await this.api('/api/projects');
+      this.state.projects = list;
+      this.renderProjectsDropdown();
+      this.renderProjectsSidebar();
+      await this.renderCharter();
+    } catch (e) {
+      this.showToast(e.message || 'Failed to save charter', 'error');
+    }
   },
 
   // -- row edit helpers

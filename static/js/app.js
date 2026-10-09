@@ -124,6 +124,19 @@ const app = {
     return role === 'lead' || role === 'team lead' || role === 'assignee' || role === 'member' || role === 'developer';
   },
 
+  fmtRupee(amount) {
+    if (amount == null || amount === '' || isNaN(Number(amount))) return '₹0';
+    const num = Math.round(Number(amount));
+    const isNeg = num < 0;
+    let s = Math.abs(num).toString();
+    if (s.length > 3) {
+      const lastThree = s.slice(-3);
+      const otherNumbers = s.slice(0, -3);
+      s = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
+    }
+    return (isNeg ? '-' : '') + '₹' + s;
+  },
+
   syncTaskProgressSlider(val) {
     let num = parseInt(val, 10);
     if (isNaN(num)) num = 0;
@@ -6142,9 +6155,12 @@ const app = {
           </div>
           ${this.isFullAccess() ? `
           <div><span class="text-slate-500">Project Code:</span> <strong class="text-slate-900 dark:text-white font-mono">${this.escapeHtml(p.project_code || ('PRJ-2026-' + (p.id || '101')))}</strong></div>
+          <div><span class="text-slate-500">Customer:</span> ${this.escapeHtml(p.customer_name || '—')}</div>
+          <div><span class="text-slate-500">Chemist:</span> ${this.escapeHtml(p.chemist_name || '—')}</div>
           <div><span class="text-slate-500">Project Received:</span> ${this.fmtDate(p.received_date)}</div>
           <div><span class="text-slate-500">Project Delivery:</span> ${this.fmtDate(p.delivery_date)}</div>
-          <div><span class="text-slate-500">Tech Pack:</span> ${this.escapeHtml(p.tech_pack || '—')}</div>
+          <div><span class="text-slate-500">Total Deliverable Qty:</span> ${this.escapeHtml(p.total_deliverable_quantity || '—')}</div>
+          <div><span class="text-slate-500">Project Budget:</span> <strong class="text-slate-900 dark:text-white">${this.fmtRupee(p.project_budget)}</strong></div>
           ` : ''}
           <div><span class="text-slate-500">Total Activities in Scope:</span> <strong>${k.total_activities || 0} Activities</strong></div>
           <div><span class="text-slate-500">Schedule Status:</span> ${k.overdue > 0 ? `<strong class="text-rose-600">${k.overdue} Overdue Activities</strong>` : '<strong class="text-emerald-600">On Track (All Deliverables Current)</strong>'}</div>

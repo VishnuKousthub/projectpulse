@@ -276,12 +276,38 @@ def init_db():
             pass
 
         # ---- Project Charter (additive only; nothing is auto-filled) ----
-        for col in ("project_code", "cas_no", "project_manager",
-                    "received_date", "delivery_date", "tech_pack"):
+        for col, col_type in (
+            ("project_code", "TEXT"),
+            ("cas_no", "TEXT"),
+            ("project_manager", "TEXT"),
+            ("received_date", "TEXT"),
+            ("delivery_date", "TEXT"),
+            ("tech_pack", "TEXT"),
+            ("customer_name", "TEXT"),
+            ("chemist_name", "TEXT"),
+            ("total_deliverable_quantity", "TEXT"),
+            ("project_budget", "REAL DEFAULT 0"),
+        ):
             try:
-                cursor.execute(f"ALTER TABLE projects ADD COLUMN {col} TEXT")
+                cursor.execute(f"ALTER TABLE projects ADD COLUMN {col} {col_type}")
             except Exception:
                 pass
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chemists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE COLLATE NOCASE,
+            created_at TEXT
+        )
+        """)
+        try:
+            c_row = cursor.execute("SELECT COUNT(*) AS c FROM chemists").fetchone()
+            if c_row and c_row["c"] == 0:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                for ch_name in ("Dr. A. Sharma", "R. Patel", "V. Iyer", "S. Nair"):
+                    cursor.execute("INSERT OR IGNORE INTO chemists (name, created_at) VALUES (?, ?)", (ch_name, now_iso))
+        except Exception:
+            pass
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS deliverables (

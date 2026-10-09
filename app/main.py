@@ -573,6 +573,27 @@ def update_project(project_id):
         if not project:
             return json_response({"error": "Project not found"}, status=404)
         
+        # Validate project_budget if passed
+        if "project_budget" in data and data["project_budget"] is not None and data["project_budget"] != "":
+            try:
+                b_val = float(data["project_budget"])
+                if b_val < 0:
+                    return json_response({"error": "Project budget must be a non-negative number"}, status=400)
+            except (ValueError, TypeError):
+                return json_response({"error": "Project budget must be a valid number"}, status=400)
+
+        # Validate delivery_date >= received_date when both are present
+        rec_val = data["received_date"] if "received_date" in data else project["received_date"]
+        del_val = data["delivery_date"] if "delivery_date" in data else project["delivery_date"]
+        if rec_val and del_val:
+            try:
+                r_date = datetime.fromisoformat(str(rec_val)[:10]).date()
+                d_date = datetime.fromisoformat(str(del_val)[:10]).date()
+                if d_date < r_date:
+                    return json_response({"error": "Delivery date must be on or after received date"}, status=400)
+            except Exception:
+                pass
+
         name = data.get("name", project["name"])
         desc = data.get("description", project["description"])
         color = data.get("color", project["color"])
@@ -586,8 +607,13 @@ def update_project(project_id):
         # Charter fields (optional; only touched when sent)
         for field in charter_module.CHARTER_FIELDS:
             if field in data:
-                conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?",
-                             (clean_text(data[field]) or None, project_id))
+                val = data[field]
+                if field == "project_budget":
+                    b_num = float(val) if val is not None and val != "" else 0.0
+                    conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?", (b_num, project_id))
+                else:
+                    conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?",
+                                 (clean_text(val) or None, project_id))
 
         record_activity(conn, project_id, "User", "Project Updated", "Updated project settings")
         updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()

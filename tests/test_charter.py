@@ -142,6 +142,63 @@ class TestCharter(unittest.TestCase):
         self.assertEqual(r_o, "todo")
         self.assertEqual(r_c, "done")
 
+    def test_09_chemists_endpoints_and_permissions(self):
+        # pm can list chemists
+        code, chemists = call("/api/chemists", "GET", None, self.pm)
+        self.assertEqual(code, 200)
+        names = [c["name"] for c in chemists]
+        self.assertIn("Dr. A. Sharma", names)
+        self.assertIn("R. Patel", names)
+
+        # assignee is forbidden
+        code, _ = call("/api/chemists", "GET", None, self.assignee)
+        self.assertEqual(code, 403)
+        code, _ = call("/api/chemists", "POST", {"name": "Test Chemist"}, self.assignee)
+        self.assertEqual(code, 403)
+
+        # pm can create chemist
+        code, created = call("/api/chemists", "POST", {"name": "Dr. Marie Curie"}, self.pm)
+        self.assertEqual(code, 201)
+        self.assertEqual(created["name"], "Dr. Marie Curie")
+
+        # duplicate name rejected
+        code, err = call("/api/chemists", "POST", {"name": "dr. marie curie"}, self.pm)
+        self.assertEqual(code, 400)
+
+        # empty name rejected
+        code, err = call("/api/chemists", "POST", {"name": "   "}, self.pm)
+        self.assertEqual(code, 400)
+
+    def test_10_new_charter_fields_and_validation(self):
+        # valid update with customer, chemist, qty, and budget
+        code, _ = call(f"/api/projects/{self.pid}", "PUT", {
+            "customer_name": "Acme Pharma",
+            "chemist_name": "Dr. Marie Curie",
+            "total_deliverable_quantity": "50 kg",
+            "project_budget": 1250000,
+            "received_date": "2026-05-01",
+            "delivery_date": "2026-10-01"
+        }, self.pm)
+        self.assertEqual(code, 200)
+
+        _, c = call(f"/api/projects/{self.pid}/charter")
+        p = c["project"]
+        self.assertEqual(p["customer_name"], "Acme Pharma")
+        self.assertEqual(p["chemist_name"], "Dr. Marie Curie")
+        self.assertEqual(p["total_deliverable_quantity"], "50 kg")
+        self.assertEqual(p["project_budget"], 1250000.0)
+
+        # negative budget rejected
+        code, _ = call(f"/api/projects/{self.pid}", "PUT", {"project_budget": -100}, self.pm)
+        self.assertEqual(code, 400)
+
+        # delivery date earlier than received date rejected
+        code, _ = call(f"/api/projects/{self.pid}", "PUT", {
+            "received_date": "2026-06-01",
+            "delivery_date": "2026-05-01"
+        }, self.pm)
+        self.assertEqual(code, 400)
+
     @classmethod
     def tearDownClass(cls):
         p = os.environ.get("PROJECT_PULSE_DB", "")
@@ -151,3 +208,4 @@ class TestCharter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

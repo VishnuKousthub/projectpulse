@@ -8,8 +8,10 @@ Everything here is additive: it reads existing tables and uses the new
 import json
 from datetime import date, datetime
 
-CHARTER_FIELDS = ("project_code", "cas_no", "project_manager",
-                  "received_date", "delivery_date", "tech_pack")
+CHARTER_FIELDS = (
+    "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
+    "received_date", "delivery_date", "total_deliverable_quantity", "project_budget", "tech_pack"
+)
 
 IMPACTS = ("low", "medium", "high")
 DELIVERABLE_STATUSES = ("backlog", "todo", "in_progress", "in_review", "done")
@@ -124,13 +126,41 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 milestones.append(td)
 
             return json_response({
-                "project": {k: p[k] for k in ("id", "name", "description", "color") } |
-                           {f: p[f] for f in CHARTER_FIELDS},
+                "project": {k: p[k] for k in ("id", "name", "description", "color") if k in p.keys()} |
+                           {f: (p[f] if f in p.keys() else None) for f in CHARTER_FIELDS},
                 "deliverables": [dict(r) for r in deliverables],
                 "risks": [dict(r) for r in risks],
                 "milestones": milestones,
                 "members": [r["name"] for r in members],
             })
+
+    # ----------------------------------------------------------------- chemists
+    @app.get("/api/chemists")
+    def list_chemists():
+        denied = deny_if_not_pm()
+        if denied:
+            return denied
+        with get_db() as conn:
+            rows = conn.execute("SELECT id, name, created_at FROM chemists ORDER BY name COLLATE NOCASE").fetchall()
+            return json_response([dict(r) for r in rows])
+
+    @app.post("/api/chemists")
+    def create_chemist():
+        denied = deny_if_not_pm()
+        if denied:
+            return denied
+        data = request.json or {}
+        name = clean_text(data.get("name"))
+        if not name:
+            return json_response({"error": "Chemist name is required"}, status=400)
+        with get_db() as conn:
+            existing = conn.execute("SELECT id, name FROM chemists WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+            if existing:
+                return json_response({"error": f"Chemist '{name}' already exists"}, status=400)
+            now_iso = get_now_iso()
+            cur = conn.execute("INSERT INTO chemists (name, created_at) VALUES (?, ?)", (name, now_iso))
+            created_row = conn.execute("SELECT id, name, created_at FROM chemists WHERE id = ?", (cur.lastrowid,)).fetchone()
+            return json_response(dict(created_row), status=201)
 
     # -------------------------------------------------------------- deliverables
     @app.get("/api/projects/<project_id:int>/deliverables")
