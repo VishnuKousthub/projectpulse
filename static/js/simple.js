@@ -183,34 +183,34 @@ Object.assign(app, {
       </div>`;
 
     root.innerHTML = `
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 mb-5">
+        <div class="${UI.card} p-5 flex flex-col h-[340px] xl:col-span-5">
+          <div class="mb-3">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Projects by Health</h3>
+            <div class="text-[11px] text-slate-400">Project distribution across delivery status</div>
+          </div>
+          <div id="dashboard-health-chart-container" class="relative flex-1 min-h-0 flex items-center justify-center">
+            <canvas id="dashboardHealthChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <div class="${UI.card} p-5 flex flex-col h-[340px] xl:col-span-7">
+          <div class="mb-3">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Task Status by Project</h3>
+            <div class="text-[11px] text-slate-400">Done, in progress, to do and overdue tasks (up to 8 projects)</div>
+          </div>
+          <div id="dashboard-status-chart-container" class="relative flex-1 min-h-0 flex items-center justify-center">
+            <canvas id="dashboardStatusChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
         ${tile('Projects', k.projects, `${k.total_tasks} tasks in total`)}
         ${tile('Overdue tasks', k.overdue_tasks, 'past their due date', k.overdue_tasks ? 'text-rose-600' : '')}
         ${tile('Due this week', k.due_this_week, 'next 7 days', k.due_this_week ? 'text-amber-600' : '')}
         ${tile('Overall progress', k.completion_pct + '%', 'tasks marked done')}
         ${tile('High risks open', k.open_high_risks, 'from project charters', k.open_high_risks ? 'text-rose-600' : '')}
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div class="${UI.card} p-4 flex flex-col">
-          <div class="mb-2">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project Health</h3>
-            <div class="text-[11px] text-slate-400">Projects by delivery status</div>
-          </div>
-          <div id="dashboard-health-chart-container" class="relative flex-1 min-h-[200px] max-h-[230px] flex items-center justify-center">
-            <canvas id="dashboardHealthChart" class="w-full max-h-[220px]"></canvas>
-          </div>
-        </div>
-
-        <div class="${UI.card} p-4 flex flex-col">
-          <div class="mb-2">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-white">Task Status by Project</h3>
-            <div class="text-[11px] text-slate-400">Done, in progress, to do and overdue</div>
-          </div>
-          <div id="dashboard-status-chart-container" class="relative flex-1 min-h-[200px] max-h-[230px] flex items-center justify-center">
-            <canvas id="dashboardStatusChart" class="w-full max-h-[220px]"></canvas>
-          </div>
-        </div>
       </div>
 
       ${panel('Projects', 'Click a project to open its task table', `
@@ -252,6 +252,9 @@ Object.assign(app, {
     const tooltipBg = isDark ? '#1E293B' : '#0F172A';
 
     // 1. Doughnut: Projects by Health
+    const healthLabels = ['On track', 'At risk', 'Delayed', 'Done'];
+    const healthKeys = ['on_track', 'at_risk', 'delayed', 'done'];
+    const healthColors = ['#10B981', '#F59E0B', '#F43F5E', '#3B82F6'];
     const healthCounts = { on_track: 0, at_risk: 0, delayed: 0, done: 0 };
     (d.projects || []).forEach(p => {
       if (healthCounts[p.health] !== undefined) healthCounts[p.health]++;
@@ -267,22 +270,66 @@ Object.assign(app, {
         this.state.charts.dashboardHealth = new Chart(healthCanvas, {
           type: 'doughnut',
           data: {
-            labels: ['On track', 'At risk', 'Delayed', 'Done'],
+            labels: healthLabels,
             datasets: [{
-              data: [healthCounts.on_track, healthCounts.at_risk, healthCounts.delayed, healthCounts.done],
-              backgroundColor: ['#10B981', '#F59E0B', '#F43F5E', '#3B82F6'],
+              data: healthKeys.map(k => healthCounts[k]),
+              backgroundColor: healthColors,
               borderColor: isDark ? '#1E293B' : '#FFFFFF',
               borderWidth: 2,
-              hoverOffset: 4
+              borderRadius: 6,
+              spacing: 3,
+              hoverOffset: 6
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+              padding: { top: 6, bottom: 6, left: 6, right: 12 }
+            },
+            onClick: (evt, elements) => {
+              if (elements && elements.length > 0) {
+                const tableEl = document.querySelector('table');
+                if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth' });
+              }
+            },
+            onHover: (evt, elements) => {
+              evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+            },
             plugins: {
               legend: {
-                position: 'bottom',
-                labels: { boxWidth: 10, padding: 8, font: { size: 10 }, color: textColor }
+                position: 'right',
+                align: 'center',
+                labels: {
+                  usePointStyle: true,
+                  pointStyle: 'circle',
+                  boxWidth: 8,
+                  boxHeight: 8,
+                  padding: 14,
+                  color: textColor,
+                  font: { size: 11, weight: '500' },
+                  generateLabels(chart) {
+                    const data = chart.data;
+                    if (!data.labels.length || !data.datasets.length) return [];
+                    const ds = data.datasets[0];
+                    const tot = ds.data.reduce((acc, val) => acc + val, 0);
+                    const labels = [];
+                    data.labels.forEach((label, i) => {
+                      const val = ds.data[i];
+                      if (val === 0) return; // Omit statuses that have 0 projects
+                      const pct = tot ? Math.round((val / tot) * 100) : 0;
+                      labels.push({
+                        text: `${label}   ${val} (${pct}%)`,
+                        fillStyle: ds.backgroundColor[i],
+                        strokeStyle: ds.backgroundColor[i],
+                        lineWidth: 0,
+                        hidden: false,
+                        index: i
+                      });
+                    });
+                    return labels;
+                  }
+                }
               },
               tooltip: {
                 backgroundColor: tooltipBg,
@@ -291,24 +338,25 @@ Object.assign(app, {
                 }
               }
             },
-            cutout: '70%'
+            cutout: '68%'
           },
           plugins: [{
             id: 'healthCenterCount',
             beforeDraw(chart) {
-              const { width, height, ctx } = chart;
+              const { chartArea, ctx } = chart;
+              if (!chartArea) return;
+              const centerX = (chartArea.left + chartArea.right) / 2;
+              const centerY = (chartArea.top + chartArea.bottom) / 2;
               ctx.save();
-              const legendH = chart.legend ? chart.legend.height : 0;
-              const centerY = (height - legendH) / 2;
-              ctx.font = 'bold 22px sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
+              ctx.font = 'bold 26px sans-serif';
               ctx.fillStyle = isDark ? '#F8FAFC' : '#0F172A';
-              ctx.fillText(String(totalProjects), width / 2, centerY - 8);
+              ctx.fillText(String(totalProjects), centerX, centerY - 10);
 
-              ctx.font = '10px sans-serif';
+              ctx.font = '11px sans-serif';
               ctx.fillStyle = isDark ? '#94A3B8' : '#64748B';
-              ctx.fillText(totalProjects === 1 ? 'project' : 'projects', width / 2, centerY + 12);
+              ctx.fillText(totalProjects === 1 ? 'project' : 'projects', centerX, centerY + 14);
               ctx.restore();
             }
           }]
