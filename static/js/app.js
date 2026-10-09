@@ -6323,10 +6323,12 @@ const app = {
 
         // Instant UI Render in 0ms!
         this.updateHeaderUserProfile();
+        this.applyRolePermissionsUI();
         this.renderProjectsDropdown();
         this.renderProjectsSidebar();
         this.populateFilterDropdowns();
-        this.renderCurrentView();
+        const landing = this.getLandingView ? this.getLandingView() : (typeof FEATURES !== 'undefined' && FEATURES.landingView ? FEATURES.landingView : 'dashboard');
+        this.switchView(landing);
         this.hideAuthContainer();
         this.showToast(`Welcome back, ${res.user.full_name}!`, 'success');
       }
