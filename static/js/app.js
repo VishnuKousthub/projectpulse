@@ -1110,6 +1110,7 @@ const app = {
   setGanttScale(scale) {
     this.state.ganttScale = scale;
     this.state.ganttOffset = 0;
+    this.state._ganttForceInitialScroll = true;
 
     document.querySelectorAll('.gantt-scale-btn').forEach(btn => {
       btn.classList.remove('bg-blue-600', 'text-white', 'shadow-xs', 'font-bold');
@@ -1131,6 +1132,7 @@ const app = {
 
   resetGanttToToday() {
     this.state.ganttOffset = 0;
+    this.state._ganttForceInitialScroll = true;
     this.renderGantt();
   },
 
@@ -1204,6 +1206,26 @@ const app = {
     if (tasksCount) tasksCount.textContent = `${this.state.tasks.length} tasks`;
     if (!container) return;
 
+    // Enforce container is the single scroll container (overflow auto both ways)
+    container.style.overflow = 'auto';
+    container.style.maxHeight = 'calc(100vh - 240px)';
+    container.style.position = 'relative';
+
+    const prevScrollLeft = container.scrollLeft;
+    const prevScrollTop = container.scrollTop;
+
+    // Detect if this render is an initial open or scale change
+    const scale = this.state.ganttScale || 'week';
+    const isNewViewSession = (this.state._lastGanttActiveView !== this.state.activeView);
+    const isScaleChanged = (this.state._lastGanttScale !== scale);
+    const isProjectChanged = (this.state._lastGanttProjectId !== this.state.currentProjectId);
+    const shouldInitialScroll = isNewViewSession || isScaleChanged || isProjectChanged || this.state._ganttForceInitialScroll;
+
+    this.state._lastGanttActiveView = this.state.activeView;
+    this.state._lastGanttScale = scale;
+    this.state._lastGanttProjectId = this.state.currentProjectId;
+    this.state._ganttForceInitialScroll = false;
+
     if (this.state.sortableInstances && this.state.sortableInstances.length > 0) {
       this.state.sortableInstances.forEach(s => {
         try {
@@ -1237,7 +1259,6 @@ const app = {
       return;
     }
 
-    const scale = this.state.ganttScale || 'week';
     const offset = this.state.ganttOffset || 0;
     const now = new Date();
 
@@ -1298,7 +1319,8 @@ const app = {
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isToday ? 'bg-blue-100/70 dark:bg-blue-900/50 font-bold text-blue-600 dark:text-blue-400' : (isWeekend ? 'bg-slate-100/50 dark:bg-slate-900/40 text-slate-400' : 'text-slate-600 dark:text-slate-300')}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
+          <div class="text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isToday ? 'bg-blue-100/70 dark:bg-blue-900/50 font-bold text-blue-600 dark:text-blue-400' : (isWeekend ? 'bg-slate-100/50 dark:bg-slate-900/40 text-slate-400' : 'text-slate-600 dark:text-slate-300')}"
+            style="width: ${colMinWidth}px; min-width: ${colMinWidth}px; max-width: ${colMinWidth}px; flex-shrink: 0;">
             <div class="text-[9px] uppercase font-semibold">${d.toLocaleDateString('en-US', { weekday: 'narrow' })}</div>
             <div class="text-[11px] font-bold">${d.getDate()}</div>
           </div>
@@ -1307,7 +1329,7 @@ const app = {
         const mKey = `${d.getFullYear()}-${d.getMonth()}`;
         if (mKey !== curMonthKey) {
           if (curMonthKey !== null && curMonthSpan > 0) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curMonthSpan * colMinWidth}px; min-width: ${curMonthSpan * colMinWidth}px; max-width: ${curMonthSpan * colMinWidth}px; flex-shrink: 0;">${curMonthName}</div>`);
           }
           curMonthKey = mKey;
           curMonthName = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -1317,7 +1339,7 @@ const app = {
         }
       }
       if (curMonthSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curMonthSpan * colMinWidth}px; min-width: ${curMonthSpan * colMinWidth}px; max-width: ${curMonthSpan * colMinWidth}px; flex-shrink: 0;">${curMonthName}</div>`);
       }
 
     } else if (scale === 'week') {
@@ -1356,7 +1378,8 @@ const app = {
         const projectWeekNum = w + 1 + offset;
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
+          <div class="text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentWeek ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-600 dark:text-slate-300'}"
+            style="width: ${colMinWidth}px; min-width: ${colMinWidth}px; max-width: ${colMinWidth}px; flex-shrink: 0;">
             <div class="text-[10px] font-bold ${isCurrentWeek ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}">Week ${projectWeekNum}</div>
             <div class="text-[9px] text-slate-400 dark:text-slate-400 font-medium">${wStart.getDate()} ${wStart.toLocaleDateString('en-US', { month: 'short' })} - ${wEnd.getDate()} ${wEnd.toLocaleDateString('en-US', { month: 'short' })}</div>
           </div>
@@ -1365,7 +1388,7 @@ const app = {
         const mKey = `${midThursday.getFullYear()}-${midThursday.getMonth()}`;
         if (mKey !== curMonthKey) {
           if (curMonthKey !== null && curMonthSpan > 0) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curMonthSpan * colMinWidth}px; min-width: ${curMonthSpan * colMinWidth}px; max-width: ${curMonthSpan * colMinWidth}px; flex-shrink: 0;">${curMonthName}</div>`);
           }
           curMonthKey = mKey;
           curMonthName = midThursday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -1375,7 +1398,7 @@ const app = {
         }
       }
       if (curMonthSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curMonthSpan} ${curMonthSpan} 0%; min-width: ${curMonthSpan * colMinWidth}px;">${curMonthName}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curMonthSpan * colMinWidth}px; min-width: ${curMonthSpan * colMinWidth}px; max-width: ${curMonthSpan * colMinWidth}px; flex-shrink: 0;">${curMonthName}</div>`);
       }
 
     } else if (scale === 'month') {
@@ -1403,7 +1426,8 @@ const app = {
         const isCurrentMonth = now.getFullYear() === mDate.getFullYear() && now.getMonth() === mDate.getMonth();
 
         bottomHeaders.push(`
-          <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentMonth ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
+          <div class="text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurrentMonth ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}"
+            style="width: ${colMinWidth}px; min-width: ${colMinWidth}px; max-width: ${colMinWidth}px; flex-shrink: 0;">
             <div class="text-xs font-bold">${mDate.toLocaleDateString('en-US', { month: 'short' })}</div>
             <div class="text-[9px] text-slate-400 font-normal">Month ${mDate.getMonth() + 1}</div>
           </div>
@@ -1411,7 +1435,7 @@ const app = {
 
         if (mDate.getFullYear() !== curYear) {
           if (curYear !== -1) {
-            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan} ${curYearSpan} 0%; min-width: ${curYearSpan * colMinWidth}px;">${curYear}</div>`);
+            topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curYearSpan * colMinWidth}px; min-width: ${curYearSpan * colMinWidth}px; max-width: ${curYearSpan * colMinWidth}px; flex-shrink: 0;">${curYear}</div>`);
           }
           curYear = mDate.getFullYear();
           curYearSpan = 1;
@@ -1420,7 +1444,7 @@ const app = {
         }
       }
       if (curYearSpan > 0) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: ${curYearSpan} ${curYearSpan} 0%; min-width: ${curYearSpan * colMinWidth}px;">${curYear}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curYearSpan * colMinWidth}px; min-width: ${curYearSpan * colMinWidth}px; max-width: ${curYearSpan * colMinWidth}px; flex-shrink: 0;">${curYear}</div>`);
       }
 
     } else if (scale === 'year') {
@@ -1438,14 +1462,15 @@ const app = {
       }
 
       for (let y = startYear; y <= endYear; y++) {
-        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800" style="flex: 4 4 0%; min-width: ${4 * colMinWidth}px;">${y}</div>`);
+        topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${4 * colMinWidth}px; min-width: ${4 * colMinWidth}px; max-width: ${4 * colMinWidth}px; flex-shrink: 0;">${y}</div>`);
         
         for (let q = 1; q <= 4; q++) {
           const qStart = new Date(y, (q - 1) * 3, 1);
           const isCurQuarter = now >= qStart && now < new Date(y, q * 3, 1);
 
           bottomHeaders.push(`
-            <div class="flex-1 min-w-[${colMinWidth}px] text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurQuarter ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;">
+            <div class="text-center border-r border-slate-200/80 dark:border-slate-700/80 py-1.5 ${isCurQuarter ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-300 font-semibold'}"
+              style="width: ${colMinWidth}px; min-width: ${colMinWidth}px; max-width: ${colMinWidth}px; flex-shrink: 0;">
               <div class="text-xs font-bold">Q${q}</div>
               <div class="text-[9px] text-slate-400 font-normal">${qStart.toLocaleDateString('en-US', { month: 'short' })}</div>
             </div>
@@ -1455,6 +1480,8 @@ const app = {
     }
 
     const totalSpanMs = Math.max(timelineMax - timelineMin, 86400000);
+    const timelineWidthPx = totalCols * colMinWidth;
+    const totalRowWidthPx = 540 + timelineWidthPx;
 
     // 3. Render Task Rows (strictly sorted by sequential process order)
     const sortedTasks = this.getSortedTasks();
@@ -1478,13 +1505,15 @@ const app = {
       const progressWidth = Math.min(100, Math.max(0, pct));
 
       return `
-        <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]">
+        <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]"
+          style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px; flex-shrink: 0;">
           
-          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px, Sticky left-0) -->
-          <div class="sticky left-0 z-10 w-[540px] flex-shrink-0 flex items-center border-r border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-750 transition">
+          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px, Sticky left-0, z-index: 30) -->
+          <div class="gantt-sticky-left flex items-center border-r border-slate-200 dark:border-slate-700/80 transition"
+            style="position: sticky; left: 0; z-index: 30; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
             
             <!-- Column 1: Title & Assignee info (260px) -->
-            <div class="w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
+            <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
               <div class="flex items-center gap-1 min-w-0">
                 ${!isProgress ? `
                   <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
@@ -1520,7 +1549,7 @@ const app = {
             </div>
 
             <!-- Column 2: Start Date Picker (115px) -->
-            <div class="w-[115px] flex-shrink-0 flex items-center justify-center">
+            <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 flex items-center justify-center">
               ${t.start_date ? `
                 <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.start_date}"
@@ -1543,10 +1572,10 @@ const app = {
             </div>
 
             <!-- Date Arrow Separator (25px) -->
-            <div class="w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
+            <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
 
             <!-- Column 3: End Date Picker (110px) -->
-            <div class="w-[110px] flex-shrink-0 flex items-center justify-center">
+            <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex items-center justify-center">
               ${t.due_date ? `
                 <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.due_date}"
@@ -1569,7 +1598,7 @@ const app = {
             </div>
 
             <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
-            <div class="w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
+            <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
               ${!isProgress ? `
                 <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
                   title="Delete Activity"
@@ -1581,25 +1610,28 @@ const app = {
 
           </div>
 
-          <!-- Column 4: Right Timeline Bar Area (flex-1) with Background Grid Lines Overlay -->
-          <div class="flex-1 relative h-9 px-0 flex items-center bg-slate-50/30 dark:bg-slate-900/20 overflow-hidden">
+          <!-- Column 5: Right Timeline Bar Area with explicit width matching header -->
+          <div class="gantt-timeline-cell flex items-center bg-slate-50/30 dark:bg-slate-900/20"
+            style="position: relative; overflow: hidden; z-index: 0; width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; max-width: ${timelineWidthPx}px; flex-shrink: 0; height: 36px;">
             <!-- Subtle Column Grid Lines Overlay for alignment with header columns -->
-            <div class="absolute inset-0 flex pointer-events-none">
+            <div style="position: absolute; inset: 0; display: flex; pointer-events: none; width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px;">
               ${Array.from({ length: totalCols }).map((_, cIdx) => `
-                <div class="flex-1 min-w-[${colMinWidth}px] border-r border-slate-100 dark:border-slate-800/60 ${cIdx === totalCols - 1 ? 'border-r-0' : ''}" style="flex: 1 1 0%; min-width: ${colMinWidth}px;"></div>
+                <div class="border-r border-slate-100 dark:border-slate-800/60 ${cIdx === totalCols - 1 ? 'border-r-0' : ''}"
+                  style="width: ${colMinWidth}px; min-width: ${colMinWidth}px; max-width: ${colMinWidth}px; flex-shrink: 0;"></div>
               `).join('')}
             </div>
 
             ${(!t.start_date && !t.due_date) ? `
               <div class="relative z-10 h-6 px-2.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/90 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shadow-2xs"
+                style="position: absolute; left: 12px; top: 5px; z-index: 10;"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="Schedule is Not Declared. Click to declare start & end dates.">
                 <i data-lucide="help-circle" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0"></i>
                 <span class="truncate">Schedule Not Declared (TBD)</span>
               </div>
             ` : `
-              <div class="gantt-bar absolute z-10 h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
-                style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%; min-width: 90px;"
+              <div class="gantt-bar absolute h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
+                style="left: ${leftPct}%; width: ${Math.max(widthPct, 1.5)}%; min-width: 80px; z-index: 10;"
                 onclick="app.openTaskModal({id: ${t.id}})"
                 title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h${t.risk_count ? `&#10;Risks: ${t.risk_count}${t.has_high_risk ? ' (High open)' : ''}` : ''}&#10;Click to open task details">
                 
@@ -1621,12 +1653,15 @@ const app = {
     let milestoneRowHtml = '';
     if (milestones.length > 0) {
       milestoneRowHtml = `
-        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2">
-          <div class="sticky left-0 z-10 w-[540px] flex-shrink-0 pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700 bg-amber-50/95 dark:bg-slate-850">
+        <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2"
+          style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px; flex-shrink: 0;">
+          <div class="gantt-milestone-sticky-left pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700"
+            style="position: sticky; left: 0; z-index: 30; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
             <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
-          <div class="flex-1 relative h-7 px-0 flex items-center">
+          <div class="gantt-timeline-cell flex items-center"
+            style="position: relative; overflow: hidden; z-index: 0; width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; max-width: ${timelineWidthPx}px; flex-shrink: 0; height: 28px;">
             ${milestones.map(m => {
               if (!m.due_date) return '';
               const mDate = new Date(m.due_date + 'T12:00:00');
@@ -1634,7 +1669,7 @@ const app = {
               const mLeft = Math.min(99, Math.max(0, (mOffset / totalSpanMs) * 100));
               return `
                 <div class="absolute -top-1 transform -translate-x-1/2 flex items-center space-x-1 cursor-pointer bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs"
-                  style="left: ${mLeft}%;"
+                  style="left: ${mLeft}%; z-index: 10;"
                   title="Milestone: ${this.escapeHtml(m.title)} (Target: ${m.due_date})">
                   <i data-lucide="flag" class="w-2.5 h-2.5"></i>
                   <span class="truncate max-w-[100px]">${this.escapeHtml(m.title)}</span>
@@ -1646,39 +1681,62 @@ const app = {
       `;
     }
 
-    const minTimelineWidth = 540 + (totalCols * colMinWidth);
-
     container.innerHTML = `
-      <div class="min-w-[${Math.max(1150, minTimelineWidth)}px]">
+      <div style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
         <!-- Sticky Two-Tier Header -->
-        <div class="sticky top-0 z-20 shadow-xs select-none">
+        <div class="shadow-xs select-none" style="position: sticky; top: 0; z-index: 40; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
           <!-- Top Tier Header (Months/Years) -->
-          <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-            <div class="sticky left-0 z-30 w-[540px] flex-shrink-0 py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-              <span>Process Activities & Schedule</span>
+          <div class="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
+            style="display: flex; align-items: center; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
+            <div class="gantt-header-sticky-left py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700"
+              style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
+              <span>Process Activities &amp; Schedule</span>
               <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
             </div>
-            <div class="flex-1 flex bg-slate-100 dark:bg-slate-800">${topHeaders.join('')}</div>
+            <div class="flex bg-slate-100 dark:bg-slate-800"
+              style="width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; flex-shrink: 0;">
+              ${topHeaders.join('')}
+            </div>
           </div>
           <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
-          <div class="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850">
-            <div class="sticky left-0 z-30 w-[540px] flex-shrink-0 py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-50 dark:bg-slate-850">
-              <div class="w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
-              <div class="w-[115px] flex-shrink-0 text-center">Start Date</div>
-              <div class="w-[25px] flex-shrink-0 text-center"></div>
-              <div class="w-[110px] flex-shrink-0 text-center">End Date</div>
-              <div class="w-[30px] flex-shrink-0 text-center"></div>
+          <div class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850"
+            style="display: flex; align-items: center; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
+            <div class="gantt-header-sticky-left py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider"
+              style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
+              <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
+              <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 text-center">Start Date</div>
+              <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center"></div>
+              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center">End Date</div>
+              <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 text-center"></div>
             </div>
-            <div class="flex-1 flex bg-slate-50 dark:bg-slate-850">${bottomHeaders.join('')}</div>
+            <div class="flex bg-slate-50 dark:bg-slate-850"
+              style="width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; flex-shrink: 0;">
+              ${bottomHeaders.join('')}
+            </div>
           </div>
         </div>
 
         <!-- Task Rows -->
-        <div id="gantt-tasks-rows" class="divide-y divide-slate-100 dark:divide-slate-700/40">${rowsHtml}</div>
+        <div id="gantt-tasks-rows" class="divide-y divide-slate-100 dark:divide-slate-700/40"
+          style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
+          ${rowsHtml}
+        </div>
         <!-- Milestone Row -->
         ${milestoneRowHtml}
       </div>
     `;
+
+    // Handle scroll: scroll once on initial open or scale change, otherwise preserve user's scroll position
+    if (shouldInitialScroll) {
+      const targetDate = (taskMin && !isNaN(taskMin.getTime())) ? taskMin : now;
+      const offsetMs = Math.max(0, targetDate - timelineMin);
+      const targetPx = (offsetMs / totalSpanMs) * timelineWidthPx;
+      container.scrollLeft = Math.max(0, Math.round(targetPx - 60));
+      container.scrollTop = 0;
+    } else {
+      container.scrollLeft = prevScrollLeft;
+      container.scrollTop = prevScrollTop;
+    }
 
     if (!this.isProgressOnly()) {
       const ganttRowsEl = document.getElementById('gantt-tasks-rows');
