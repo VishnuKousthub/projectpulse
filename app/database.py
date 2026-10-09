@@ -317,6 +317,7 @@ def init_db():
             quality TEXT,
             quantity TEXT,
             due_date TEXT,
+            dispatch_date TEXT,
             status TEXT DEFAULT 'todo', -- 'backlog', 'todo', 'in_progress', 'in_review', 'done'
             created_at TEXT NOT NULL,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
@@ -360,6 +361,16 @@ def init_db():
             cursor.execute("UPDATE deliverables SET status = 'done' WHERE status = 'completed'")
             cursor.execute("UPDATE project_risks SET status = 'todo' WHERE status = 'open'")
             cursor.execute("UPDATE project_risks SET status = 'done' WHERE status IN ('closed', 'mitigated')")
+        except Exception:
+            pass
+
+        # Additive migration: deliverables.dispatch_date TEXT (copy existing due_date into it once)
+        try:
+            cursor.execute("ALTER TABLE deliverables ADD COLUMN dispatch_date TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("UPDATE deliverables SET dispatch_date = due_date WHERE dispatch_date IS NULL AND due_date IS NOT NULL")
         except Exception:
             pass
 

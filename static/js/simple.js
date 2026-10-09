@@ -173,9 +173,9 @@ Object.assign(app, {
           ${canCharter ? `onclick="app.openProjectFromDashboard(${x.project_id}, 'charter')"` : ''}>
         <td class="${UI.td}"><div class="font-semibold text-slate-900 dark:text-white">${esc(x.title)}</div>
           <div class="text-[10px] text-slate-400 truncate max-w-[240px]">${esc(x.project_name)}${x.quantity ? ' · ' + esc(x.quantity) : ''}</div></td>
-        <td class="${UI.td} text-right whitespace-nowrap">${this.fmtDate(x.due_date)}
-          <div class="text-[10px] ${x.days_left !== null && x.days_left < 0 ? 'text-rose-500' : 'text-slate-400'}">${this.daysLabel(x.days_left)}</div></td>
-      </tr>`).join('') : `<tr><td colspan="2" class="py-6 text-center text-xs text-slate-400">No open deliverables.${canCharter ? " Add them on a project's Charter page." : ""}</td></tr>`;
+        <td class="${UI.td} text-right whitespace-nowrap">${this.fmtDate(x.dispatch_date || x.due_date)}
+          <div class="text-[10px] text-slate-400">${this.daysLabel(x.days_left)}</div></td>
+      </tr>`).join('') : `<tr><td colspan="2" class="py-6 text-center text-xs text-slate-400">No upcoming dispatches.${canCharter ? " Add them on a project's Charter page." : ""}</td></tr>`;
 
     const maxOpen = Math.max(1, ...d.workload.map(w => w.open));
     const workload = d.workload.length ? d.workload.map(w => `
@@ -244,7 +244,7 @@ Object.assign(app, {
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
         ${panel('Most overdue tasks', d.overdue_total > d.overdue.length ? `Showing ${d.overdue.length} of ${d.overdue_total}` : `${d.overdue_total} overdue`, `
           <div class="overflow-x-auto"><table class="w-full"><tbody>${overdueRows}</tbody></table></div>`)}
-        ${panel('Deliverables due', 'Open deliverables, soonest first', `
+        ${panel('Upcoming dispatches', 'Soonest first', `
           <div class="overflow-x-auto"><table class="w-full"><tbody>${delivRows}</tbody></table></div>`)}
       </div>
 
@@ -614,85 +614,51 @@ Object.assign(app, {
         </select>`;
     };
 
-    // ---------- deliverables (pipeline board)
-    const totDeliv = c.deliverables.length;
-    const doneDeliv = c.deliverables.filter(d => (d.status === 'done' || d.status === 'completed')).length;
-    const pctDeliv = totDeliv ? Math.round((doneDeliv / totDeliv) * 100) : 0;
-
-    let levelBadge = { label: 'Rookie 🌱', cls: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' };
-    if (pctDeliv === 100 && totDeliv > 0) {
-      levelBadge = { label: 'Champion 🏆', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800' };
-    } else if (pctDeliv >= 40) {
-      levelBadge = { label: 'Pro 🚀', cls: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800' };
-    }
-
-    const progressStrip = `
-      <div class="px-5 py-3.5 bg-slate-50/80 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-700/60">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-bold text-slate-700 dark:text-slate-200">${doneDeliv} of ${totDeliv} delivered</span>
-            <span class="text-xs text-slate-400 font-medium">(${pctDeliv}%)</span>
-          </div>
-          <span class="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full border ${levelBadge.cls}">
-            ${levelBadge.label}
-          </span>
-        </div>
-        <div class="h-2 w-full bg-slate-200/80 dark:bg-slate-700 rounded-full overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 transition-all duration-500 rounded-full" style="width: ${pctDeliv}%"></div>
-        </div>
-      </div>`;
-
-    const getDueCountdown = (dueDateStr) => {
-      if (!dueDateStr) return null;
+    // ---------- deliverables (friendly card look)
+    const renderDispatchChip = (dispatchDateStr) => {
+      if (!dispatchDateStr) return '';
       try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const parts = dueDateStr.slice(0, 10).split('-');
-        if (parts.length < 3) return null;
+        const parts = String(dispatchDateStr).slice(0, 10).split('-');
+        if (parts.length < 3) return `<span class="inline-flex items-center text-[10px] text-slate-400"><i data-lucide="calendar" class="w-2.5 h-2.5 mr-1"></i>${dispatchDateStr.slice(0, 10)}</span>`;
         const target = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
         target.setHours(0, 0, 0, 0);
         const diffDays = Math.round((target - today) / (1000 * 60 * 60 * 24));
-        if (diffDays < 0) {
-          return { text: `${Math.abs(diffDays)}d late`, isLate: true };
+        if (diffDays > 0) {
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60"><i data-lucide="clock" class="w-3 h-3"></i>${diffDays}d to dispatch</span>`;
         } else if (diffDays === 0) {
-          return { text: 'Due today', isLate: true };
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"><i data-lucide="alert-circle" class="w-3 h-3"></i>Dispatch today</span>`;
         } else {
-          return { text: `${diffDays}d left`, isLate: false };
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300 border border-slate-200 dark:border-slate-700"><i data-lucide="check-circle-2" class="w-3 h-3"></i>dispatched ${Math.abs(diffDays)}d ago</span>`;
         }
       } catch (e) {
-        return null;
+        return '';
       }
-    };
-
-    const renderCountdownChip = (dueStr) => {
-      const cd = getDueCountdown(dueStr);
-      if (!cd) {
-        return dueStr ? `<span class="inline-flex items-center text-[10px] text-slate-400"><i data-lucide="calendar" class="w-2.5 h-2.5 mr-1"></i>${dueStr.slice(0, 10)}</span>` : '';
-      }
-      if (cd.isLate) {
-        return `<span class="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60"><i data-lucide="alert-circle" class="w-2.5 h-2.5"></i>${cd.text}</span>`;
-      }
-      return `<span class="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300 border border-slate-200 dark:border-slate-700"><i data-lucide="clock" class="w-2.5 h-2.5"></i>${cd.text}</span>`;
     };
 
     const renderCard = (d) => `
-      <div data-deliverable-id="${d.id}" class="deliverable-card bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200/90 dark:border-slate-700/80 shadow-sm hover:shadow transition-shadow select-none ${canEdit ? 'cursor-grab active:cursor-grabbing' : ''}">
-        <div class="flex items-start justify-between gap-1 mb-1.5">
-          <h4 class="text-xs font-bold text-slate-900 dark:text-white leading-snug">${esc(d.title)}</h4>
-          ${canEdit ? `
-            <div class="flex items-center -mr-1 -mt-1 opacity-70 hover:opacity-100">
-              <button onclick="event.stopPropagation(); app.editCharterRow('deliverable', ${d.id})" class="${UI.iconBtn} !p-1" title="Edit"><i data-lucide="pencil" class="w-3 h-3"></i></button>
-              <button onclick="event.stopPropagation(); app.deleteDeliverable(${d.id})" class="${UI.iconBtn} !p-1 hover:!text-rose-600" title="Delete"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-            </div>` : ''}
+      <div class="bg-white dark:bg-slate-800/90 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-sm hover:shadow transition-shadow flex flex-col justify-between">
+        <div>
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">📦</span>
+              <h4 class="text-xs font-bold text-slate-900 dark:text-white leading-snug">${esc(d.title)}</h4>
+            </div>
+            ${canEdit ? `
+              <div class="flex items-center -mr-1 -mt-1 opacity-70 hover:opacity-100">
+                <button onclick="app.editCharterRow('deliverable', ${d.id})" class="${UI.iconBtn} !p-1" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                <button onclick="app.deleteDeliverable(${d.id})" class="${UI.iconBtn} !p-1 hover:!text-rose-600" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+              </div>` : ''}
+          </div>
+          <div class="text-[11px] text-slate-500 dark:text-slate-400 space-y-1 mb-3">
+            <div><span class="text-slate-400 font-medium">Quantity:</span> <strong class="text-slate-700 dark:text-slate-300">${esc(d.quantity || '—')}</strong></div>
+            <div><span class="text-slate-400 font-medium">Quality:</span> <strong class="text-slate-700 dark:text-slate-300">${esc(d.quality || '—')}</strong></div>
+          </div>
         </div>
-        ${(d.quality || d.quantity) ? `
-          <div class="text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5 mb-2">
-            ${d.quality ? `<div class="truncate"><span class="text-slate-400 font-medium">Quality:</span> ${esc(d.quality)}</div>` : ''}
-            ${d.quantity ? `<div class="truncate"><span class="text-slate-400 font-medium">Qty:</span> ${esc(d.quantity)}</div>` : ''}
-          </div>` : ''}
-        <div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60 mt-1.5">
-          <div>${renderCountdownChip(d.due_date)}</div>
-          <div class="text-[10px] text-slate-400 font-mono">#${d.id}</div>
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
+          <div>${renderDispatchChip(d.dispatch_date || d.due_date)}</div>
+          <div class="text-[10px] text-slate-400 font-mono">${this.fmtDate(d.dispatch_date || d.due_date)}</div>
         </div>
       </div>`;
 
@@ -705,26 +671,22 @@ Object.assign(app, {
           </h4>
           <button onclick="app.cancelCharterRow()" class="${UI.iconBtn}"><i data-lucide="x" class="w-4 h-4"></i></button>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <div>
             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Deliverable *</label>
             ${inp('cd-title', editingDeliv.title, 'text', 'placeholder="e.g. AZADOL Batch"')}
-          </div>
-          <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quality</label>
-            ${inp('cd-quality', editingDeliv.quality, 'text', 'placeholder="e.g. Purity ≥ 99%"')}
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quantity</label>
             ${inp('cd-qty', editingDeliv.quantity, 'text', 'placeholder="e.g. 1 kg"')}
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Due Date</label>
-            ${inp('cd-due', editingDeliv.due_date, 'date')}
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quality</label>
+            ${inp('cd-quality', editingDeliv.quality, 'text', 'placeholder="e.g. Purity ≥ 99%"')}
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Status</label>
-            ${statusSel('cd-status', editingDeliv.status || 'todo', 'app.updateDropdownColor(this)')}
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Dispatch date</label>
+            ${inp('cd-dispatch', editingDeliv.dispatch_date || editingDeliv.due_date, 'date')}
           </div>
         </div>
         <div class="flex items-center justify-end gap-2">
@@ -737,57 +699,25 @@ Object.assign(app, {
 
     const emptyState = `
       <div class="p-10 text-center flex flex-col items-center justify-center">
-        <div class="text-4xl mb-3">🎯</div>
+        <div class="text-4xl mb-3">📦</div>
         <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-1">No deliverables logged yet</h4>
-        <p class="text-xs text-slate-400 max-w-sm mb-4">Track milestones, quantities, and quality acceptance criteria with an interactive pipeline board.</p>
+        <p class="text-xs text-slate-400 max-w-sm mb-4">Track deliverable batches, quantities, quality specifications, and dispatch dates.</p>
         ${canEdit ? `<button onclick="app.editCharterRow('deliverable', 0)" class="${UI.btn} ${UI.btnPrimary}"><i data-lucide="plus" class="w-4 h-4"></i>Add your first deliverable</button>` : ''}
       </div>`;
-
-    const PIPELINE_COLUMNS = [
-      { id: 'backlog', label: 'Backlog', dot: 'bg-slate-400', badge: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
-      { id: 'todo', label: 'To Do', dot: 'bg-blue-500', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300' },
-      { id: 'in_progress', label: 'In Progress', dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300' },
-      { id: 'in_review', label: 'In Review', dot: 'bg-purple-500', badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300' },
-      { id: 'done', label: 'Done', dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300' },
-    ];
-
-    const boardCols = PIPELINE_COLUMNS.map(col => {
-      const items = c.deliverables.filter(d => {
-        const st = (d.status === 'pending' ? 'todo' : (d.status === 'completed' ? 'done' : d.status)) || 'todo';
-        return st === col.id;
-      });
-      return `
-        <div class="flex-1 flex flex-col min-w-[200px] bg-slate-50/60 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-700/50 p-2.5">
-          <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/60 dark:border-slate-700/40">
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full ${col.dot}"></span>
-              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">${col.label}</span>
-            </div>
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${col.badge}">${items.length}</span>
-          </div>
-          <div data-status="${col.id}" class="deliverables-drop-zone flex-1 min-h-[140px] space-y-2">
-            ${items.map(d => renderCard(d)).join('')}
-            ${!items.length ? `<div class="h-24 flex items-center justify-center text-[11px] text-slate-400 italic">No items</div>` : ''}
-          </div>
-        </div>`;
-    }).join('');
 
     const deliverables = `
       <div class="${UI.card} overflow-hidden">
         <div class="px-5 py-3 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60">
           <div>
             <h3 class="text-sm font-bold text-slate-800 dark:text-white">Project deliverables</h3>
-            <div class="text-[11px] text-slate-400">Interactive deliverable pipeline — drag cards to update status</div>
+            <div class="text-[11px] text-slate-400">Batches, specifications, quantities and dispatch dates</div>
           </div>
           ${canEdit ? `<button onclick="app.editCharterRow('deliverable', 0)" class="${UI.btn} ${UI.btnGhost}"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Add deliverable</button>` : ''}
         </div>
-        ${c.deliverables.length ? progressStrip : ''}
         ${formHtml}
         ${!c.deliverables.length && !formHtml ? emptyState : `
-          <div class="p-4 overflow-x-auto">
-            <div class="flex md:grid md:grid-cols-5 gap-3 min-w-[850px] md:min-w-0">
-              ${boardCols}
-            </div>
+          <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            ${c.deliverables.map(d => renderCard(d)).join('')}
           </div>
         `}
       </div>`;
@@ -883,7 +813,6 @@ Object.assign(app, {
 
     root.innerHTML = header + deliverables + milestones + risks;
     this.initLucide();
-    this.initDeliverablesSortable(canEdit);
   },
 
   // -- header edit
@@ -988,19 +917,14 @@ Object.assign(app, {
     const v = (x) => document.getElementById(x)?.value ?? '';
     const body = {
       title: v('cd-title'),
-      quality: v('cd-quality'),
       quantity: v('cd-qty'),
-      due_date: v('cd-due'),
-      status: v('cd-status') || 'todo'
+      quality: v('cd-quality'),
+      dispatch_date: v('cd-dispatch')
     };
     if (!body.title.trim()) { this.showToast('Deliverable name is required', 'error'); return; }
     if (id) await this.api(`/api/deliverables/${id}`, { method: 'PUT', body });
     else await this.api(`/api/projects/${this.state.currentProjectId}/deliverables`, { method: 'POST', body });
     this.state.charterEdit = null;
-    await this.renderCharter();
-  },
-  async setDeliverableStatus(id, status) {
-    await this.api(`/api/deliverables/${id}`, { method: 'PUT', body: { status } });
     await this.renderCharter();
   },
   async deleteDeliverable(id) {
@@ -1058,122 +982,6 @@ Object.assign(app, {
     await this.api(`/api/tasks/${taskId}`, { method: 'PUT', body: { tags: kept } });
     if (task) task.tags = kept;
     await this.renderCharter();
-  },
-
-  initDeliverablesSortable(canEdit) {
-    if (this.state.deliverableSortables) {
-      this.state.deliverableSortables.forEach(s => {
-        try { s.destroy(); } catch (e) {}
-      });
-    }
-    this.state.deliverableSortables = [];
-    if (!canEdit || typeof Sortable === 'undefined') return;
-
-    const zones = document.querySelectorAll('.deliverables-drop-zone');
-    zones.forEach(zone => {
-      try {
-        const sortable = new Sortable(zone, {
-          group: 'deliverables-pipeline',
-          animation: 150,
-          ghostClass: 'opacity-40',
-          chosenClass: 'scale-[1.02]',
-          dragClass: 'rotate-1',
-          draggable: '.deliverable-card',
-          onEnd: async (evt) => {
-            const itemEl = evt.item;
-            const delivId = parseInt(itemEl.getAttribute('data-deliverable-id'), 10);
-            const newStatus = evt.to.getAttribute('data-status');
-            const oldStatus = evt.from.getAttribute('data-status');
-            if (delivId && newStatus && newStatus !== oldStatus) {
-              await this.handleDeliverableMove(delivId, newStatus);
-            }
-          }
-        });
-        this.state.deliverableSortables.push(sortable);
-      } catch (err) {
-        console.warn('[ProjectPulse] Sortable initialization failed:', err);
-      }
-    });
-  },
-
-  async handleDeliverableMove(id, newStatus) {
-    try {
-      await this.api(`/api/deliverables/${id}`, { method: 'PUT', body: { status: newStatus } });
-      if (newStatus === 'done') {
-        const c = await this.api(`/api/projects/${this.state.currentProjectId}/charter`);
-        const allDone = c.deliverables && c.deliverables.length > 0 && c.deliverables.every(d => d.status === 'done');
-        this.fireConfetti(allDone);
-      }
-      await this.renderCharter();
-    } catch (err) {
-      this.showToast(err.message || 'Failed to update deliverable status', 'error');
-      await this.renderCharter();
-    }
-  },
-
-  fireConfetti(isBig = false) {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return;
-    }
-    let canvas = document.getElementById('projectpulse-confetti-canvas');
-    if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.id = 'projectpulse-confetti-canvas';
-      canvas.className = 'fixed inset-0 pointer-events-none z-[9999]';
-      document.body.appendChild(canvas);
-    }
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const count = isBig ? 120 : 45;
-    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#6366F1'];
-    const particles = [];
-    for (let i = 0; i < count; i++) {
-      particles.push({
-        x: canvas.width * (0.3 + Math.random() * 0.4),
-        y: canvas.height * (isBig ? 0.35 : 0.55),
-        vx: (Math.random() - 0.5) * (isBig ? 14 : 8),
-        vy: (Math.random() - 1) * (isBig ? 16 : 10) - 2,
-        size: Math.random() * 6 + 4,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        rotation: Math.random() * 360,
-        rSpeed: (Math.random() - 0.5) * 10,
-        alpha: 1,
-      });
-    }
-
-    let start = null;
-    const duration = isBig ? 2400 : 1400;
-
-    const animate = (timestamp) => {
-      if (!start) start = timestamp;
-      const progress = timestamp - start;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      particles.forEach(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.35;
-        p.rotation += p.rSpeed;
-        p.alpha = Math.max(0, 1 - progress / duration);
-
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate((p.rotation * Math.PI) / 180);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
-        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
-        ctx.restore();
-      });
-
-      if (progress < duration) {
-        requestAnimationFrame(animate);
-      } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    };
-    requestAnimationFrame(animate);
   },
 
   // ---------------------------------------------------------------- users (admin only)

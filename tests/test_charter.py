@@ -64,17 +64,13 @@ class TestCharter(unittest.TestCase):
 
     def test_03_deliverable_crud(self):
         code, d = call(f"/api/projects/{self.pid}/deliverables", "POST",
-                       {"title": "AZADOL 1 kg", "quality": "99%", "quantity": "1 kg", "due_date": "2026-12-10"}, self.pm)
+                       {"title": "AZADOL 1 kg", "quantity": "1 kg", "quality": "99%", "dispatch_date": "2026-12-10"}, self.pm)
         self.assertEqual(code, 201)
-        self.assertEqual(d["status"], "todo")
-        code, d2 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "in_progress"}, self.pm)
-        self.assertEqual((code, d2["status"], d2["quantity"]), (200, "in_progress", "1 kg"))
-        code, d3 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "in_review"}, self.pm)
-        self.assertEqual(d3["status"], "in_review")
-        code, d4 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "done"}, self.pm)
-        self.assertEqual(d4["status"], "done")
-        code, d5 = call(f"/api/deliverables/{d['id']}", "PUT", {"status": "backlog"}, self.pm)
-        self.assertEqual(d5["status"], "backlog")
+        self.assertEqual(d["dispatch_date"], "2026-12-10")
+        self.assertEqual(d["quantity"], "1 kg")
+        self.assertEqual(d["quality"], "99%")
+        code, d2 = call(f"/api/deliverables/{d['id']}", "PUT", {"quantity": "2 kg", "dispatch_date": "2026-12-15"}, self.pm)
+        self.assertEqual((code, d2["quantity"], d2["dispatch_date"]), (200, "2 kg", "2026-12-15"))
         code, _ = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "  "}, self.pm)
         self.assertEqual(code, 400)
         _, c = call(f"/api/projects/{self.pid}/charter")
@@ -127,17 +123,18 @@ class TestCharter(unittest.TestCase):
 
     def test_08_migration_converts_old_statuses(self):
         with get_db() as conn:
-            conn.execute("INSERT INTO deliverables (project_id, title, status, created_at) VALUES (?, 'Old Pending', 'pending', '2026-01-01')", (self.pid,))
+            conn.execute("INSERT INTO deliverables (project_id, title, due_date, status, created_at) VALUES (?, 'Old Due Date', '2026-11-20', 'pending', '2026-01-01')", (self.pid,))
             conn.execute("INSERT INTO deliverables (project_id, title, status, created_at) VALUES (?, 'Old Completed', 'completed', '2026-01-01')", (self.pid,))
             conn.execute("INSERT INTO project_risks (project_id, description, status, created_at) VALUES (?, 'Old Open', 'open', '2026-01-01')", (self.pid,))
             conn.execute("INSERT INTO project_risks (project_id, description, status, created_at) VALUES (?, 'Old Closed', 'closed', '2026-01-01')", (self.pid,))
         init_db()
         with get_db() as conn:
-            d_p = conn.execute("SELECT status FROM deliverables WHERE title = 'Old Pending'").fetchone()["status"]
+            d_p = conn.execute("SELECT status, dispatch_date FROM deliverables WHERE title = 'Old Due Date'").fetchone()
             d_c = conn.execute("SELECT status FROM deliverables WHERE title = 'Old Completed'").fetchone()["status"]
             r_o = conn.execute("SELECT status FROM project_risks WHERE description = 'Old Open'").fetchone()["status"]
             r_c = conn.execute("SELECT status FROM project_risks WHERE description = 'Old Closed'").fetchone()["status"]
-        self.assertEqual(d_p, "todo")
+        self.assertEqual(d_p["status"], "todo")
+        self.assertEqual(d_p["dispatch_date"], "2026-11-20")
         self.assertEqual(d_c, "done")
         self.assertEqual(r_o, "todo")
         self.assertEqual(r_c, "done")
@@ -198,6 +195,29 @@ class TestCharter(unittest.TestCase):
             "delivery_date": "2026-05-01"
         }, self.pm)
         self.assertEqual(code, 400)
+
+    def test_11_upcoming_dispatches_on_dashboard(self):
+        # add deliverable with future dispatch date and past dispatch date
+        future_date = (date.today() + timedelta(days=5)).isoformat()
+        past_date = (date.today() - timedelta(days=5)).isoformat()
+        code, d_fut = call(f"/api/projects/{self.pid}/deliverables", "POST",
+                           {"title": "Future Batch", "quantity": "10 kg", "dispatch_date": future_date}, self.pm)
+        self.assertEqual(code, 201)
+        code, d_past = call(f"/api/projects/{self.pid}/deliverables", "POST",
+                            {"title": "Past Batch", "quantity": "5 kg", "dispatch_date": past_date}, self.pm)
+        self.assertEqual(code, 201)
+
+        code, dash = call("/api/dashboard", "GET", None, self.pm)
+        self.assertEqual(code, 200)
+        upcoming = dash.get("deliverables", [])
+        # upcoming should contain the future deliverable but not the past one
+        fut_ids = [x["id"] for x in upcoming]
+        self.assertIn(d_fut["id"], fut_ids)
+        self.assertNotIn(d_past["id"], fut_ids)
+        # verify quantity and dispatch_date are returned
+        fut_item = next(x for x in upcoming if x["id"] == d_fut["id"])
+        self.assertEqual(fut_item["quantity"], "10 kg")
+        self.assertEqual(fut_item["dispatch_date"], future_date)
 
     @classmethod
     def tearDownClass(cls):

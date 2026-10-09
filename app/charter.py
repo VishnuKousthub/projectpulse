@@ -125,10 +125,17 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 td["type"] = task_type(td.pop("tags", None))
                 milestones.append(td)
 
+            deliv_list = []
+            for r in deliverables:
+                d = dict(r)
+                if not d.get("dispatch_date"):
+                    d["dispatch_date"] = d.get("due_date")
+                deliv_list.append(d)
+
             return json_response({
                 "project": {k: p[k] for k in ("id", "name", "description", "color") if k in p.keys()} |
                            {f: (p[f] if f in p.keys() else None) for f in CHARTER_FIELDS},
-                "deliverables": [dict(r) for r in deliverables],
+                "deliverables": deliv_list,
                 "risks": [dict(r) for r in risks],
                 "milestones": milestones,
                 "members": [r["name"] for r in members],
@@ -172,9 +179,15 @@ def register(app, *, get_db, json_response, request, get_current_user,
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
             rows = conn.execute(
-                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
+                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(dispatch_date, due_date, '9999'), id",
                 (project_id,)).fetchall()
-            return json_response([dict(r) for r in rows])
+            result = []
+            for r in rows:
+                d = dict(r)
+                if not d.get("dispatch_date"):
+                    d["dispatch_date"] = d.get("due_date")
+                result.append(d)
+            return json_response(result)
 
     @app.post("/api/projects/<project_id:int>/deliverables")
     def add_deliverable(project_id):
@@ -185,21 +198,23 @@ def register(app, *, get_db, json_response, request, get_current_user,
         title = clean_text(data.get("title"))
         if not title:
             return json_response({"error": "Deliverable name is required"}, status=400)
-        status = data.get("status") if data.get("status") in DELIVERABLE_STATUSES else "todo"
+        disp_date = clean_text(data.get("dispatch_date")) or clean_text(data.get("due_date")) or None
         with get_db() as conn:
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
-            cols = ["project_id", "title", "quality", "quantity", "due_date", "status", "created_at"]
-            vals = [project_id, title, clean_text(data.get("quality")), clean_text(data.get("quantity")),
-                    clean_text(data.get("due_date")) or None, status, get_now_iso()]
+            cols = ["project_id", "title", "quantity", "quality", "dispatch_date", "due_date", "created_at"]
+            vals = [project_id, title, clean_text(data.get("quantity")), clean_text(data.get("quality")),
+                    disp_date, disp_date, get_now_iso()]
             if "updated_at" in table_columns(conn, "deliverables"):   # present in some older builds
                 cols.append("updated_at")
                 vals.append(get_now_iso())
             cur = conn.execute(
                 f"INSERT INTO deliverables ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
             record_activity(conn, project_id, "User", "Deliverable Added", f'Added deliverable "{title}"')
-            row = conn.execute("SELECT * FROM deliverables WHERE id = ?", (cur.lastrowid,)).fetchone()
-            return json_response(dict(row), status=201)
+            row = dict(conn.execute("SELECT * FROM deliverables WHERE id = ?", (cur.lastrowid,)).fetchone())
+            if not row.get("dispatch_date"):
+                row["dispatch_date"] = row.get("due_date")
+            return json_response(row, status=201)
 
     @app.put("/api/deliverables/<deliverable_id:int>")
     def update_deliverable(deliverable_id):
@@ -214,19 +229,23 @@ def register(app, *, get_db, json_response, request, get_current_user,
             title = clean_text(data["title"]) if "title" in data else row["title"]
             if not title:
                 return json_response({"error": "Deliverable name is required"}, status=400)
-            status = data.get("status", row["status"])
-            if status not in DELIVERABLE_STATUSES:
-                status = row["status"]
+            disp_date = row["dispatch_date"] if "dispatch_date" in row.keys() else row["due_date"]
+            if "dispatch_date" in data:
+                disp_date = clean_text(data["dispatch_date"]) or None
+            elif "due_date" in data:
+                disp_date = clean_text(data["due_date"]) or None
             conn.execute("""
-                UPDATE deliverables SET title = ?, quality = ?, quantity = ?, due_date = ?, status = ?
+                UPDATE deliverables SET title = ?, quantity = ?, quality = ?, dispatch_date = ?, due_date = ?
                 WHERE id = ?
             """, (title,
-                  clean_text(data["quality"]) if "quality" in data else row["quality"],
                   clean_text(data["quantity"]) if "quantity" in data else row["quantity"],
-                  (clean_text(data["due_date"]) or None) if "due_date" in data else row["due_date"],
-                  status, deliverable_id))
-            return json_response(dict(conn.execute(
-                "SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()))
+                  clean_text(data["quality"]) if "quality" in data else row["quality"],
+                  disp_date, disp_date, deliverable_id))
+            updated_row = dict(conn.execute(
+                "SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone())
+            if not updated_row.get("dispatch_date"):
+                updated_row["dispatch_date"] = updated_row.get("due_date")
+            return json_response(updated_row)
 
     @app.delete("/api/deliverables/<deliverable_id:int>")
     def delete_deliverable(deliverable_id):
@@ -424,14 +443,17 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
         upcoming = []
         for d in deliverables:
-            dd = _d(d["due_date"])
-            upcoming.append({
-                "id": d["id"], "project_id": d["project_id"], "project_name": d["project_name"],
-                "title": d["title"], "quantity": d["quantity"], "quality": d["quality"],
-                "due_date": str(d["due_date"])[:10] if d["due_date"] else None,
-                "days_left": (dd - today).days if dd else None, "status": d["status"],
-            })
-        upcoming.sort(key=lambda x: (x["due_date"] is None, x["due_date"] or ""))
+            disp = d["dispatch_date"] if ("dispatch_date" in d.keys() and d["dispatch_date"]) else d.get("due_date")
+            dd = _d(disp)
+            if dd is not None and dd >= today:
+                upcoming.append({
+                    "id": d["id"], "project_id": d["project_id"], "project_name": d["project_name"],
+                    "title": d["title"], "quantity": d["quantity"], "quality": d["quality"],
+                    "dispatch_date": str(disp)[:10],
+                    "due_date": str(disp)[:10],
+                    "days_left": (dd - today).days,
+                })
+        upcoming.sort(key=lambda x: (x["dispatch_date"] is None, x["dispatch_date"] or ""))
 
         high_risks = [{
             "id": r["id"], "project_id": r["project_id"], "project_name": r["project_name"],
