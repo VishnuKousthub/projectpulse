@@ -328,6 +328,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS project_risks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL,
+            task_id INTEGER,
             risk_code TEXT,
             description TEXT NOT NULL,
             impact TEXT DEFAULT 'medium', -- 'low', 'medium', 'high'
@@ -343,6 +344,7 @@ def init_db():
         for table, col, ddl in (
             ("deliverables", "quality", "TEXT"),
             ("deliverables", "quantity", "TEXT"),
+            ("project_risks", "task_id", "INTEGER"),
             ("project_risks", "risk_code", "TEXT"),
             ("project_risks", "mitigation", "TEXT"),
             ("project_risks", "owner", "TEXT"),
@@ -386,6 +388,7 @@ def init_db():
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deliverables_proj ON deliverables(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_risks_proj ON project_risks(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_risks_task ON project_risks(task_id)")
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS subtasks (

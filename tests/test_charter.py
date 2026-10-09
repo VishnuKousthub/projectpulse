@@ -110,7 +110,9 @@ class TestCharter(unittest.TestCase):
         self.assertEqual(next(t for t in c["milestones"] if t["id"] == tid)["type"], "nontechnical")
 
     def test_07_dashboard_shape_and_counts(self):
-        call(f"/api/projects/{self.pid}/risks", "POST", {"description": "Equipment down", "impact": "high"}, self.pm)
+        _, tasks = call(f"/api/projects/{self.pid}/tasks")
+        tid = tasks[0]["id"]
+        call(f"/api/tasks/{tid}/risks", "POST", {"description": "Equipment down", "impact": "high"}, self.pm)
         code, d = call("/api/dashboard")
         self.assertEqual(code, 200)
         for key in ("kpis", "projects", "overdue", "deliverables", "high_risks", "workload"):
@@ -120,6 +122,7 @@ class TestCharter(unittest.TestCase):
         self.assertIsNotNone(row["days_left"])
         self.assertGreaterEqual(d["kpis"]["open_high_risks"], 1)
         self.assertEqual(d["kpis"]["projects"], len(d["projects"]))
+        self.assertTrue(any(r.get("task_id") == tid for r in d.get("high_risks", [])))
 
     def test_08_migration_converts_old_statuses(self):
         with get_db() as conn:
@@ -218,6 +221,58 @@ class TestCharter(unittest.TestCase):
         fut_item = next(x for x in upcoming if x["id"] == d_fut["id"])
         self.assertEqual(fut_item["quantity"], "10 kg")
         self.assertEqual(fut_item["dispatch_date"], future_date)
+
+    def test_12_task_risks(self):
+        _, tasks = call(f"/api/projects/{self.pid}/tasks")
+        tid = tasks[0]["id"]
+
+        # PM creates task risk
+        code, r1 = call(f"/api/tasks/{tid}/risks", "POST", {
+            "description": "High temperature reaction", "impact": "high", "mitigation": "Cooling jacket",
+            "owner": "Alice", "status": "todo"
+        }, self.pm)
+        self.assertEqual(code, 201)
+        self.assertEqual(r1["task_id"], tid)
+        self.assertEqual(r1["impact"], "high")
+
+        # Assignee creates task risk
+        code, r2 = call(f"/api/tasks/{tid}/risks", "POST", {
+            "description": "Low reagent purity", "impact": "medium", "status": "in_progress"
+        }, self.assignee)
+        self.assertEqual(code, 201)
+        self.assertEqual(r2["task_id"], tid)
+
+        # GET /api/tasks/<id>/risks
+        code, t_risks = call(f"/api/tasks/{tid}/risks", "GET", None, self.assignee)
+        self.assertEqual(code, 200)
+        self.assertGreaterEqual(len(t_risks), 2)
+
+        # GET /api/projects/<pid>/tasks includes risk_count and has_high_risk
+        _, p_tasks = call(f"/api/projects/{self.pid}/tasks")
+        task_row = next(t for t in p_tasks if t["id"] == tid)
+        self.assertGreaterEqual(task_row["risk_count"], 2)
+        self.assertTrue(task_row["has_high_risk"])
+
+        # Assignee can update risk
+        code, upd = call(f"/api/risks/{r1['id']}", "PUT", {"status": "done"}, self.assignee)
+        self.assertEqual(code, 200)
+        self.assertEqual(upd["status"], "done")
+
+        # Assignee CANNOT delete risk (403)
+        code, _ = call(f"/api/risks/{r1['id']}", "DELETE", None, self.assignee)
+        self.assertEqual(code, 403)
+
+        # PM CAN delete risk (200)
+        code, _ = call(f"/api/risks/{r1['id']}", "DELETE", None, self.pm)
+        self.assertEqual(code, 200)
+
+        # Delete task cascades to its risks
+        with get_db() as conn:
+            conn.execute("INSERT INTO project_risks (project_id, task_id, description, created_at) VALUES (?, ?, 'Cascade Risk', '2026-01-01')", (self.pid, tid))
+        call(f"/api/tasks/{tid}", "DELETE", None, self.pm)
+        with get_db() as conn:
+            remaining = conn.execute("SELECT COUNT(*) AS c FROM project_risks WHERE task_id = ?", (tid,)).fetchone()["c"]
+        self.assertEqual(remaining, 0)
 
     @classmethod
     def tearDownClass(cls):

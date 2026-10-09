@@ -1227,6 +1227,16 @@ def get_tasks(project_id):
         for r in resources_raw:
             resources_by_task.setdefault(r["task_id"], []).append(dict(r))
 
+        # Batch fetch all task risks in 1 single query
+        risks_raw = conn.execute("""
+            SELECT id, project_id, task_id, risk_code, description, impact, mitigation, owner, status
+            FROM project_risks
+            WHERE project_id = ? AND task_id IS NOT NULL
+        """, (project_id,)).fetchall()
+        risks_by_task = {}
+        for r in risks_raw:
+            risks_by_task.setdefault(r["task_id"], []).append(dict(r))
+
         result = []
         for t in tasks:
             t_dict = dict(t)
@@ -1241,6 +1251,10 @@ def get_tasks(project_id):
             t_dict["subtask_completed_count"] = sum(1 for s in t_subtasks if s.get("completed"))
             t_dict["logged_hours_sum"] = safe_float(logged_hours_by_task.get(t["id"], 0.0))
             t_dict["resources"] = resources_by_task.get(t["id"], [])
+            t_risks = risks_by_task.get(t["id"], [])
+            t_dict["risks"] = t_risks
+            t_dict["risk_count"] = len(t_risks)
+            t_dict["has_high_risk"] = any(r.get("impact") in ("high", "critical") and r.get("status") != "done" for r in t_risks)
 
             if t_dict.get("progress_pct") is None:
                 if t_dict.get("status") == "done":
@@ -1489,6 +1503,10 @@ def get_task_dict(conn, task_id: int):
     t_dict["logged_hours_sum"] = sum(safe_float(tl.get("hours"), 0.0) for tl in timelogs_list)
     t_dict["resources"] = task_resources_list
     t_dict["activities"] = [dict(a) for a in conn.execute("SELECT * FROM activity_logs WHERE task_id = ? ORDER BY timestamp DESC LIMIT 20", (task_id,)).fetchall()]
+    task_risks_list = [dict(r) for r in conn.execute("SELECT * FROM project_risks WHERE task_id = ? ORDER BY id ASC", (task_id,)).fetchall()]
+    t_dict["risks"] = task_risks_list
+    t_dict["risk_count"] = len(task_risks_list)
+    t_dict["has_high_risk"] = any(r.get("impact") in ("high", "critical") and r.get("status") != "done" for r in task_risks_list)
 
     if t_dict.get("progress_pct") is None:
         if t_dict.get("status") == "done":
@@ -1895,6 +1913,7 @@ def delete_task(task_id):
             return json_response({"error": "Task not found"}, status=404)
         project_id = task["project_id"]
         record_activity(conn, project_id, "User", "Task Deleted", f'Deleted task "{task["title"]}"')
+        conn.execute("DELETE FROM project_risks WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         normalize_project_task_order(conn, project_id)
         return json_response({"success": True})

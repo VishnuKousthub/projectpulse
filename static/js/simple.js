@@ -189,10 +189,10 @@ Object.assign(app, {
       </div>`).join('') : '<div class="py-4 text-xs text-slate-400 text-center">No open tasks.</div>';
 
     const risks = d.high_risks.length ? d.high_risks.map(r => `
-      <div class="py-2 border-t first:border-t-0 border-slate-100 dark:border-slate-700/60 ${canCharter ? 'cursor-pointer hover:opacity-80' : ''}"
-           ${canCharter ? `onclick="app.openProjectFromDashboard(${r.project_id}, 'charter')"` : ''}>
+      <div class="py-2 border-t first:border-t-0 border-slate-100 dark:border-slate-700/60 cursor-pointer hover:opacity-80"
+           onclick="app.openProjectFromDashboard(${r.project_id}, 'table')">
         <div class="text-xs font-semibold text-slate-900 dark:text-white"><span class="font-mono text-rose-600">${esc(r.risk_code || '')}</span> ${esc(r.description)}</div>
-        <div class="text-[10px] text-slate-400 truncate">${esc(r.project_name)}${r.owner ? ' · ' + esc(r.owner) : ''}</div>
+        <div class="text-[10px] text-slate-400 truncate">${r.task_title ? `${esc(r.task_title)} · ` : ''}${esc(r.project_name)}${r.owner ? ' · ' + esc(r.owner) : ''}</div>
       </div>`).join('') : '<div class="py-4 text-xs text-slate-400 text-center">No open high-impact risks.</div>';
 
     const panel = (title, sub, body) => `
@@ -231,7 +231,7 @@ Object.assign(app, {
         ${tile('Overdue tasks', k.overdue_tasks, 'past their due date', k.overdue_tasks ? 'text-rose-600' : '')}
         ${tile('Due this week', k.due_this_week, 'next 7 days', k.due_this_week ? 'text-amber-600' : '')}
         ${tile('Overall progress', k.completion_pct + '%', 'tasks marked done')}
-        ${tile('High risks open', k.open_high_risks, 'from project charters', k.open_high_risks ? 'text-rose-600' : '')}
+        ${tile('High risks open', k.open_high_risks, 'from activities', k.open_high_risks ? 'text-rose-600' : '')}
       </div>
 
       ${panel('Projects', 'Click a project to open its task table', `
@@ -762,56 +762,7 @@ Object.assign(app, {
           <summary class="px-5 py-3 cursor-pointer text-sm font-bold text-slate-800 dark:text-white">Activities not classified yet <span class="text-slate-400 font-medium">· ${untyped.length}</span></summary>
           ${msTable('Not classified', untyped, '', true)}
         </details>` : ''}`;
-
-    // ---------- risks
-    const impactBadge = (v) => {
-      const cls = v === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200' : v === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200';
-      return `<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold capitalize ${cls}">${esc(v)}</span>`;
-    };
-    const riskForm = (r) => `
-      <tr class="border-t border-slate-100 dark:border-slate-700/60 bg-blue-50/40 dark:bg-slate-700/20">
-        <td class="${UI.td}">${inp('cr-code', r.risk_code, 'text', 'placeholder="auto"')}</td>
-        <td class="${UI.td}">${inp('cr-desc', r.description, 'text', 'placeholder="Risk description"')}</td>
-        <td class="${UI.td}"><select id="cr-impact" class="${UI.input}">${['high', 'medium', 'low'].map(v => `<option value="${v}" ${(r.impact || 'medium') === v ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></td>
-        <td class="${UI.td}">${inp('cr-mit', r.mitigation, 'text', 'placeholder="Mitigation plan"')}</td>
-        <td class="${UI.td}">${inp('cr-owner', r.owner, 'text', 'placeholder="Owner"')}</td>
-        <td class="${UI.td}">${statusSel('cr-status', r.status || 'todo', 'app.updateDropdownColor(this)')}</td>
-        <td class="${UI.td} whitespace-nowrap text-right">
-          <button onclick="app.saveRisk(${r.id || 0})" class="${UI.btn} ${UI.btnPrimary}">Save</button>
-          <button onclick="app.cancelCharterRow()" class="${UI.btn} ${UI.btnGhost}">Cancel</button>
-        </td>
-      </tr>`;
-    const riskRows = c.risks.map(r =>
-      (edit.kind === 'risk' && edit.id === r.id) ? riskForm(r) : `
-      <tr class="border-t border-slate-100 dark:border-slate-700/60 ${r.status === 'done' ? 'opacity-50' : ''}">
-        <td class="${UI.td} font-mono font-bold">${esc(r.risk_code)}</td>
-        <td class="${UI.td}">${esc(r.description)}</td>
-        <td class="${UI.td}">${impactBadge(r.impact)}</td>
-        <td class="${UI.td}">${esc(r.mitigation) || '<span class="text-slate-400">—</span>'}</td>
-        <td class="${UI.td}">${esc(r.owner) || '<span class="text-slate-400">—</span>'}</td>
-        <td class="${UI.td}">${statusSel('', r.status, `app.setRiskStatus(${r.id}, this.value)`)}</td>
-        <td class="${UI.td} text-right whitespace-nowrap">${canEdit ? `
-          <button onclick="app.editCharterRow('risk', ${r.id})" class="${UI.iconBtn}" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
-          <button onclick="app.deleteRisk(${r.id})" class="${UI.iconBtn} hover:!text-rose-600" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}</td>
-      </tr>`).join('');
-    const riskNew = (edit.kind === 'risk' && edit.id === 0) ? riskForm({}) : '';
-    const riskEmpty = (!c.risks.length && !riskNew) ? `<tr><td colspan="7" class="py-6 text-center text-xs text-slate-400">No risks logged.</td></tr>` : '';
-
-    const risks = `
-      <div class="${UI.card} overflow-hidden">
-        <div class="px-5 py-3 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60">
-          <div><h3 class="text-sm font-bold text-slate-800 dark:text-white">Project risks</h3>
-            <div class="text-[11px] text-slate-400">Open high-impact risks show on the Dashboard</div></div>
-          ${canEdit ? `<button onclick="app.editCharterRow('risk', 0)" class="${UI.btn} ${UI.btnGhost}"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Add risk</button>` : ''}
-        </div>
-        <div class="overflow-x-auto"><table class="w-full">
-          <thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
-            <th class="${UI.th}">Risk ID</th><th class="${UI.th}">Risk description</th><th class="${UI.th}">Impact</th>
-            <th class="${UI.th}">Mitigation plan</th><th class="${UI.th}">Owner</th><th class="${UI.th}">Status</th><th class="${UI.th}"></th></tr></thead>
-          <tbody>${riskRows}${riskNew}${riskEmpty}</tbody></table></div>
-      </div>`;
-
-    root.innerHTML = header + deliverables + milestones + risks;
+    root.innerHTML = header + deliverables + milestones;
     this.initLucide();
   },
 

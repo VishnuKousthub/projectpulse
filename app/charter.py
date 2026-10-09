@@ -257,6 +257,49 @@ def register(app, *, get_db, json_response, request, get_current_user,
             return json_response({"success": True})
 
     # --------------------------------------------------------------------- risks
+    @app.get("/api/tasks/<task_id:int>/risks")
+    def get_task_risks(task_id):
+        user = get_current_user()
+        if not user:
+            return json_response({"error": "Unauthorized"}, status=401)
+        with get_db() as conn:
+            task = conn.execute("SELECT id, project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            if not task:
+                return json_response({"error": "Task not found"}, status=404)
+            rows = conn.execute("SELECT * FROM project_risks WHERE task_id = ? ORDER BY id", (task_id,)).fetchall()
+            return json_response([dict(r) for r in rows])
+
+    @app.post("/api/tasks/<task_id:int>/risks")
+    def add_task_risk(task_id):
+        user = get_current_user()
+        if not user:
+            return json_response({"error": "Unauthorized"}, status=401)
+        data = request.json or {}
+        desc = clean_text(data.get("description"))
+        if not desc:
+            return json_response({"error": "Risk description is required"}, status=400)
+        impact = str(data.get("impact", "medium")).lower()
+        impact = impact if impact in IMPACTS else "medium"
+        with get_db() as conn:
+            task = conn.execute("SELECT id, project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            if not task:
+                return json_response({"error": "Task not found"}, status=404)
+            project_id = task["project_id"]
+            code = clean_text(data.get("risk_code"))
+            if not code:
+                n = conn.execute("SELECT COUNT(*) AS c FROM project_risks WHERE project_id = ?",
+                                 (project_id,)).fetchone()["c"]
+                code = f"R{n + 1}"
+            status = data.get("status") if data.get("status") in RISK_STATUSES else "todo"
+            cur = conn.execute("""
+                INSERT INTO project_risks (project_id, task_id, risk_code, description, impact, mitigation, owner, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (project_id, task_id, code, desc, impact, clean_text(data.get("mitigation")),
+                  clean_text(data.get("owner")), status, get_now_iso()))
+            record_activity(conn, project_id, user.get("username", "User"), "Risk Added", f'Added risk {code} for activity #{task_id}')
+            return json_response(dict(conn.execute(
+                "SELECT * FROM project_risks WHERE id = ?", (cur.lastrowid,)).fetchone()), status=201)
+
     @app.get("/api/projects/<project_id:int>/risks")
     def get_risks(project_id):
         denied = deny_if_not_pm()
@@ -299,9 +342,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
     @app.put("/api/risks/<risk_id:int>")
     def update_risk(risk_id):
-        denied = deny_if_not_pm()
-        if denied:
-            return denied
+        user = get_current_user()
+        if not user:
+            return json_response({"error": "Unauthorized"}, status=401)
         data = request.json or {}
         with get_db() as conn:
             row = conn.execute("SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
@@ -346,9 +389,10 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 FROM tasks t LEFT JOIN members m ON t.assignee_id = m.id
             """).fetchall()
             risks = conn.execute("""
-                SELECT r.*, p.name AS project_name FROM project_risks r
+                SELECT r.*, p.name AS project_name, t.title AS task_title FROM project_risks r
                 JOIN projects p ON p.id = r.project_id
-                WHERE r.status != 'done'
+                JOIN tasks t ON t.id = r.task_id
+                WHERE r.task_id IS NOT NULL AND r.status != 'done'
             """).fetchall()
             deliverables = conn.execute("""
                 SELECT d.*, p.name AS project_name FROM deliverables d
@@ -457,6 +501,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
         high_risks = [{
             "id": r["id"], "project_id": r["project_id"], "project_name": r["project_name"],
+            "task_id": r["task_id"], "task_title": r["task_title"],
             "risk_code": r["risk_code"], "description": r["description"],
             "mitigation": r["mitigation"], "owner": r["owner"],
         } for r in risks if r["impact"] in ("high", "critical")]

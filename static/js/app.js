@@ -1578,7 +1578,7 @@ const app = {
               <div class="gantt-bar absolute z-10 h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
                 style="left: ${leftPct}%; width: ${Math.max(widthPct, 2.5)}%; min-width: 90px;"
                 onclick="app.openTaskModal({id: ${t.id}})"
-                title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h&#10;Click to open task details">
+                title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h${t.risk_count ? `&#10;Risks: ${t.risk_count}${t.has_high_risk ? ' (High open)' : ''}` : ''}&#10;Click to open task details">
                 
                 <!-- Progress Fill Overlay -->
                 <div class="absolute inset-0 bg-white/20 rounded-md pointer-events-none" style="width: ${progressWidth}%"></div>
@@ -1872,6 +1872,11 @@ const app = {
                     ${this.escapeHtml(t.title)}
                   </span>
                   ${tagsHtml}
+                  ${t.risk_count ? `
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold border ${t.has_high_risk ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}" title="${t.risk_count} risk(s)${t.has_high_risk ? ' (High risk open)' : ''}">
+                      <i data-lucide="shield-alert" class="w-2.5 h-2.5 ${t.has_high_risk ? 'text-rose-500' : 'text-slate-400'}"></i>
+                      <span>${t.risk_count}</span>
+                    </span>` : ''}
                 </div>
               </div>
             </div>
@@ -3644,6 +3649,7 @@ const app = {
         tagsInput.value = (localTask.tags || []).join(', ');
         this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
         this.renderTaskModalResourceChips(localTask.resources || []);
+        this.renderTaskRisks(localTask.risks || [], localTask.id);
       }
 
       this.updateTaskAssigneeDeleteBtnVisibility();
@@ -3689,6 +3695,7 @@ const app = {
           tagsInput.value = (task.tags || []).join(', ');
           this.renderSubtaskList(task.subtasks || []);
           this.renderTaskModalResourceChips(task.resources || []);
+          await this.loadTaskRisks(task.id);
           this.updateTaskAssigneeDeleteBtnVisibility();
           this.updateTaskModalDateBadges();
         }
@@ -3710,6 +3717,7 @@ const app = {
       
       if (progressNum) progressNum.value = 0;
       if (progressSlider) progressSlider.value = 0;
+      this.renderTaskRisks([], 0);
 
       if (params.assignee_name) {
         if (manualAssigneeInput) manualAssigneeInput.value = params.assignee_name;
@@ -4156,6 +4164,202 @@ const app = {
       this.fetchTasks();
     } catch (e) {
       console.error(e);
+    }
+  },
+
+  async loadTaskRisks(taskId) {
+    if (!taskId) {
+      this.state.currentTaskRisks = [];
+      this.renderTaskRisks([], 0);
+      return;
+    }
+    try {
+      const risks = await this.api(`/api/tasks/${taskId}/risks`);
+      this.state.currentTaskRisks = risks || [];
+      this.renderTaskRisks(this.state.currentTaskRisks, taskId);
+    } catch (e) {
+      console.error('Failed to load task risks:', e);
+      this.renderTaskRisks(this.state.currentTaskRisks || [], taskId);
+    }
+  },
+
+  renderTaskRisks(risks = [], taskId = 0) {
+    const container = document.getElementById('task-risks-container');
+    const countSpan = document.getElementById('task-risks-count');
+    const addBtn = document.getElementById('task-add-risk-btn');
+    if (!container) return;
+    if (countSpan) countSpan.textContent = `(${risks.length})`;
+    if (!taskId) {
+      container.innerHTML = '<div class="text-center text-slate-400 text-xs py-2">Save the activity first to attach risks.</div>';
+      if (addBtn) addBtn.classList.add('hidden');
+      return;
+    }
+    if (addBtn) addBtn.classList.remove('hidden');
+    if (!risks.length) {
+      container.innerHTML = '<div class="text-center text-slate-400 text-xs py-2">No risks logged for this activity.</div>';
+      this.initLucide();
+      return;
+    }
+    const isPmOrAdmin = this.isFullAccess();
+    container.innerHTML = risks.map(r => {
+      const impactClass = r.impact === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60' : (r.impact === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700');
+      const isDone = r.status === 'done';
+      return `
+        <div id="task-risk-row-${r.id}" class="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60 text-xs space-y-1.5 ${isDone ? 'opacity-60' : ''}">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="font-mono font-bold text-slate-700 dark:text-slate-300 text-[11px]">${this.escapeHtml(r.risk_code || 'R')}</span>
+              <span class="font-semibold text-slate-900 dark:text-white truncate">${this.escapeHtml(r.description)}</span>
+            </div>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${impactClass}">${this.escapeHtml(r.impact || 'medium')}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize">${this.escapeHtml((r.status || 'todo').replace('_', ' '))}</span>
+              <button type="button" onclick="app.editTaskRiskForm(${r.id})" class="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition" title="Edit risk">
+                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+              </button>
+              ${isPmOrAdmin ? `
+              <button type="button" onclick="app.deleteTaskRisk(${r.id})" class="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition" title="Delete risk">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>` : ''}
+            </div>
+          </div>
+          ${r.mitigation ? `<div class="text-[11px] text-slate-500 dark:text-slate-400"><span class="font-semibold">Mitigation:</span> ${this.escapeHtml(r.mitigation)}</div>` : ''}
+          ${r.owner ? `<div class="text-[10px] text-slate-400"><span class="font-semibold">Owner:</span> ${this.escapeHtml(r.owner)}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+    this.initLucide();
+  },
+
+  showAddTaskRiskForm() {
+    const taskId = document.getElementById('task-input-id')?.value;
+    if (!taskId) return;
+    this.showTaskRiskForm(null, Number(taskId));
+  },
+
+  editTaskRiskForm(riskId) {
+    const risk = (this.state.currentTaskRisks || []).find(r => r.id === riskId);
+    if (!risk) return;
+    const taskId = document.getElementById('task-input-id')?.value;
+    this.showTaskRiskForm(risk, Number(taskId));
+  },
+
+  showTaskRiskForm(risk, taskId) {
+    const container = document.getElementById('task-risks-container');
+    if (!container) return;
+    const isEdit = !!risk;
+    const formId = isEdit ? `task-risk-row-${risk.id}` : 'task-risk-new-form';
+
+    const formHtml = `
+      <div id="${formId}" class="p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20 text-xs space-y-2">
+        <div class="font-bold text-slate-800 dark:text-white flex items-center justify-between">
+          <span>${isEdit ? `Edit Risk ${this.escapeHtml(risk.risk_code || '')}` : 'Add New Risk'}</span>
+          ${isEdit ? `<span class="text-[10px] font-mono text-slate-400">ID #${risk.id}</span>` : ''}
+        </div>
+        <div class="space-y-1.5">
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-0.5">Description <span class="text-rose-500">*</span></label>
+            <input type="text" id="trisk-input-desc" value="${isEdit ? this.escapeHtml(risk.description || '') : ''}" placeholder="Risk description" class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-0.5">Impact</label>
+              <select id="trisk-input-impact" class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="high" ${isEdit && risk.impact === 'high' ? 'selected' : ''}>High</option>
+                <option value="medium" ${!isEdit || risk.impact === 'medium' ? 'selected' : ''}>Medium</option>
+                <option value="low" ${isEdit && risk.impact === 'low' ? 'selected' : ''}>Low</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-0.5">Status</label>
+              <select id="trisk-input-status" class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="todo" ${!isEdit || risk.status === 'todo' ? 'selected' : ''}>To Do</option>
+                <option value="in_progress" ${isEdit && risk.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+                <option value="in_review" ${isEdit && risk.status === 'in_review' ? 'selected' : ''}>In Review</option>
+                <option value="done" ${isEdit && risk.status === 'done' ? 'selected' : ''}>Done</option>
+                <option value="backlog" ${isEdit && risk.status === 'backlog' ? 'selected' : ''}>Backlog</option>
+              </select>
+            </div>
+            <div class="col-span-2 sm:col-span-1">
+              <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-0.5">Owner</label>
+              <input type="text" id="trisk-input-owner" value="${isEdit ? this.escapeHtml(risk.owner || '') : ''}" placeholder="Owner name" class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-0.5">Mitigation Plan</label>
+            <input type="text" id="trisk-input-mitigation" value="${isEdit ? this.escapeHtml(risk.mitigation || '') : ''}" placeholder="Mitigation plan" class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button type="button" onclick="app.renderTaskRisks(app.state.currentTaskRisks || [], ${taskId})" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">Cancel</button>
+          <button type="button" onclick="app.saveTaskRisk(${isEdit ? risk.id : 'null'}, ${taskId})" class="px-3 py-1 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm">${isEdit ? 'Update Risk' : 'Add Risk'}</button>
+        </div>
+      </div>
+    `;
+
+    if (isEdit) {
+      const existingEl = document.getElementById(formId);
+      if (existingEl) existingEl.outerHTML = formHtml;
+    } else {
+      const existingNew = document.getElementById('task-risk-new-form');
+      if (existingNew) existingNew.remove();
+      container.insertAdjacentHTML('afterbegin', formHtml);
+    }
+  },
+
+  async saveTaskRisk(riskId, taskId) {
+    const desc = document.getElementById('trisk-input-desc')?.value.trim();
+    if (!desc) {
+      this.showToast('Risk description is required', 'error');
+      return;
+    }
+    const impact = document.getElementById('trisk-input-impact')?.value || 'medium';
+    const status = document.getElementById('trisk-input-status')?.value || 'todo';
+    const owner = document.getElementById('trisk-input-owner')?.value.trim() || '';
+    const mitigation = document.getElementById('trisk-input-mitigation')?.value.trim() || '';
+
+    const payload = { description: desc, impact, status, owner, mitigation };
+    try {
+      if (riskId) {
+        await this.api(`/api/risks/${riskId}`, { method: 'PUT', body: payload });
+        this.showToast('Risk updated', 'success');
+      } else {
+        await this.api(`/api/tasks/${taskId}/risks`, { method: 'POST', body: payload });
+        this.showToast('Risk added to activity', 'success');
+      }
+      await this.loadTaskRisks(taskId);
+      const localTask = this.state.tasks.find(t => t.id === Number(taskId));
+      if (localTask) {
+        localTask.risks = this.state.currentTaskRisks;
+        localTask.risk_count = this.state.currentTaskRisks.length;
+        localTask.has_high_risk = this.state.currentTaskRisks.some(r => (r.impact === 'high' || r.impact === 'critical') && r.status !== 'done');
+      }
+      this.renderTable();
+      this.renderGantt();
+    } catch (e) {
+      this.showToast(e.message || 'Failed to save risk', 'error');
+    }
+  },
+
+  async deleteTaskRisk(riskId) {
+    if (!confirm('Delete this risk?')) return;
+    const taskId = document.getElementById('task-input-id')?.value;
+    try {
+      await this.api(`/api/risks/${riskId}`, { method: 'DELETE' });
+      this.showToast('Risk deleted', 'success');
+      if (taskId) {
+        await this.loadTaskRisks(Number(taskId));
+        const localTask = this.state.tasks.find(t => t.id === Number(taskId));
+        if (localTask) {
+          localTask.risks = this.state.currentTaskRisks;
+          localTask.risk_count = this.state.currentTaskRisks.length;
+          localTask.has_high_risk = this.state.currentTaskRisks.some(r => (r.impact === 'high' || r.impact === 'critical') && r.status !== 'done');
+        }
+        this.renderTable();
+        this.renderGantt();
+      }
+    } catch (e) {
+      this.showToast(e.message || 'Failed to delete risk', 'error');
     }
   },
 
@@ -6168,33 +6372,24 @@ const app = {
 
       </div>
 
-      <!-- ==================== CHARTER: DELIVERABLES & RISKS ==================== -->
+      <!-- ==================== CHARTER: DELIVERABLES ==================== -->
       ${(() => {
         if (!this.isFullAccess()) return '';
         const ch = data.charter || {};
         const dl = ch.deliverables || [];
-        const rk = ch.risks || [];
-        if (!dl.length && !rk.length) return '';
+        if (!dl.length) return '';
         const th = 'py-2 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-600';
         const td = 'py-2 px-3 text-xs align-top';
         return `<div id="report-sec-charter" class="space-y-3">
-          ${dl.length ? `<div>
+          <div>
             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-700 mb-1.5">Project Deliverables</div>
             <table class="w-full text-left border-collapse border border-slate-200 dark:border-slate-700"><thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
-              <th class="${th}">Deliverable</th><th class="${th}">Quality</th><th class="${th}">Quantity</th><th class="${th}">Due</th><th class="${th}">Status</th></tr></thead>
+              <th class="${th}">Deliverable</th><th class="${th}">Quantity</th><th class="${th}">Quality</th><th class="${th}">Dispatch date</th></tr></thead>
               <tbody>${dl.map(x => `<tr class="border-t border-slate-100 dark:border-slate-700/60">
-                <td class="${td} font-semibold">${this.escapeHtml(x.title)}</td><td class="${td}">${this.escapeHtml(x.quality || '—')}</td>
-                <td class="${td}">${this.escapeHtml(x.quantity || '—')}</td><td class="${td}">${this.fmtDate(x.due_date)}</td>
-                <td class="${td} capitalize">${this.escapeHtml(String(x.status || '').replace('_', ' '))}</td></tr>`).join('')}</tbody></table></div>` : ''}
-          ${rk.length ? `<div>
-            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white pb-1 border-b border-slate-200 dark:border-slate-700 mb-1.5">Project Risks</div>
-            <table class="w-full text-left border-collapse border border-slate-200 dark:border-slate-700"><thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
-              <th class="${th}">ID</th><th class="${th}">Risk description</th><th class="${th}">Impact</th><th class="${th}">Mitigation plan</th><th class="${th}">Owner</th><th class="${th}">Status</th></tr></thead>
-              <tbody>${rk.map(x => `<tr class="border-t border-slate-100 dark:border-slate-700/60 ${x.status === 'done' ? 'opacity-50' : ''}">
-                <td class="${td} font-mono font-bold">${this.escapeHtml(x.risk_code || '')}</td><td class="${td}">${this.escapeHtml(x.description)}</td>
-                <td class="${td} capitalize">${this.escapeHtml(x.impact)}</td><td class="${td}">${this.escapeHtml(x.mitigation || '—')}</td>
-                <td class="${td}">${this.escapeHtml(x.owner || '—')}</td>
-                <td class="${td} capitalize">${this.escapeHtml(String(x.status || '').replace('_', ' '))}</td></tr>`).join('')}</tbody></table></div>` : ''}
+                <td class="${td} font-semibold">${this.escapeHtml(x.title)}</td>
+                <td class="${td}">${this.escapeHtml(x.quantity || '—')}</td>
+                <td class="${td}">${this.escapeHtml(x.quality || '—')}</td>
+                <td class="${td}">${this.fmtDate(x.dispatch_date || x.due_date)}</td></tr>`).join('')}</tbody></table></div>
         </div>`;
       })()}
 
