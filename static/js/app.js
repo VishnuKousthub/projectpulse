@@ -1924,6 +1924,11 @@ const app = {
                       <i data-lucide="shield-alert" class="w-2.5 h-2.5 ${t.has_high_risk ? 'text-rose-500' : 'text-slate-400'}"></i>
                       <span>${t.risk_count}</span>
                     </span>` : ''}
+                  ${t.attachment_count ? `
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/60" title="${t.attachment_count} attached document(s)">
+                      <i data-lucide="paperclip" class="w-2.5 h-2.5 text-blue-500"></i>
+                      <span>${t.attachment_count}</span>
+                    </span>` : ''}
                 </div>
               </div>
             </div>
@@ -3695,6 +3700,8 @@ const app = {
         this.renderSubtaskList(localTask.subtasks_list || localTask.subtasks || []);
         this.renderTaskModalResourceChips(localTask.resources || []);
         this.renderTaskRisks(localTask.risks || [], localTask.id);
+        this.renderTaskAttachments([], localTask.id);
+        this.loadTaskAttachments(localTask.id);
       }
 
       this.updateTaskAssigneeDeleteBtnVisibility();
@@ -3741,6 +3748,7 @@ const app = {
           this.renderSubtaskList(task.subtasks || []);
           this.renderTaskModalResourceChips(task.resources || []);
           await this.loadTaskRisks(task.id);
+          await this.loadTaskAttachments(task.id);
           this.updateTaskAssigneeDeleteBtnVisibility();
           this.updateTaskModalDateBadges();
         }
@@ -3763,6 +3771,7 @@ const app = {
       if (progressNum) progressNum.value = 0;
       if (progressSlider) progressSlider.value = 0;
       this.renderTaskRisks([], 0);
+      this.renderTaskAttachments([], 0);
 
       if (params.assignee_name) {
         if (manualAssigneeInput) manualAssigneeInput.value = params.assignee_name;
@@ -3836,6 +3845,11 @@ const app = {
 
   closeTaskModal() {
     document.getElementById('task-modal')?.classList.add('hidden');
+    const taskFileInput = document.getElementById('task-attachment-file-input');
+    if (taskFileInput) taskFileInput.value = '';
+    const riskFileInput = document.getElementById('risk-attachment-file-input');
+    if (riskFileInput) riskFileInput.value = '';
+    this.state.currentTaskAttachments = [];
   },
 
   populateTaskModalDropdowns() {
@@ -4264,6 +4278,10 @@ const app = {
             <div class="flex items-center gap-1.5 flex-shrink-0">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${impactClass}">${this.escapeHtml(r.impact || 'medium')}</span>
               <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize">${this.escapeHtml((r.status || 'todo').replace('_', ' '))}</span>
+              ${this.getUserRole() !== 'viewer' ? `
+              <button type="button" onclick="app.triggerRiskAttachmentUpload(${r.id})" class="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition" title="Attach document to risk">
+                <i data-lucide="paperclip" class="w-3.5 h-3.5"></i>
+              </button>` : ''}
               <button type="button" onclick="app.editTaskRiskForm(${r.id})" class="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition" title="Edit risk">
                 <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
               </button>
@@ -4275,6 +4293,45 @@ const app = {
           </div>
           ${r.mitigation ? `<div class="text-[11px] text-slate-500 dark:text-slate-400"><span class="font-semibold">Mitigation:</span> ${this.escapeHtml(r.mitigation)}</div>` : ''}
           ${r.owner ? `<div class="text-[10px] text-slate-400"><span class="font-semibold">Owner:</span> ${this.escapeHtml(r.owner)}</div>` : ''}
+          ${(() => {
+            const riskAtts = (this.state.currentTaskAttachments || []).filter(a => a.risk_id === r.id);
+            if (!riskAtts.length) return '';
+            const curUser = this.state.user || {};
+            const curFullName = (curUser.full_name || '').toLowerCase();
+            const curUsername = (curUser.username || '').toLowerCase();
+            return `
+              <div class="pt-1.5 border-t border-slate-200/60 dark:border-slate-800 space-y-1">
+                <div class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <i data-lucide="paperclip" class="w-3 h-3 text-blue-500"></i>
+                  <span>Attached Documents (${riskAtts.length}):</span>
+                </div>
+                ${riskAtts.map(att => {
+                  const uploader = (att.uploaded_by || '').toLowerCase();
+                  const isOwner = (curFullName && uploader === curFullName) || (curUsername && uploader === curUsername);
+                  const canDelete = isPmOrAdmin || isOwner;
+                  return `
+                    <div class="flex items-center justify-between gap-2 px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px]">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-500 flex-shrink-0"></i>
+                        <span class="font-medium text-slate-700 dark:text-slate-200 truncate" title="${this.escapeHtml(att.original_name)}">${this.escapeHtml(att.original_name)}</span>
+                        <span class="text-[10px] text-slate-400 font-mono">(${this.formatBytes(att.size)})</span>
+                        ${att.uploaded_by ? `<span class="text-[9px] text-slate-400">by ${this.escapeHtml(att.uploaded_by)}</span>` : ''}
+                      </div>
+                      <div class="flex items-center gap-1 flex-shrink-0">
+                        <button type="button" onclick="app.downloadAttachment(${att.id}, '${this.escapeHtml(att.original_name)}')" class="p-1 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition" title="Download">
+                          <i data-lucide="download" class="w-3 h-3"></i>
+                        </button>
+                        ${canDelete ? `
+                        <button type="button" onclick="app.deleteAttachment(${att.id})" class="p-1 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition" title="Delete">
+                          <i data-lucide="trash-2" class="w-3 h-3"></i>
+                        </button>` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          })()}
         </div>
       `;
     }).join('');
@@ -4411,6 +4468,264 @@ const app = {
     } catch (e) {
       this.showToast(e.message || 'Failed to delete risk', 'error');
     }
+  },
+
+  // ==================== TASK & RISK ATTACHMENTS ====================
+
+  formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  },
+
+  async loadTaskAttachments(taskId) {
+    if (!taskId) {
+      this.state.currentTaskAttachments = [];
+      this.renderTaskAttachments([], 0);
+      return;
+    }
+    try {
+      const atts = await this.api(`/api/tasks/${taskId}/attachments`);
+      this.state.currentTaskAttachments = atts || [];
+      this.renderTaskAttachments(this.state.currentTaskAttachments, taskId);
+      this.renderTaskRisks(this.state.currentTaskRisks || [], taskId);
+    } catch (e) {
+      console.error('Failed to load task attachments:', e);
+      this.renderTaskAttachments(this.state.currentTaskAttachments || [], taskId);
+    }
+  },
+
+  renderTaskAttachments(attachments = null, taskId = null) {
+    const container = document.getElementById('task-attachments-container');
+    const countSpan = document.getElementById('task-attachments-count');
+    const uploadBtn = document.getElementById('task-upload-attachment-btn');
+    const dropzone = document.getElementById('task-attachment-dropzone');
+    if (!container) return;
+
+    if (attachments === null) {
+      attachments = this.state.currentTaskAttachments || [];
+    }
+    if (taskId === null) {
+      const idVal = document.getElementById('task-input-id')?.value;
+      taskId = idVal ? Number(idVal) : 0;
+    }
+
+    const actAttachments = attachments.filter(a => !a.risk_id);
+    if (countSpan) {
+      countSpan.textContent = `(${actAttachments.length})`;
+    }
+
+    if (!taskId) {
+      container.innerHTML = '<div class="text-center text-slate-400 text-xs py-2">Save the activity first to attach documents.</div>';
+      if (uploadBtn) uploadBtn.classList.add('hidden');
+      if (dropzone) dropzone.classList.add('hidden');
+      return;
+    }
+
+    const isPmOrAdmin = this.isFullAccess();
+    if (uploadBtn) {
+      if (isPmOrAdmin) uploadBtn.classList.remove('hidden');
+      else uploadBtn.classList.add('hidden');
+    }
+    if (dropzone) {
+      if (isPmOrAdmin) dropzone.classList.remove('hidden');
+      else dropzone.classList.add('hidden');
+    }
+
+    if (!actAttachments.length) {
+      container.innerHTML = '<div class="text-center text-slate-400 text-xs py-2">No documents attached to this activity.</div>';
+      this.initLucide();
+      return;
+    }
+
+    container.innerHTML = actAttachments.map(att => {
+      return `
+        <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+            </div>
+            <div class="min-w-0">
+              <div class="font-semibold text-slate-800 dark:text-slate-100 truncate" title="${this.escapeHtml(att.original_name)}">${this.escapeHtml(att.original_name)}</div>
+              <div class="text-[10px] text-slate-400 flex items-center gap-1.5">
+                <span>${this.formatBytes(att.size)}</span>
+                ${att.uploaded_by ? `<span>• by ${this.escapeHtml(att.uploaded_by)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <button type="button" onclick="app.downloadAttachment(${att.id}, '${this.escapeHtml(att.original_name)}')" class="px-2 py-1 rounded text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center gap-1 transition" title="Download">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i> Download
+            </button>
+            ${isPmOrAdmin ? `
+            <button type="button" onclick="app.deleteAttachment(${att.id})" class="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition" title="Delete document">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+    this.initLucide();
+  },
+
+  handleAttachmentDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('task-attachment-dropzone');
+    if (dropzone) {
+      dropzone.classList.add('border-blue-500', 'bg-blue-50/40', 'dark:bg-blue-900/20');
+    }
+  },
+
+  handleAttachmentDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('task-attachment-dropzone');
+    if (dropzone) {
+      dropzone.classList.remove('border-blue-500', 'bg-blue-50/40', 'dark:bg-blue-900/20');
+    }
+  },
+
+  handleAttachmentDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.handleAttachmentDragLeave(e);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      this.uploadTaskAttachment(files[0], null);
+    }
+  },
+
+  handleTaskAttachmentUpload(e) {
+    const file = e.target?.files?.[0];
+    if (file) {
+      this.uploadTaskAttachment(file, null);
+    }
+    e.target.value = '';
+  },
+
+  triggerRiskAttachmentUpload(riskId) {
+    this._uploadTargetRiskId = riskId;
+    const input = document.getElementById('risk-attachment-file-input');
+    if (input) input.click();
+  },
+
+  handleRiskAttachmentUpload(e) {
+    const file = e.target?.files?.[0];
+    const riskId = this._uploadTargetRiskId;
+    if (file && riskId) {
+      this.uploadTaskAttachment(file, riskId);
+    }
+    e.target.value = '';
+    this._uploadTargetRiskId = null;
+  },
+
+  async uploadTaskAttachment(file, riskId = null) {
+    const taskIdVal = document.getElementById('task-input-id')?.value;
+    const taskId = taskIdVal ? Number(taskIdVal) : null;
+    if (!taskId) {
+      this.showToast('Please save the activity first before uploading documents.', 'warning');
+      return;
+    }
+
+    if (!file) return;
+
+    const allowed = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'png', 'jpg', 'jpeg', 'zip'];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      this.showToast(`File type .${ext} is not allowed. Allowed types: ${allowed.join(', ')}`, 'error');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      this.showToast('File size exceeds the 15 MB limit.', 'error');
+      return;
+    }
+
+    const progressEl = document.getElementById('task-attachment-progress');
+    if (progressEl) progressEl.classList.remove('hidden');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (riskId) {
+        formData.append('risk_id', riskId);
+      }
+
+      const headers = {};
+      const token = this.state.token || localStorage.getItem('pp_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+        method: 'POST',
+        headers: headers,
+        body: formData
+      });
+
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch (_) {}
+        throw new Error(errData.error || `Upload failed with status ${res.status}`);
+      }
+
+      const uploadedAtt = await res.json();
+      this.showToast(`Uploaded "${file.name}" successfully!`, 'success');
+
+      // Refresh attachments
+      await this.loadTaskAttachments(taskId);
+
+      // Update local task attachment count in state
+      const localTask = this.state.tasks.find(t => t.id === taskId);
+      if (localTask) {
+        localTask.attachment_count = (localTask.attachment_count || 0) + 1;
+      }
+      this.renderTable();
+      this.renderGantt();
+    } catch (e) {
+      console.error('Attachment upload failed:', e);
+      this.showToast(e.message || 'Attachment upload failed', 'error');
+    } finally {
+      if (progressEl) progressEl.classList.add('hidden');
+    }
+  },
+
+  async deleteAttachment(attachmentId) {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+
+    const taskIdVal = document.getElementById('task-input-id')?.value;
+    const taskId = taskIdVal ? Number(taskIdVal) : null;
+
+    try {
+      await this.api(`/api/attachments/${attachmentId}`, { method: 'DELETE' });
+      this.showToast('Document deleted successfully', 'success');
+
+      if (taskId) {
+        await this.loadTaskAttachments(taskId);
+        const localTask = this.state.tasks.find(t => t.id === taskId);
+        if (localTask && localTask.attachment_count > 0) {
+          localTask.attachment_count -= 1;
+        }
+        this.renderTable();
+        this.renderGantt();
+      }
+    } catch (e) {
+      this.showToast(e.message || 'Failed to delete attachment', 'error');
+    }
+  },
+
+  downloadAttachment(attachmentId, originalName) {
+    const token = this.state.token || localStorage.getItem('pp_token') || '';
+    const url = `/api/attachments/${attachmentId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = originalName || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   },
 
   async handleSaveTask() {

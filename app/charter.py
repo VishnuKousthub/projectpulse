@@ -7,6 +7,7 @@ Everything here is additive: it reads existing tables and uses the new
 """
 import json
 from datetime import date, datetime
+from app.database import get_attachments_dir
 
 CHARTER_FIELDS = (
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
@@ -374,6 +375,17 @@ def register(app, *, get_db, json_response, request, get_current_user,
         if denied:
             return denied
         with get_db() as conn:
+            # Delete attachments belonging to this risk and their files on disk
+            try:
+                folder = get_attachments_dir()
+                att_rows = conn.execute("SELECT stored_name FROM attachments WHERE risk_id = ?", (risk_id,)).fetchall()
+                for ar in att_rows:
+                    fpath = folder / ar["stored_name"]
+                    if fpath.exists():
+                        fpath.unlink()
+                conn.execute("DELETE FROM attachments WHERE risk_id = ?", (risk_id,))
+            except Exception as e:
+                print(f"[Attachment] Error cleaning risk attachments: {e}")
             conn.execute("DELETE FROM project_risks WHERE id = ?", (risk_id,))
             return json_response({"success": True})
 

@@ -3,10 +3,12 @@ import os
 import re
 import sqlite3
 import secrets
+import uuid
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from bottle import Bottle, request, response, static_file, run
 
-from app.database import get_db, init_db, hash_password, verify_password, normalize_project_task_order
+from app.database import get_db, init_db, hash_password, verify_password, normalize_project_task_order, get_attachments_dir
 from app.seed import seed_database
 from app import charter as charter_module
 from app import users as users_module
@@ -113,6 +115,8 @@ def get_current_user():
         token = auth_header[7:].strip()
     if not token:
         token = request.get_cookie("pp_token")
+    if not token:
+        token = request.query.get("token")
     
     if not token:
         return None
@@ -629,6 +633,18 @@ def delete_project(project_id):
         project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
             return json_response({"error": "Project not found"}, status=404)
+        # Cleanup project attachments and files on disk
+        folder = get_attachments_dir()
+        att_rows = conn.execute("SELECT stored_name FROM attachments WHERE project_id = ?", (project_id,)).fetchall()
+        for ar in att_rows:
+            try:
+                fpath = folder / ar["stored_name"]
+                if fpath.exists():
+                    fpath.unlink()
+            except Exception:
+                pass
+        conn.execute("DELETE FROM attachments WHERE project_id = ?", (project_id,))
+
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         return json_response({
             "success": True,
@@ -1237,6 +1253,15 @@ def get_tasks(project_id):
         for r in risks_raw:
             risks_by_task.setdefault(r["task_id"], []).append(dict(r))
 
+        # Batch fetch all task attachment counts
+        att_counts_raw = conn.execute("""
+            SELECT task_id, COUNT(*) as c
+            FROM attachments
+            WHERE project_id = ?
+            GROUP BY task_id
+        """, (project_id,)).fetchall()
+        attachments_by_task = {a["task_id"]: a["c"] for a in att_counts_raw}
+
         result = []
         for t in tasks:
             t_dict = dict(t)
@@ -1255,6 +1280,7 @@ def get_tasks(project_id):
             t_dict["risks"] = t_risks
             t_dict["risk_count"] = len(t_risks)
             t_dict["has_high_risk"] = any(r.get("impact") in ("high", "critical") and r.get("status") != "done" for r in t_risks)
+            t_dict["attachment_count"] = attachments_by_task.get(t["id"], 0)
 
             if t_dict.get("progress_pct") is None:
                 if t_dict.get("status") == "done":
@@ -1507,6 +1533,8 @@ def get_task_dict(conn, task_id: int):
     t_dict["risks"] = task_risks_list
     t_dict["risk_count"] = len(task_risks_list)
     t_dict["has_high_risk"] = any(r.get("impact") in ("high", "critical") and r.get("status") != "done" for r in task_risks_list)
+    att_cnt = conn.execute("SELECT COUNT(*) as c FROM attachments WHERE task_id = ?", (task_id,)).fetchone()
+    t_dict["attachment_count"] = att_cnt["c"] if att_cnt else 0
 
     if t_dict.get("progress_pct") is None:
         if t_dict.get("status") == "done":
@@ -1985,6 +2013,16 @@ def delete_task(task_id):
             return json_response({"error": "Task not found"}, status=404)
         project_id = task["project_id"]
         record_activity(conn, project_id, "User", "Task Deleted", f'Deleted task "{task["title"]}"')
+        try:
+            folder = get_attachments_dir()
+            att_rows = conn.execute("SELECT stored_name FROM attachments WHERE task_id = ?", (task_id,)).fetchall()
+            for ar in att_rows:
+                fpath = folder / ar["stored_name"]
+                if fpath.exists():
+                    fpath.unlink()
+            conn.execute("DELETE FROM attachments WHERE task_id = ?", (task_id,))
+        except Exception as e:
+            print(f"[Attachment] Error cleaning task attachments: {e}")
         conn.execute("DELETE FROM project_risks WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         normalize_project_task_order(conn, project_id)
@@ -4204,6 +4242,195 @@ def unmap_task_resource(task_id, resource_id):
 
     with get_db() as conn:
         conn.execute("DELETE FROM task_resources WHERE task_id = ? AND resource_id = ?", (task_id, resource_id))
+        return json_response({"success": True})
+
+# ==================== TASK & RISK ATTACHMENTS ====================
+
+ALLOWED_ATTACHMENT_EXTENSIONS = {
+    "pdf", "doc", "docx", "xls", "xlsx", "csv", "ppt", "pptx", "txt", "png", "jpg", "jpeg", "zip"
+}
+MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15 MB
+
+def secure_filename(filename):
+    if not filename:
+        return "file"
+    name = Path(filename).name
+    cleaned = re.sub(r'[^a-zA-Z0-9_.-]', '_', name)
+    cleaned = cleaned.strip('._')
+    return cleaned or "file"
+
+@app.get("/api/tasks/<task_id:int>/attachments")
+def get_task_attachments(task_id):
+    risk_id_param = request.query.get("risk_id")
+    with get_db() as conn:
+        task = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            return json_response({"error": "Task not found"}, status=404)
+
+        if risk_id_param is not None and risk_id_param != "":
+            if risk_id_param.lower() in ("null", "none"):
+                rows = conn.execute("""
+                    SELECT * FROM attachments
+                    WHERE task_id = ? AND risk_id IS NULL
+                    ORDER BY id DESC
+                """, (task_id,)).fetchall()
+            else:
+                risk_id = safe_int(risk_id_param)
+                rows = conn.execute("""
+                    SELECT * FROM attachments
+                    WHERE task_id = ? AND risk_id = ?
+                    ORDER BY id DESC
+                """, (task_id, risk_id)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT * FROM attachments
+                WHERE task_id = ?
+                ORDER BY id DESC
+            """, (task_id,)).fetchall()
+
+        return json_response([dict(r) for r in rows])
+
+@app.post("/api/tasks/<task_id:int>/attachments")
+def upload_task_attachment(task_id):
+    user = get_current_user()
+
+    upload = request.files.get("file") or request.files.get("attachment")
+    if not upload:
+        return json_response({"error": "No file uploaded"}, status=400)
+
+    orig_filename = upload.filename or "file"
+    ext = orig_filename.rsplit(".", 1)[-1].lower() if "." in orig_filename else ""
+    if ext not in ALLOWED_ATTACHMENT_EXTENSIONS:
+        return json_response({
+            "error": f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(ALLOWED_ATTACHMENT_EXTENSIONS))}"
+        }, status=400)
+
+    try:
+        content = upload.file.read()
+    except Exception as e:
+        return json_response({"error": f"Failed to read file: {e}"}, status=400)
+
+    file_size = len(content)
+    if file_size == 0:
+        return json_response({"error": "Uploaded file is empty"}, status=400)
+    if file_size > MAX_ATTACHMENT_SIZE:
+        return json_response({"error": "File size exceeds maximum allowed size of 15 MB"}, status=400)
+
+    risk_id_raw = request.forms.get("risk_id") or request.params.get("risk_id")
+    risk_id = safe_int(risk_id_raw) if (risk_id_raw is not None and str(risk_id_raw).strip() != "") else None
+
+    with get_db() as conn:
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            return json_response({"error": "Task not found"}, status=404)
+
+        risk = None
+        if risk_id is not None:
+            risk = conn.execute("SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
+            if not risk:
+                return json_response({"error": "Risk not found"}, status=404)
+            if risk["task_id"] != task_id:
+                return json_response({"error": "Risk does not belong to the specified task"}, status=400)
+
+        # Role checks:
+        # PM and Admin can attach to activity or risk.
+        # Lead and Assignee can attach ONLY to a risk!
+        if user and not is_full_access(user):
+            if user.get("role") == "viewer":
+                return json_response({"error": "Permission Denied: Viewers cannot upload attachments."}, status=403)
+            if not risk_id:
+                return json_response({
+                    "error": f"Permission Denied: User role '{user.get('role')}' can only upload attachments to specific risks, not directly to the activity."
+                }, status=403)
+
+        folder = get_attachments_dir()
+        safe_name = secure_filename(orig_filename)
+        stored_name = f"{uuid.uuid4().hex}_{safe_name}"
+        fpath = folder / stored_name
+        with open(fpath, "wb") as f:
+            f.write(content)
+
+        user_name = (user.get("full_name") or user.get("username") or "User") if user else "User"
+        now_str = get_now_iso()
+        mime_type = upload.content_type or "application/octet-stream"
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO attachments (project_id, task_id, risk_id, original_name, stored_name, size, mime, uploaded_by, uploaded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (task["project_id"], task_id, risk_id, orig_filename, stored_name, file_size, mime_type, user_name, now_str))
+        att_id = cursor.lastrowid
+        new_att = conn.execute("SELECT * FROM attachments WHERE id = ?", (att_id,)).fetchone()
+
+        target_desc = f'risk "{risk["description"][:30]}"' if risk else f'task "{task["title"]}"'
+        record_activity(conn, task["project_id"], user_name, "Document Uploaded", f'Uploaded attachment "{orig_filename}" to {target_desc}', task_id=task_id)
+
+        return json_response(dict(new_att), status=201)
+
+@app.get("/api/attachments/<attachment_id:int>/download")
+def download_attachment(attachment_id):
+    with get_db() as conn:
+        att = conn.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+        if not att:
+            return json_response({"error": "Attachment not found"}, status=404)
+
+        folder = get_attachments_dir()
+        fpath = folder / att["stored_name"]
+        if not fpath.exists():
+            return json_response({"error": "File not found on disk"}, status=404)
+
+        res = static_file(att["stored_name"], root=str(folder), download=att["original_name"], mimetype=att["mime"] or "application/octet-stream")
+        res.set_header("X-Content-Type-Options", "nosniff")
+        return res
+
+@app.delete("/api/attachments/<attachment_id:int>")
+def delete_attachment(attachment_id):
+    user = get_current_user()
+    with get_db() as conn:
+        att = conn.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+        if not att:
+            return json_response({"error": "Attachment not found"}, status=404)
+
+        # Check permissions:
+        # Full access (PM/Admin) can delete any attachment.
+        # Restricted roles (Lead/Assignee) can only delete if:
+        # 1. Attachment is tied to a risk (att['risk_id'] is not None)
+        # 2. Attachment was uploaded by the user
+        if user and not is_full_access(user):
+            if user.get("role") == "viewer":
+                return json_response({"error": "Permission Denied: Viewers cannot delete attachments."}, status=403)
+            if not att["risk_id"]:
+                return json_response({
+                    "error": f"Permission Denied: User role '{user.get('role')}' cannot delete activity-level attachments."
+                }, status=403)
+
+            user_identifiers = {
+                (user.get("full_name") or "").strip().lower(),
+                (user.get("username") or "").strip().lower(),
+            }
+            user_identifiers.discard("")
+            uploader = (att["uploaded_by"] or "").strip().lower()
+
+            if not uploader or uploader not in user_identifiers:
+                return json_response({
+                    "error": "Permission Denied: You can only delete attachments that you uploaded."
+                }, status=403)
+
+        # Delete file on disk
+        folder = get_attachments_dir()
+        fpath = folder / att["stored_name"]
+        try:
+            if fpath.exists():
+                fpath.unlink()
+        except Exception as e:
+            print(f"[Attachment] Error deleting file {fpath}: {e}")
+
+        conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+        task = conn.execute("SELECT project_id, title FROM tasks WHERE id = ?", (att["task_id"],)).fetchone()
+        if task:
+            user_name = (user.get("full_name") or user.get("username") or "User") if user else "User"
+            record_activity(conn, task["project_id"], user_name, "Document Deleted", f'Deleted attachment "{att["original_name"]}"', task_id=att["task_id"])
+
         return json_response({"success": True})
 
 # ==================== GLOBAL JSON ERROR HANDLERS ====================

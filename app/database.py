@@ -7,11 +7,25 @@ from contextlib import contextmanager
 
 import shutil
 import threading
+from pathlib import Path
 
 _ACTIVE_DB_PATH = None
 _PERSISTENT_STORAGE_PATH = None
 _sync_timer = None
 _sync_lock = threading.Lock()
+
+def get_attachments_dir():
+    env_dir = os.environ.get("PROJECT_PULSE_ATTACHMENTS_DIR") or os.environ.get("PROJECT_PULSE_UPLOADS")
+    if env_dir:
+        folder = Path(env_dir)
+    else:
+        db_path = get_db_path()
+        if db_path:
+            folder = Path(db_path).resolve().parent / "attachments"
+        else:
+            folder = Path(__file__).resolve().parent.parent / "attachments"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 def get_db_path():
     global _ACTIVE_DB_PATH, _PERSISTENT_STORAGE_PATH
@@ -428,6 +442,43 @@ def init_db():
             FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL
         )
         """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            task_id INTEGER NOT NULL,
+            risk_id INTEGER,
+            original_name TEXT NOT NULL,
+            stored_name TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            mime TEXT,
+            uploaded_by TEXT,
+            uploaded_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE,
+            FOREIGN KEY (risk_id) REFERENCES project_risks (id) ON DELETE CASCADE
+        )
+        """)
+        for col, col_type in (
+            ("project_id", "INTEGER NOT NULL DEFAULT 1"),
+            ("task_id", "INTEGER NOT NULL DEFAULT 1"),
+            ("risk_id", "INTEGER"),
+            ("original_name", "TEXT NOT NULL DEFAULT ''"),
+            ("stored_name", "TEXT NOT NULL DEFAULT ''"),
+            ("size", "INTEGER NOT NULL DEFAULT 0"),
+            ("mime", "TEXT"),
+            ("uploaded_by", "TEXT"),
+            ("uploaded_at", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            try:
+                cursor.execute(f"ALTER TABLE attachments ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_attachments_proj ON attachments(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_attachments_risk ON attachments(risk_id)")
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS email_settings (

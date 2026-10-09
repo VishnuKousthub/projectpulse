@@ -15,3 +15,7 @@ ENV/
 .DS_Store
 Thumbs.db
 pulse.db
+
+# Uploaded documents and attachments
+uploads/
+attachments/

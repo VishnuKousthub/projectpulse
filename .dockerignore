@@ -12,3 +12,5 @@ scratch/
 *.log
 pulse.db
 .DS_Store
+uploads
+attachments
