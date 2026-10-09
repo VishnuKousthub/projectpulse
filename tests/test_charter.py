@@ -51,14 +51,14 @@ class TestCharter(unittest.TestCase):
             "project_code": "CCS079", "cas_no": "123-45-6", "project_manager": "Rajagopal",
             "received_date": "2026-04-09", "delivery_date": "2026-12-15", "tech_pack": "TP-1"}, self.pm)
         self.assertEqual(code, 200)
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         p = c["project"]
         self.assertEqual((p["project_code"], p["cas_no"], p["project_manager"]), ("CCS079", "123-45-6", "Rajagopal"))
         self.assertEqual((p["received_date"], p["delivery_date"], p["tech_pack"]), ("2026-04-09", "2026-12-15", "TP-1"))
 
     def test_02_update_without_charter_fields_keeps_them(self):
         call(f"/api/projects/{self.pid}", "PUT", {"description": "new scope"}, self.pm)
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         self.assertEqual(c["project"]["project_code"], "CCS079")
         self.assertEqual(c["project"]["description"], "new scope")
 
@@ -73,7 +73,7 @@ class TestCharter(unittest.TestCase):
         self.assertEqual((code, d2["quantity"], d2["dispatch_date"]), (200, "2 kg", "2026-12-15"))
         code, _ = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "  "}, self.pm)
         self.assertEqual(code, 400)
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         self.assertTrue(any(x["id"] == d["id"] for x in c["deliverables"]))
         self.assertEqual(call(f"/api/deliverables/{d['id']}", "DELETE", None, self.pm)[0], 200)
 
@@ -94,26 +94,29 @@ class TestCharter(unittest.TestCase):
         self.assertEqual(call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "x"}, self.assignee)[0], 403)
         self.assertEqual(call(f"/api/projects/{self.pid}/risks", "POST", {"description": "x"}, self.assignee)[0], 403)
         self.assertEqual(call(f"/api/projects/{self.pid}/charter", "GET", None, self.assignee)[0], 403)
-        self.assertEqual(call("/api/dashboard", "GET", None, self.assignee)[0], 200)
+        self.assertEqual(call("/api/dashboard", "GET", None, self.assignee)[0], 403)
+        # Unauthenticated calls return 401
+        self.assertEqual(call(f"/api/projects/{self.pid}/charter", "GET", None)[0], 401)
+        self.assertEqual(call("/api/dashboard", "GET", None)[0], 401)
 
     def test_06_task_type_comes_from_tags(self):
         _, tasks = call(f"/api/projects/{self.pid}/tasks")
         tid = tasks[0]["id"]
         call(f"/api/tasks/{tid}", "PUT", {"tags": ["pm", "Technical"]}, self.pm)
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         self.assertEqual(next(t for t in c["milestones"] if t["id"] == tid)["type"], "technical")
         call(f"/api/tasks/{tid}", "PUT", {"tags": ["Both"]}, self.pm)
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         self.assertEqual(next(t for t in c["milestones"] if t["id"] == tid)["type"], "both")
         call(f"/api/tasks/{tid}", "PUT", {"tags": ["Non-technical"]}, self.pm)
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         self.assertEqual(next(t for t in c["milestones"] if t["id"] == tid)["type"], "nontechnical")
 
     def test_07_dashboard_shape_and_counts(self):
         _, tasks = call(f"/api/projects/{self.pid}/tasks")
         tid = tasks[0]["id"]
         call(f"/api/tasks/{tid}/risks", "POST", {"description": "Equipment down", "impact": "high"}, self.pm)
-        code, d = call("/api/dashboard")
+        code, d = call("/api/dashboard", token=self.pm)
         self.assertEqual(code, 200)
         for key in ("kpis", "projects", "overdue", "deliverables", "high_risks", "workload"):
             self.assertIn(key, d)
@@ -181,7 +184,7 @@ class TestCharter(unittest.TestCase):
         }, self.pm)
         self.assertEqual(code, 200)
 
-        _, c = call(f"/api/projects/{self.pid}/charter")
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         p = c["project"]
         self.assertEqual(p["customer_name"], "Acme Pharma")
         self.assertEqual(p["chemist_name"], "Dr. Marie Curie")
@@ -273,6 +276,41 @@ class TestCharter(unittest.TestCase):
         with get_db() as conn:
             remaining = conn.execute("SELECT COUNT(*) AS c FROM project_risks WHERE task_id = ?", (tid,)).fetchone()["c"]
         self.assertEqual(remaining, 0)
+
+    def test_13_quantity_validation_and_total_calculation(self):
+        # 1. Validation rejects missing unit
+        code, err = call(f"/api/projects/{self.pid}/deliverables", "POST",
+                         {"title": "No Unit Batch", "quantity": "100"}, self.pm)
+        self.assertEqual(code, 400)
+        self.assertIn("unit", err["error"].lower())
+
+        # Clean existing deliverables for this project
+        with get_db() as conn:
+            conn.execute("DELETE FROM deliverables WHERE project_id = ?", (self.pid,))
+
+        # Test Check 1: 10g + 20g + 30g = 60 g
+        _, d1 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch A", "quantity": "10g"}, self.pm)
+        _, d2 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch B", "quantity": "20g"}, self.pm)
+        _, d3 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch C", "quantity": "30g"}, self.pm)
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
+        self.assertEqual(c["project"]["total_deliverable_quantity"], "60 g")
+
+        # Clean again
+        with get_db() as conn:
+            conn.execute("DELETE FROM deliverables WHERE project_id = ?", (self.pid,))
+
+        # Test Check 2: 4kg + 100kg + 250gm + 10kg = 114.25 kg
+        call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 1", "quantity": "4kg"}, self.pm)
+        call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 2", "quantity": "100kg"}, self.pm)
+        call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 3", "quantity": "250gm"}, self.pm)
+        _, d4 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 4", "quantity": "10kg"}, self.pm)
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
+        self.assertEqual(c["project"]["total_deliverable_quantity"], "114.25 kg")
+
+        # Deleting deliverable updates total quantity immediately
+        call(f"/api/deliverables/{d4['id']}", "DELETE", None, self.pm)
+        _, c_after = call(f"/api/projects/{self.pid}/charter", token=self.pm)
+        self.assertEqual(c_after["project"]["total_deliverable_quantity"], "104.25 kg")
 
     @classmethod
     def tearDownClass(cls):

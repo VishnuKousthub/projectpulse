@@ -378,7 +378,7 @@ class TestRolePermissions(unittest.TestCase):
             for p in projs:
                 for f in ("project_code", "cas_no", "customer_name", "chemist_name",
                           "project_manager", "received_date", "delivery_date",
-                          "total_deliverable_quantity", "project_budget", "tech_pack"):
+                          "total_deliverable_quantity", "tech_pack"):
                     self.assertNotIn(f, p, f"{role_name} should not see {f} in /api/projects")
 
             # 4. Check charter fields stripped from GET /api/projects/1
@@ -386,7 +386,7 @@ class TestRolePermissions(unittest.TestCase):
             self.assertEqual(status_p1, 200)
             for f in ("project_code", "cas_no", "customer_name", "chemist_name",
                       "project_manager", "received_date", "delivery_date",
-                      "total_deliverable_quantity", "project_budget", "tech_pack"):
+                      "total_deliverable_quantity", "tech_pack"):
                 self.assertNotIn(f, p1, f"{role_name} should not see {f} in /api/projects/1")
 
             # 5. Check Project Report omits charter and strips fields
@@ -396,12 +396,13 @@ class TestRolePermissions(unittest.TestCase):
             rep_p = rep.get("project", {})
             for f in ("project_code", "cas_no", "customer_name", "chemist_name",
                       "project_manager", "received_date", "delivery_date",
-                      "total_deliverable_quantity", "project_budget", "tech_pack"):
+                      "total_deliverable_quantity", "tech_pack"):
                 self.assertNotIn(f, rep_p, f"{role_name} should not see {f} in report project")
 
-    # 8. Test admin and pm see budget in project object, restricted roles do not
+    # 8. Test all roles (Admin, PM, Lead, Assignee) see budget in project object
     def test_08_budget_visibility_by_role(self):
-        for token, role_name in [(self.admin_token, "Admin"), (self.pm_token, "PM")]:
+        for token, role_name in [(self.admin_token, "Admin"), (self.pm_token, "PM"),
+                                 (self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
             status_p, p = self._request("/api/projects/1", token=token)
             self.assertEqual(status_p, 200)
             self.assertIn("project_budget", p, f"{role_name} should see project_budget")
@@ -409,15 +410,6 @@ class TestRolePermissions(unittest.TestCase):
             status_list, plist = self._request("/api/projects", token=token)
             self.assertEqual(status_list, 200)
             self.assertIn("project_budget", plist[0], f"{role_name} should see project_budget in list")
-
-        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
-            status_p, p = self._request("/api/projects/1", token=token)
-            self.assertEqual(status_p, 200)
-            self.assertNotIn("project_budget", p, f"{role_name} should NOT see project_budget")
-
-            status_list, plist = self._request("/api/projects", token=token)
-            self.assertEqual(status_list, 200)
-            self.assertNotIn("project_budget", plist[0], f"{role_name} should NOT see project_budget in list")
 
 
 if __name__ == "__main__":

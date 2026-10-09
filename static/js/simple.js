@@ -33,17 +33,16 @@ Object.assign(app, {
   },
 
   applySimpleMode() {
-    if (FEATURES.advancedViews) return;
-    ['kanban', 'calendar', 'resources', 'analytics'].forEach(v => {
-      const el = document.getElementById(`nav-${v}`);
-      if (el) el.style.display = 'none';
-    });
-    const reset = document.getElementById('sidebar-reset-demo-btn');
-    if (reset) reset.style.display = 'none';
-
     const role = this.getUserRole();
     const isAdmin = (role === 'admin');
     const isProgress = this.isProgressOnly();
+
+    ['kanban', 'calendar', 'resources', 'analytics'].forEach(v => {
+      const el = document.getElementById(`nav-${v}`);
+      if (el) el.style.display = (isAdmin || FEATURES.advancedViews) ? '' : 'none';
+    });
+    const reset = document.getElementById('sidebar-reset-demo-btn');
+    if (reset) reset.style.display = 'none';
 
     const navUsers = document.getElementById('nav-users');
     if (navUsers) {
@@ -208,6 +207,14 @@ Object.assign(app, {
       </div>`;
 
     root.innerHTML = `
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+        ${tile('Projects', k.projects, `${k.total_tasks} tasks in total`)}
+        ${tile('Overdue tasks', k.overdue_tasks, 'past their due date', k.overdue_tasks ? 'text-rose-600' : '')}
+        ${tile('Due this week', k.due_this_week, 'next 7 days', k.due_this_week ? 'text-amber-600' : '')}
+        ${tile('Overall progress', k.completion_pct + '%', 'tasks marked done')}
+        ${tile('High risks open', k.open_high_risks, 'from activities', k.open_high_risks ? 'text-rose-600' : '')}
+      </div>
+
       <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 mb-5">
         <div class="${UI.card} p-5 flex flex-col h-[340px] xl:col-span-5">
           <div class="mb-3">
@@ -228,14 +235,6 @@ Object.assign(app, {
             <canvas id="dashboardStatusChart" class="w-full h-full"></canvas>
           </div>
         </div>
-      </div>
-
-      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        ${tile('Projects', k.projects, `${k.total_tasks} tasks in total`)}
-        ${tile('Overdue tasks', k.overdue_tasks, 'past their due date', k.overdue_tasks ? 'text-rose-600' : '')}
-        ${tile('Due this week', k.due_this_week, 'next 7 days', k.due_this_week ? 'text-amber-600' : '')}
-        ${tile('Overall progress', k.completion_pct + '%', 'tasks marked done')}
-        ${tile('High risks open', k.open_high_risks, 'from activities', k.open_high_risks ? 'text-rose-600' : '')}
       </div>
 
       ${panel('Projects', 'Click a project to open its task table', `
@@ -587,7 +586,7 @@ Object.assign(app, {
           ${field('Chemist name', esc(p.chemist_name), chemistSelect)}
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'))}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'))}
-          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'placeholder="e.g. 500 g or 10 kg"'))}
+          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-50 dark:bg-slate-800 text-slate-500"'))}
           ${field('Project budget', this.formatINR(p.project_budget), inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'))}
         </div>
       </div>`;
@@ -883,6 +882,10 @@ Object.assign(app, {
       dispatch_date: v('cd-dispatch')
     };
     if (!body.title.trim()) { this.showToast('Deliverable name is required', 'error'); return; }
+    if (body.quantity && !/[a-zA-Z]/.test(body.quantity)) {
+      this.showToast('Quantity must include a unit (e.g. g, kg, gm, mg, L, ml)', 'error');
+      return;
+    }
     if (id) await this.api(`/api/deliverables/${id}`, { method: 'PUT', body });
     else await this.api(`/api/projects/${this.state.currentProjectId}/deliverables`, { method: 'POST', body });
     this.state.charterEdit = null;

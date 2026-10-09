@@ -145,10 +145,6 @@ const app = {
     const chip = document.getElementById('gantt-budget-chip');
     const textEl = document.getElementById('gantt-budget-chip-text');
     if (!chip) return;
-    if (!this.isFullAccess()) {
-      chip.classList.add('hidden');
-      return;
-    }
     chip.classList.remove('hidden');
     const p = this.state.currentProject;
     const b = p?.project_budget;
@@ -536,6 +532,9 @@ const app = {
 
     if (viewName === 'users' && !isAdmin) {
       return this.switchView(this.getLandingView ? this.getLandingView() : 'dashboard');
+    }
+    if (['kanban', 'calendar', 'resources', 'analytics'].includes(viewName) && !isAdmin) {
+      return this.switchView(this.getLandingView ? this.getLandingView() : (isProgress ? 'table' : 'dashboard'));
     }
     if (viewName === 'charter' && !this.isFullAccess()) {
       return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
@@ -1836,23 +1835,16 @@ const app = {
     const statBudgetSub = document.getElementById('table-stat-budget-sub');
     const kpiBar = document.getElementById('table-kpi-bar');
 
-    if (this.isFullAccess()) {
-      if (statBudgetCard) statBudgetCard.classList.remove('hidden');
-      if (kpiBar) {
-        kpiBar.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5';
-      }
-      const b = this.state.currentProject?.project_budget;
-      if (statBudget) {
-        statBudget.textContent = this.formatINR(b);
-      }
-      if (statBudgetSub) {
-        statBudgetSub.textContent = (b != null && b !== '' && Number(b) > 0) ? 'Charter Allocation' : 'Budget not set';
-      }
-    } else {
-      if (statBudgetCard) statBudgetCard.classList.add('hidden');
-      if (kpiBar) {
-        kpiBar.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5';
-      }
+    if (statBudgetCard) statBudgetCard.classList.remove('hidden');
+    if (kpiBar) {
+      kpiBar.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5';
+    }
+    const b = this.state.currentProject?.project_budget;
+    if (statBudget) {
+      statBudget.textContent = this.formatINR(b);
+    }
+    if (statBudgetSub) {
+      statBudgetSub.textContent = (b != null && b !== '' && Number(b) > 0) ? 'Charter Allocation' : 'Budget not set';
     }
 
     // 2. Filter Tasks

@@ -81,13 +81,85 @@ def table_columns(conn, table):
     return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
+import re
+
+
+def parse_quantity(qty_str):
+    if not qty_str:
+        return None
+    s = str(qty_str).strip().lower().replace(" ", "")
+    m = re.match(r"^([\d.]+)([a-z]+)$", s)
+    if not m:
+        return None
+    try:
+        val = float(m.group(1))
+    except ValueError:
+        return None
+    unit = m.group(2)
+    if unit in ("kg", "kgs", "kilo", "kilos", "kilogram", "kilograms"):
+        return val * 1000, "g", "kg"
+    elif unit in ("g", "gm", "gms", "gram", "grams"):
+        return val, "g", "g"
+    elif unit in ("mg", "mgs", "milligram", "milligrams"):
+        return val / 1000, "g", "mg"
+    elif unit in ("l", "ltr", "liters", "litres", "liter", "litre"):
+        return val * 1000, "ml", "l"
+    elif unit in ("ml", "mls", "milliliter", "millilitres"):
+        return val, "ml", "ml"
+    return val, unit, unit
+
+
+def compute_total_quantity(quantities):
+    parsed = []
+    has_kg = False
+    for q in quantities:
+        p = parse_quantity(q)
+        if p:
+            val_base, base_unit, orig_unit = p
+            if orig_unit == "kg":
+                has_kg = True
+            parsed.append((val_base, base_unit, orig_unit))
+    if not parsed:
+        return ""
+    base_unit = parsed[0][1]
+    total_base = sum(p[0] for p in parsed if p[1] == base_unit)
+    if base_unit == "g":
+        if has_kg or total_base >= 1000:
+            val_kg = total_base / 1000
+            val_str = f"{val_kg:g}" if round(val_kg, 4) == val_kg else f"{val_kg:.2f}"
+            return f"{val_str} kg"
+        else:
+            val_str = f"{total_base:g}" if round(total_base, 4) == total_base else f"{total_base:.2f}"
+            return f"{val_str} g"
+    elif base_unit == "ml":
+        if total_base >= 1000:
+            val_l = total_base / 1000
+            val_str = f"{val_l:g}" if round(val_l, 4) == val_l else f"{val_l:.2f}"
+            return f"{val_str} L"
+        else:
+            val_str = f"{total_base:g}" if round(total_base, 4) == total_base else f"{total_base:.2f}"
+            return f"{val_str} mL"
+    else:
+        return f"{total_base:g} {base_unit}"
+
+
+def sync_project_total_quantity(conn, project_id):
+    rows = conn.execute("SELECT quantity FROM deliverables WHERE project_id = ?", (project_id,)).fetchall()
+    qtys = [r["quantity"] for r in rows if r["quantity"]]
+    total_str = compute_total_quantity(qtys)
+    conn.execute("UPDATE projects SET total_deliverable_quantity = ? WHERE id = ?", (total_str, project_id))
+    return total_str
+
+
 def register(app, *, get_db, json_response, request, get_current_user,
              is_full_access, get_now_iso, record_activity, clean_text,
              sanitize_projects_for_user=None):
 
     def deny_if_not_pm():
         user = get_current_user()
-        if user and not is_full_access(user):
+        if not user:
+            return json_response({"error": "Authentication required"}, status=401)
+        if not is_full_access(user):
             return json_response(
                 {"error": "Permission Denied: only PM and Admin can access the project charter."},
                 status=403)
@@ -199,12 +271,15 @@ def register(app, *, get_db, json_response, request, get_current_user,
         title = clean_text(data.get("title"))
         if not title:
             return json_response({"error": "Deliverable name is required"}, status=400)
+        qty = clean_text(data.get("quantity"))
+        if qty and not re.search(r"[a-zA-Z]", str(qty)):
+            return json_response({"error": "Quantity must include a unit (e.g. g, kg, gm, mg, L, ml)"}, status=400)
         disp_date = clean_text(data.get("dispatch_date")) or clean_text(data.get("due_date")) or None
         with get_db() as conn:
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
             cols = ["project_id", "title", "quantity", "quality", "dispatch_date", "due_date", "created_at"]
-            vals = [project_id, title, clean_text(data.get("quantity")), clean_text(data.get("quality")),
+            vals = [project_id, title, qty, clean_text(data.get("quality")),
                     disp_date, disp_date, get_now_iso()]
             if "updated_at" in table_columns(conn, "deliverables"):   # present in some older builds
                 cols.append("updated_at")
@@ -212,6 +287,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
             cur = conn.execute(
                 f"INSERT INTO deliverables ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
             record_activity(conn, project_id, "User", "Deliverable Added", f'Added deliverable "{title}"')
+            sync_project_total_quantity(conn, project_id)
             row = dict(conn.execute("SELECT * FROM deliverables WHERE id = ?", (cur.lastrowid,)).fetchone())
             if not row.get("dispatch_date"):
                 row["dispatch_date"] = row.get("due_date")
@@ -230,6 +306,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
             title = clean_text(data["title"]) if "title" in data else row["title"]
             if not title:
                 return json_response({"error": "Deliverable name is required"}, status=400)
+            qty = clean_text(data["quantity"]) if "quantity" in data else row["quantity"]
+            if qty and not re.search(r"[a-zA-Z]", str(qty)):
+                return json_response({"error": "Quantity must include a unit (e.g. g, kg, gm, mg, L, ml)"}, status=400)
             disp_date = row["dispatch_date"] if "dispatch_date" in row.keys() else row["due_date"]
             if "dispatch_date" in data:
                 disp_date = clean_text(data["dispatch_date"]) or None
@@ -239,9 +318,10 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 UPDATE deliverables SET title = ?, quantity = ?, quality = ?, dispatch_date = ?, due_date = ?
                 WHERE id = ?
             """, (title,
-                  clean_text(data["quantity"]) if "quantity" in data else row["quantity"],
+                  qty,
                   clean_text(data["quality"]) if "quality" in data else row["quality"],
                   disp_date, disp_date, deliverable_id))
+            sync_project_total_quantity(conn, row["project_id"])
             updated_row = dict(conn.execute(
                 "SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone())
             if not updated_row.get("dispatch_date"):
@@ -254,7 +334,10 @@ def register(app, *, get_db, json_response, request, get_current_user,
         if denied:
             return denied
         with get_db() as conn:
+            row = conn.execute("SELECT project_id FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
             conn.execute("DELETE FROM deliverables WHERE id = ?", (deliverable_id,))
+            if row:
+                sync_project_total_quantity(conn, row["project_id"])
             return json_response({"success": True})
 
     # --------------------------------------------------------------------- risks
@@ -392,6 +475,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
     # ----------------------------------------------------------------- dashboard
     @app.get("/api/dashboard")
     def get_dashboard():
+        denied = deny_if_not_pm()
+        if denied:
+            return denied
         today = date.today()
         with get_db() as conn:
             projects = conn.execute("SELECT * FROM projects ORDER BY name COLLATE NOCASE").fetchall()

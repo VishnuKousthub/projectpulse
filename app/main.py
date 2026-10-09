@@ -150,7 +150,7 @@ def is_progress_only(user=None):
 
 CHARTER_STRIP_FIELDS = {
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
-    "received_date", "delivery_date", "total_deliverable_quantity", "project_budget", "tech_pack"
+    "received_date", "delivery_date", "total_deliverable_quantity", "tech_pack"
 }
 
 def sanitize_project_for_user(proj, user=None):
@@ -377,11 +377,18 @@ def auth_register():
             else:
                 return json_response({"error": "An account with this email already exists"}, status=400)
 
+        requested_role = (data.get("role") or "assignee").strip().lower()
+        if requested_role in ("admin", "pm", "project manager", "manager"):
+            return json_response({"error": "Self-registration cannot create a PM or Admin account"}, status=403)
+        if requested_role not in ("assignee", "lead"):
+            requested_role = "assignee"
+        assigned_role = requested_role
+
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at, last_login)
-            VALUES (?, ?, ?, ?, 'pm', ?, ?, ?)
-        """, (username, email, pwd_hash, full_name, avatar_color, now_str, now_str))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (username, email, pwd_hash, full_name, assigned_role, avatar_color, now_str, now_str))
         user_id = cursor.lastrowid
 
         token = secrets.token_hex(32)
@@ -396,10 +403,10 @@ def auth_register():
             "username": username,
             "email": email,
             "full_name": full_name,
-            "role": "pm",
+            "role": assigned_role,
             "avatar_color": avatar_color,
-            "is_full_access": True,
-            "is_progress_only": False
+            "is_full_access": False,
+            "is_progress_only": True
         }
 
         bootstrap = get_bootstrap_payload(conn, user_id)
