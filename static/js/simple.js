@@ -558,18 +558,18 @@ Object.assign(app, {
       } else if (!view || view === '—' || view === '₹0') {
         valueHtml = notSetPill;
       } else if (variant === 'project-name') {
-        valueHtml = `<div class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white break-words leading-tight">${view}</div>`;
+        valueHtml = `<div class="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 break-words leading-tight">${view}</div>`;
       } else if (variant === 'quantity') {
-        valueHtml = `<div class="text-sm sm:text-base font-extrabold text-emerald-600 dark:text-emerald-400 break-words leading-tight">${view}</div>`;
+        valueHtml = `<div class="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 break-words leading-tight">${view}</div>`;
       } else if (variant === 'budget') {
-        valueHtml = `<div class="text-sm sm:text-base font-extrabold text-amber-600 dark:text-amber-400 break-words leading-tight">${view}</div>`;
+        valueHtml = `<div class="text-sm sm:text-base font-bold text-amber-600 dark:text-amber-400 break-words leading-tight">${view}</div>`;
       } else {
-        valueHtml = `<div class="text-xs font-semibold text-slate-800 dark:text-slate-100 break-words leading-snug">${view}</div>`;
+        valueHtml = `<div class="text-xs font-normal text-slate-700 dark:text-slate-300 break-words leading-snug">${view}</div>`;
       }
 
       return `
         <div class="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 border-l-4 ${borderLClass} shadow-2xs transition-all flex flex-col justify-between ${wide ? 'sm:col-span-2 lg:col-span-3' : ''}">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-0.5">${label}</div>
+          <div class="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 mb-0.5">${label}</div>
           <div class="min-h-[20px] flex items-center">${valueHtml}</div>
         </div>
       `;
