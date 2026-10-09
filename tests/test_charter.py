@@ -94,10 +94,10 @@ class TestCharter(unittest.TestCase):
         self.assertEqual(upd2["status"], "in_review")
         self.assertEqual(call(f"/api/projects/{self.pid}/risks", "POST", {"description": ""}, self.pm)[0], 400)
 
-    def test_05_restricted_roles_cannot_edit_but_can_read(self):
+    def test_05_restricted_roles_cannot_access_charter(self):
         self.assertEqual(call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "x"}, self.assignee)[0], 403)
         self.assertEqual(call(f"/api/projects/{self.pid}/risks", "POST", {"description": "x"}, self.assignee)[0], 403)
-        self.assertEqual(call(f"/api/projects/{self.pid}/charter", "GET", None, self.assignee)[0], 200)
+        self.assertEqual(call(f"/api/projects/{self.pid}/charter", "GET", None, self.assignee)[0], 403)
         self.assertEqual(call("/api/dashboard", "GET", None, self.assignee)[0], 200)
 
     def test_06_task_type_comes_from_tags(self):

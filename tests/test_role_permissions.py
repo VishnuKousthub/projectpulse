@@ -240,6 +240,58 @@ class TestRolePermissions(unittest.TestCase):
             status_d, _ = self._request(f"/api/tasks/{new_task_id}", method="DELETE", token=token)
             self.assertEqual(status_d, 200, f"{role_name} failed to delete task")
 
+    # 7. Test restricted roles cannot access charter and sensitive fields are stripped
+    def test_07_restricted_roles_cannot_access_charter_and_fields_stripped(self):
+        # 1. PM can access charter
+        status, data = self._request("/api/projects/1/charter", token=self.pm_token)
+        self.assertEqual(status, 200)
+        self.assertIn("project", data)
+
+        # 2. Lead & Assignee get 403 on charter endpoints
+        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
+            status_charter, _ = self._request("/api/projects/1/charter", token=token)
+            self.assertEqual(status_charter, 403, f"{role_name} should be blocked from GET charter")
+
+            status_deliv_get, _ = self._request("/api/projects/1/deliverables", token=token)
+            self.assertEqual(status_deliv_get, 403, f"{role_name} should be blocked from GET deliverables")
+
+            status_deliv_post, _ = self._request("/api/projects/1/deliverables", method="POST", token=token, body={"title": "Test Deliverable"})
+            self.assertEqual(status_deliv_post, 403, f"{role_name} should be blocked from POST deliverables")
+
+            status_risk_get, _ = self._request("/api/projects/1/risks", token=token)
+            self.assertEqual(status_risk_get, 403, f"{role_name} should be blocked from GET risks")
+
+            status_risk_post, _ = self._request("/api/projects/1/risks", method="POST", token=token, body={"description": "Test Risk"})
+            self.assertEqual(status_risk_post, 403, f"{role_name} should be blocked from POST risks")
+
+            # 3. Check charter fields stripped from GET /api/projects
+            status_projs, projs = self._request("/api/projects", token=token)
+            self.assertEqual(status_projs, 200)
+            self.assertTrue(len(projs) > 0)
+            for p in projs:
+                for f in ("project_code", "cas_no", "customer_name", "chemist_name",
+                          "project_manager", "received_date", "delivery_date",
+                          "total_deliverable_quantity", "project_budget", "tech_pack"):
+                    self.assertNotIn(f, p, f"{role_name} should not see {f} in /api/projects")
+
+            # 4. Check charter fields stripped from GET /api/projects/1
+            status_p1, p1 = self._request("/api/projects/1", token=token)
+            self.assertEqual(status_p1, 200)
+            for f in ("project_code", "cas_no", "customer_name", "chemist_name",
+                      "project_manager", "received_date", "delivery_date",
+                      "total_deliverable_quantity", "project_budget", "tech_pack"):
+                self.assertNotIn(f, p1, f"{role_name} should not see {f} in /api/projects/1")
+
+            # 5. Check Project Report omits charter and strips fields
+            status_rep, rep = self._request("/api/projects/1/report", token=token)
+            self.assertEqual(status_rep, 200)
+            self.assertNotIn("charter", rep, f"{role_name} should not receive charter in report")
+            rep_p = rep.get("project", {})
+            for f in ("project_code", "cas_no", "customer_name", "chemist_name",
+                      "project_manager", "received_date", "delivery_date",
+                      "total_deliverable_quantity", "project_budget", "tech_pack"):
+                self.assertNotIn(f, rep_p, f"{role_name} should not see {f} in report project")
+
 
 if __name__ == "__main__":
     unittest.main()

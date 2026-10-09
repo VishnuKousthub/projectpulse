@@ -144,6 +144,36 @@ def is_progress_only(user=None):
     role = get_user_role(user)
     return role in ("lead", "assignee", "member", "viewer")
 
+CHARTER_STRIP_FIELDS = {
+    "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
+    "received_date", "delivery_date", "total_deliverable_quantity", "project_budget", "tech_pack"
+}
+
+def sanitize_project_for_user(proj, user=None):
+    if not proj:
+        return proj
+    if user is None:
+        user = get_current_user()
+    if user and not is_full_access(user):
+        if isinstance(proj, dict):
+            return {k: v for k, v in proj.items() if k not in CHARTER_STRIP_FIELDS}
+        elif hasattr(proj, "keys"):
+            return {k: proj[k] for k in proj.keys() if k not in CHARTER_STRIP_FIELDS}
+    return dict(proj) if not isinstance(proj, dict) else proj
+
+def sanitize_projects_for_user(projects, user=None):
+    if projects is None:
+        return projects
+    if user is None:
+        user = get_current_user()
+    if user and not is_full_access(user):
+        if isinstance(projects, list):
+            return [sanitize_project_for_user(p, user) for p in projects]
+        return sanitize_project_for_user(projects, user)
+    if isinstance(projects, list):
+        return [dict(p) if not isinstance(p, dict) else p for p in projects]
+    return dict(projects) if not isinstance(projects, dict) else projects
+
 def get_all_projects_aggregated(conn):
     return conn.execute("""
         SELECT
@@ -230,9 +260,15 @@ def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
         t_dict["logged_hours_sum"] = safe_float(logged_hours_by_task.get(t["id"], 0.0))
         tasks.append(t_dict)
 
+    req_user = None
+    if user_id:
+        req_user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not req_user:
+        req_user = get_current_user()
+
     return {
-        "projects": projects,
-        "current_project": current_project,
+        "projects": sanitize_projects_for_user(projects, req_user),
+        "current_project": sanitize_project_for_user(current_project, req_user),
         "tasks": tasks
     }
 
@@ -437,7 +473,7 @@ def auth_logout():
 def get_projects():
     with get_db() as conn:
         projects = get_all_projects_aggregated(conn)
-        return json_response(projects)
+        return json_response(sanitize_projects_for_user(projects))
 
 @app.post("/api/projects")
 def create_project():
@@ -519,7 +555,7 @@ def get_project(project_id):
         sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date DESC", (project_id,)).fetchall()
         milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
         
-        result = dict(project)
+        result = sanitize_project_for_user(project)
         result["members"] = members
         result["sprints"] = sprints
         result["milestones"] = milestones
@@ -2647,27 +2683,24 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
     now_iso = get_now_iso()
     period_str = f"{first_start} to {last_due}"
 
-    return {
-        "project": {
-            "id": project["id"],
-            "name": project["name"],
-            "description": project["description"] or "",
-            "created_at": project["created_at"],
-            "updated_at": project["updated_at"],
-            "project_code": project["project_code"],
-            "cas_no": project["cas_no"],
-            "project_manager": project["project_manager"],
-            "received_date": project["received_date"],
-            "delivery_date": project["delivery_date"],
-            "tech_pack": project["tech_pack"],
-        },
-        "charter": {
-            "deliverables": [dict(r) for r in conn.execute(
-                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
-                (project_id,)).fetchall()],
-            "risks": [dict(r) for r in conn.execute(
-                "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()],
-        },
+    curr_u = current_user or get_current_user()
+    is_full = is_full_access(curr_u)
+
+    proj_dict = {
+        "id": project["id"],
+        "name": project["name"],
+        "description": project["description"] or "",
+        "created_at": project["created_at"],
+        "updated_at": project["updated_at"],
+    }
+    if is_full:
+        for k in ("project_code", "cas_no", "project_manager", "received_date", "delivery_date", "tech_pack",
+                  "customer_name", "chemist_name", "total_deliverable_quantity", "project_budget"):
+            if k in project.keys():
+                proj_dict[k] = project[k]
+
+    report_payload = {
+        "project": proj_dict,
         "metadata": {
             "generated_at": now_iso,
             "generated_by": gen_by,
@@ -2708,6 +2741,15 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
         },
         "activities": tasks_output
     }
+    if is_full:
+        report_payload["charter"] = {
+            "deliverables": [dict(r) for r in conn.execute(
+                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
+                (project_id,)).fetchall()],
+            "risks": [dict(r) for r in conn.execute(
+                "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()],
+        }
+    return report_payload
 
 def generate_cumulative_project_excel(report):
     import io
@@ -2981,6 +3023,10 @@ def export_cumulative_report_endpoint(project_id):
         response.set_header("Content-Disposition", f'attachment; filename="{filename}"')
         return excel_bytes
 
+@app.get("/api/projects/<project_id:int>/report")
+def get_report_endpoint_alias(project_id):
+    return get_cumulative_report_endpoint(project_id)
+
 # ==================== PROJECT CHARTER & DASHBOARD ====================
 
 charter_module.register(
@@ -2988,6 +3034,7 @@ charter_module.register(
     get_db=get_db, json_response=json_response, request=request,
     get_current_user=get_current_user, is_full_access=is_full_access,
     get_now_iso=get_now_iso, record_activity=record_activity, clean_text=clean_text,
+    sanitize_projects_for_user=sanitize_projects_for_user,
 )
 
 # ==================== USER MANAGEMENT (ADMIN ONLY) ====================
@@ -3022,7 +3069,7 @@ def export_project(project_id):
         export_data = {
             "version": "1.0",
             "exported_at": get_now_iso(),
-            "project": dict(project),
+            "project": sanitize_project_for_user(project),
             "members": members,
             "sprints": sprints,
             "milestones": milestones,

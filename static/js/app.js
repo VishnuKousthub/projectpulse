@@ -184,6 +184,9 @@ const app = {
     if (resAddBtn) resAddBtn.style.display = isProgress ? 'none' : '';
     if (resMapBtn) resMapBtn.style.display = isProgress ? 'none' : '';
 
+    const navCharter = document.getElementById('nav-charter');
+    if (navCharter) navCharter.style.display = isProgress ? 'none' : '';
+
     // Simple mode re-hides what this method may have just un-hidden (e.g. Reset Demo Data)
     this.applySimpleMode();
   },
@@ -498,6 +501,9 @@ const app = {
 
     if (viewName === 'users' && !isAdmin) {
       return this.switchView(this.getLandingView ? this.getLandingView() : 'dashboard');
+    }
+    if (viewName === 'charter' && !this.isFullAccess()) {
+      return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
     }
     if (viewName === 'dashboard' && isProgress) {
       return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
@@ -6132,12 +6138,14 @@ const app = {
         <!-- Right Panel: Project & Schedule Terms -->
         <div class="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 space-y-1 text-xs text-slate-700 dark:text-slate-300 shadow-2xs">
           <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/60 mb-1.5">
-            Project & Commercial Terms
+            ${this.isFullAccess() ? 'Project & Commercial Terms' : 'Project Schedule & Scope'}
           </div>
+          ${this.isFullAccess() ? `
           <div><span class="text-slate-500">Project Code:</span> <strong class="text-slate-900 dark:text-white font-mono">${this.escapeHtml(p.project_code || ('PRJ-2026-' + (p.id || '101')))}</strong></div>
           <div><span class="text-slate-500">Project Received:</span> ${this.fmtDate(p.received_date)}</div>
           <div><span class="text-slate-500">Project Delivery:</span> ${this.fmtDate(p.delivery_date)}</div>
           <div><span class="text-slate-500">Tech Pack:</span> ${this.escapeHtml(p.tech_pack || '—')}</div>
+          ` : ''}
           <div><span class="text-slate-500">Total Activities in Scope:</span> <strong>${k.total_activities || 0} Activities</strong></div>
           <div><span class="text-slate-500">Schedule Status:</span> ${k.overdue > 0 ? `<strong class="text-rose-600">${k.overdue} Overdue Activities</strong>` : '<strong class="text-emerald-600">On Track (All Deliverables Current)</strong>'}</div>
         </div>
@@ -6146,6 +6154,7 @@ const app = {
 
       <!-- ==================== CHARTER: DELIVERABLES & RISKS ==================== -->
       ${(() => {
+        if (!this.isFullAccess()) return '';
         const ch = data.charter || {};
         const dl = ch.deliverables || [];
         const rk = ch.risks || [];

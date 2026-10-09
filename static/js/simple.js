@@ -50,6 +50,11 @@ Object.assign(app, {
       navUsers.style.display = isAdmin ? '' : 'none';
     }
 
+    const navCharter = document.getElementById('nav-charter');
+    if (navCharter) {
+      navCharter.style.display = this.isFullAccess() ? '' : 'none';
+    }
+
     const navDashboard = document.getElementById('nav-dashboard');
     if (navDashboard) {
       navDashboard.style.display = isProgress ? 'none' : '';
@@ -148,14 +153,16 @@ Object.assign(app, {
         <td class="${UI.td} text-right text-rose-600 font-bold whitespace-nowrap">${t.days_late}d late</td>
       </tr>`).join('') : `<tr><td colspan="3" class="py-6 text-center text-xs text-slate-400">Nothing overdue 🎉</td></tr>`;
 
+    const canCharter = this.isFullAccess();
+
     const delivRows = d.deliverables.length ? d.deliverables.map(x => `
-      <tr class="border-t border-slate-100 dark:border-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer"
-          onclick="app.openProjectFromDashboard(${x.project_id}, 'charter')">
+      <tr class="border-t border-slate-100 dark:border-slate-700/60 ${canCharter ? 'hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer' : ''}"
+          ${canCharter ? `onclick="app.openProjectFromDashboard(${x.project_id}, 'charter')"` : ''}>
         <td class="${UI.td}"><div class="font-semibold text-slate-900 dark:text-white">${esc(x.title)}</div>
           <div class="text-[10px] text-slate-400 truncate max-w-[240px]">${esc(x.project_name)}${x.quantity ? ' · ' + esc(x.quantity) : ''}</div></td>
         <td class="${UI.td} text-right whitespace-nowrap">${this.fmtDate(x.due_date)}
           <div class="text-[10px] ${x.days_left !== null && x.days_left < 0 ? 'text-rose-500' : 'text-slate-400'}">${this.daysLabel(x.days_left)}</div></td>
-      </tr>`).join('') : `<tr><td colspan="2" class="py-6 text-center text-xs text-slate-400">No open deliverables. Add them on a project's Charter page.</td></tr>`;
+      </tr>`).join('') : `<tr><td colspan="2" class="py-6 text-center text-xs text-slate-400">No open deliverables.${canCharter ? " Add them on a project's Charter page." : ""}</td></tr>`;
 
     const maxOpen = Math.max(1, ...d.workload.map(w => w.open));
     const workload = d.workload.length ? d.workload.map(w => `
@@ -169,7 +176,8 @@ Object.assign(app, {
       </div>`).join('') : '<div class="py-4 text-xs text-slate-400 text-center">No open tasks.</div>';
 
     const risks = d.high_risks.length ? d.high_risks.map(r => `
-      <div class="py-2 border-t first:border-t-0 border-slate-100 dark:border-slate-700/60 cursor-pointer" onclick="app.openProjectFromDashboard(${r.project_id}, 'charter')">
+      <div class="py-2 border-t first:border-t-0 border-slate-100 dark:border-slate-700/60 ${canCharter ? 'cursor-pointer hover:opacity-80' : ''}"
+           ${canCharter ? `onclick="app.openProjectFromDashboard(${r.project_id}, 'charter')"` : ''}>
         <div class="text-xs font-semibold text-slate-900 dark:text-white"><span class="font-mono text-rose-600">${esc(r.risk_code || '')}</span> ${esc(r.description)}</div>
         <div class="text-[10px] text-slate-400 truncate">${esc(r.project_name)}${r.owner ? ' · ' + esc(r.owner) : ''}</div>
       </div>`).join('') : '<div class="py-4 text-xs text-slate-400 text-center">No open high-impact risks.</div>';

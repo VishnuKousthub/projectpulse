@@ -79,13 +79,14 @@ def table_columns(conn, table):
 
 
 def register(app, *, get_db, json_response, request, get_current_user,
-             is_full_access, get_now_iso, record_activity, clean_text):
+             is_full_access, get_now_iso, record_activity, clean_text,
+             sanitize_projects_for_user=None):
 
     def deny_if_not_pm():
         user = get_current_user()
         if user and not is_full_access(user):
             return json_response(
-                {"error": "Permission Denied: only PM and Admin can edit the project charter."},
+                {"error": "Permission Denied: only PM and Admin can access the project charter."},
                 status=403)
         return None
 
@@ -95,6 +96,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
     # ------------------------------------------------------------------ charter
     @app.get("/api/projects/<project_id:int>/charter")
     def get_charter(project_id):
+        denied = deny_if_not_pm()
+        if denied:
+            return denied
         with get_db() as conn:
             p = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
             if not p:
@@ -129,6 +133,19 @@ def register(app, *, get_db, json_response, request, get_current_user,
             })
 
     # -------------------------------------------------------------- deliverables
+    @app.get("/api/projects/<project_id:int>/deliverables")
+    def get_deliverables(project_id):
+        denied = deny_if_not_pm()
+        if denied:
+            return denied
+        with get_db() as conn:
+            if not project_exists(conn, project_id):
+                return json_response({"error": "Project not found"}, status=404)
+            rows = conn.execute(
+                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
+                (project_id,)).fetchall()
+            return json_response([dict(r) for r in rows])
+
     @app.post("/api/projects/<project_id:int>/deliverables")
     def add_deliverable(project_id):
         denied = deny_if_not_pm()
@@ -191,6 +208,17 @@ def register(app, *, get_db, json_response, request, get_current_user,
             return json_response({"success": True})
 
     # --------------------------------------------------------------------- risks
+    @app.get("/api/projects/<project_id:int>/risks")
+    def get_risks(project_id):
+        denied = deny_if_not_pm()
+        if denied:
+            return denied
+        with get_db() as conn:
+            if not project_exists(conn, project_id):
+                return json_response({"error": "Project not found"}, status=404)
+            rows = conn.execute("SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()
+            return json_response([dict(r) for r in rows])
+
     @app.post("/api/projects/<project_id:int>/risks")
     def add_risk(project_id):
         denied = deny_if_not_pm()
@@ -382,6 +410,16 @@ def register(app, *, get_db, json_response, request, get_current_user,
         } for r in risks if r["impact"] in ("high", "critical")]
 
         workload_rows = sorted(workload.values(), key=lambda w: (-w["open"], w["name"]))
+
+        user = get_current_user()
+        if sanitize_projects_for_user:
+            project_rows = sanitize_projects_for_user(project_rows, user)
+        elif user and not is_full_access(user):
+            for row in project_rows:
+                for k in ("project_code", "cas_no", "customer_name", "chemist_name",
+                          "project_manager", "received_date", "delivery_date",
+                          "total_deliverable_quantity", "project_budget", "tech_pack"):
+                    row.pop(k, None)
 
         return json_response({
             "today": today.isoformat(),
