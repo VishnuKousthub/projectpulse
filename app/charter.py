@@ -278,8 +278,6 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 JOIN projects p ON p.id = d.project_id
                 WHERE d.status != 'done'
             """).fetchall()
-            all_deliverables = conn.execute("SELECT * FROM deliverables").fetchall()
-            all_risks = conn.execute("SELECT * FROM project_risks").fetchall()
 
         by_project = {}
         for t in tasks:
@@ -366,30 +364,6 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
         overdue_list.sort(key=lambda x: -x["days_late"])
 
-        project_name_map = {p["id"]: p["name"] for p in projects}
-        key_tasks_list = []
-        for t in tasks:
-            st = (t["status"] or "todo").lower()
-            if st in ("done", "completed"):
-                continue
-            prio = str(t["priority"] or "").lower()
-            if prio in ("urgent", "high"):
-                dd = _d(t["due_date"])
-                key_tasks_list.append({
-                    "task_id": t["id"],
-                    "project_id": t["project_id"],
-                    "project_name": project_name_map.get(t["project_id"], "Unknown Project"),
-                    "title": t["title"],
-                    "priority": prio,
-                    "due_date": str(t["due_date"])[:10] if t["due_date"] else None,
-                    "progress_pct": int(t["progress_pct"] or 0),
-                    "assignee": clean_assignee(t["assignee_name"]),
-                    "_sort_date": dd or date(9999, 12, 31)
-                })
-        key_tasks_list.sort(key=lambda x: (x["_sort_date"], x["title"]))
-        for item in key_tasks_list:
-            item.pop("_sort_date", None)
-
         upcoming = []
         for d in deliverables:
             dd = _d(d["due_date"])
@@ -409,54 +383,6 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
         workload_rows = sorted(workload.values(), key=lambda w: (-w["open"], w["name"]))
 
-        deliv_by_status = {"backlog": 0, "todo": 0, "in_progress": 0, "in_review": 0, "done": 0}
-        deliv_total = len(all_deliverables)
-        deliv_overdue = 0
-        deliv_due_7 = 0
-        for d in all_deliverables:
-            st = normalize_item_status(d.get("status"))
-            deliv_by_status[st] += 1
-            if st != "done":
-                dd = _d(d.get("due_date"))
-                if dd is not None:
-                    if dd < today:
-                        deliv_overdue += 1
-                    elif 0 <= (dd - today).days <= 7:
-                        deliv_due_7 += 1
-
-        deliv_pct = round(deliv_by_status["done"] / deliv_total * 100) if deliv_total else 0
-        deliverable_summary = {
-            "total": deliv_total,
-            "by_status": deliv_by_status,
-            "overdue": deliv_overdue,
-            "due_next_7_days": deliv_due_7,
-            "delivered_pct": deliv_pct,
-        }
-
-        risk_by_status = {"backlog": 0, "todo": 0, "in_progress": 0, "in_review": 0, "done": 0}
-        risk_open_by_impact = {"high": 0, "medium": 0, "low": 0}
-        risk_total = len(all_risks)
-        risk_open_total = 0
-        for r in all_risks:
-            st = normalize_item_status(r.get("status"))
-            risk_by_status[st] += 1
-            if st != "done":
-                risk_open_total += 1
-                imp = str(r.get("impact") or "medium").strip().lower()
-                if imp in ("high", "critical"):
-                    risk_open_by_impact["high"] += 1
-                elif imp == "low":
-                    risk_open_by_impact["low"] += 1
-                else:
-                    risk_open_by_impact["medium"] += 1
-
-        risk_summary = {
-            "total": risk_total,
-            "by_status": risk_by_status,
-            "open_total": risk_open_total,
-            "open_by_impact": risk_open_by_impact,
-        }
-
         return json_response({
             "today": today.isoformat(),
             "kpis": {
@@ -467,10 +393,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 "open_high_risks": len(high_risks),
                 "total_tasks": tot_tasks,
             },
-            "deliverable_summary": deliverable_summary,
-            "risk_summary": risk_summary,
             "projects": project_rows,
-            "key_tasks": key_tasks_list[:8],
             "overdue": overdue_list[:10],
             "overdue_total": len(overdue_list),
             "deliverables": upcoming[:8],
