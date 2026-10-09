@@ -541,8 +541,8 @@ Object.assign(app, {
     const edit = this.state.charterEdit || {};   // {kind, id}
 
     // ---------- header block
-    const notSetPill = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-lg border border-dashed border-amber-400 dark:border-amber-500/70 bg-amber-50/70 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 text-base font-bold">Not set</span>`;
-    const charterInputClass = 'w-full px-3 py-2 text-base font-semibold rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition';
+    const notSetPill = `<span class="inline-flex items-center px-2 py-0.5 rounded-md border border-dashed border-amber-400 dark:border-amber-500/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-bold">Not set</span>`;
+    const charterInputClass = 'w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition';
 
     const field = (label, view, inputHtml, groupColor = 'blue', variant = 'standard', wide = false) => {
       const borderLClass = {
@@ -558,19 +558,19 @@ Object.assign(app, {
       } else if (!view || view === '—' || view === '₹0') {
         valueHtml = notSetPill;
       } else if (variant === 'project-name') {
-        valueHtml = `<div class="text-xl font-black text-slate-900 dark:text-white break-words tracking-tight">${view}</div>`;
+        valueHtml = `<div class="text-base font-bold text-slate-900 dark:text-white break-words leading-tight">${view}</div>`;
       } else if (variant === 'quantity') {
-        valueHtml = `<div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 break-words tracking-tight">${view}</div>`;
+        valueHtml = `<div class="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 break-words">${view}</div>`;
       } else if (variant === 'budget') {
-        valueHtml = `<div class="text-2xl font-black text-amber-600 dark:text-amber-400 break-words tracking-tight">${view}</div>`;
+        valueHtml = `<div class="text-lg font-extrabold text-amber-600 dark:text-amber-400 break-words">${view}</div>`;
       } else {
-        valueHtml = `<div class="text-lg font-extrabold text-slate-900 dark:text-white break-words">${view}</div>`;
+        valueHtml = `<div class="text-sm font-semibold text-slate-800 dark:text-slate-100 break-words">${view}</div>`;
       }
 
       return `
-        <div class="bg-slate-50 dark:bg-slate-800/60 p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 ${borderLClass} shadow-2xs transition-all flex flex-col justify-between ${wide ? 'sm:col-span-2 lg:col-span-3' : ''}">
-          <div class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">${label}</div>
-          <div class="min-h-[28px] flex items-center">${valueHtml}</div>
+        <div class="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 ${borderLClass} shadow-2xs transition-all flex flex-col justify-between ${wide ? 'sm:col-span-2 lg:col-span-3' : ''}">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1">${label}</div>
+          <div class="min-h-[24px] flex items-center">${valueHtml}</div>
         </div>
       `;
     };
@@ -580,23 +580,23 @@ Object.assign(app, {
 
     const chemistsList = this.state.chemists || [];
     const chemistSelect = `
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
         <select id="cf-chemist" class="${charterInputClass} flex-1" onchange="if(this.value==='__NEW__'){app.promptNewChemist();}">
           <option value="">Select Chemist…</option>
           ${chemistsList.map(ch => `<option value="${esc(ch.name)}" ${ch.name === p.chemist_name ? 'selected' : ''}>${esc(ch.name)}</option>`).join('')}
           <option value="__NEW__" class="font-bold text-blue-600 dark:text-blue-400">+ Add new chemist…</option>
         </select>
-        <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !h-10 !px-3 text-sm font-bold" title="Add new chemist">+</button>
+        <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !h-7 !px-2 text-xs font-bold" title="Add new chemist">+</button>
       </div>`;
 
     const header = `
-      <div class="${UI.card} p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div class="${UI.card} p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Project Charter</h2>
-            <div class="flex items-center gap-2 mt-1.5">
-              <span class="w-1 h-3.5 bg-blue-600 dark:bg-blue-400 rounded-full inline-block"></span>
-              <span class="text-sm font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400">Project Scope</span>
+            <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">Project Charter</h2>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <span class="w-1 h-3 bg-blue-600 dark:bg-blue-400 rounded-full inline-block"></span>
+              <span class="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Project Scope</span>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -607,7 +607,7 @@ Object.assign(app, {
               : `<button onclick="app.editCharterHeader()" class="${UI.btn} ${UI.btnPrimary}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Edit</button>`) : ''}
           </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           ${field('Project name', esc(p.name), inp('cf-name', p.name), 'blue', 'project-name')}
           ${field('Project code', esc(p.project_code), inp('cf-code', p.project_code), 'blue', 'standard')}
           ${field('CAS no.', esc(p.cas_no), inp('cf-cas', p.cas_no), 'blue', 'standard')}
