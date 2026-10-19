@@ -1342,18 +1342,16 @@ const app = {
       }
 
     } else if (scale === 'week') {
-      // WEEKLY SCALE (Synchronized with exact Monday start & midpoint Thursday month grouping)
+      // WEEKLY SCALE (Starts Week 1 directly from the first task start date)
       colMinWidth = 180;
-      const dayOfWeek = taskMin.getDay();
-      const mondayOffset = (dayOfWeek + 6) % 7; // 0 for Mon, 1 for Tue, ..., 6 for Sun
-      const projectStartMonday = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate() - mondayOffset);
+      const projectStartDate = new Date(taskMin.getFullYear(), taskMin.getMonth(), taskMin.getDate());
       
-      // Total weeks needed to span from projectStartMonday through taskMax
-      const totalDays = Math.max(1, Math.ceil((taskMax.getTime() - projectStartMonday.getTime()) / 86400000));
+      // Total weeks needed to span from projectStartDate through taskMax
+      const totalDays = Math.max(1, Math.ceil((taskMax.getTime() - projectStartDate.getTime()) / 86400000) + 1);
       const totalProjectWeeks = Math.max(1, Math.ceil(totalDays / 7));
 
       // Apply offset navigation (shifts by 1 week per click)
-      timelineMin = new Date(projectStartMonday.getTime() + (offset * 7 * 86400000));
+      timelineMin = new Date(projectStartDate.getTime() + (offset * 7 * 86400000));
       const weeksCount = totalProjectWeeks;
       totalCols = weeksCount;
       timelineMax = new Date(timelineMin.getTime() + (weeksCount * 7 * 86400000));
@@ -1364,15 +1362,15 @@ const app = {
         rangeLabel.textContent = `Project Timeline • ${totalProjectWeeks} Week${totalProjectWeeks > 1 ? 's' : ''} (Week 1 to Week ${totalProjectWeeks}) • ${startFormatted} to ${endFormatted}`;
       }
 
-      // Group weeks by their midpoint Thursday month for 100% calendar accuracy
+      // Group weeks by their midpoint date for month grouping
       let curMonthKey = null;
       let curMonthSpan = 0;
       let curMonthName = '';
 
       for (let w = 0; w < weeksCount; w++) {
         const wStart = new Date(timelineMin.getTime() + (w * 7 * 86400000));
-        const wEnd = new Date(wStart.getTime() + (6 * 86400000)); // Sunday
-        const midThursday = new Date(wStart.getTime() + (3 * 86400000)); // Thursday defines majority month
+        const wEnd = new Date(wStart.getTime() + (6 * 86400000));
+        const midPoint = new Date(wStart.getTime() + (3 * 86400000));
         const isCurrentWeek = now >= wStart && now < new Date(wStart.getTime() + (7 * 86400000));
         const projectWeekNum = w + 1 + offset;
 
@@ -1384,13 +1382,13 @@ const app = {
           </div>
         `);
 
-        const mKey = `${midThursday.getFullYear()}-${midThursday.getMonth()}`;
+        const mKey = `${midPoint.getFullYear()}-${midPoint.getMonth()}`;
         if (mKey !== curMonthKey) {
           if (curMonthKey !== null && curMonthSpan > 0) {
             topHeaders.push(`<div class="border-r border-slate-200 dark:border-slate-700 text-center text-xs font-bold text-slate-700 dark:text-slate-200 py-1.5 bg-slate-100 dark:bg-slate-800 truncate" style="width: ${curMonthSpan * colMinWidth}px; min-width: ${curMonthSpan * colMinWidth}px; max-width: ${curMonthSpan * colMinWidth}px; flex-shrink: 0;">${curMonthName}</div>`);
           }
           curMonthKey = mKey;
-          curMonthName = midThursday.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          curMonthName = midPoint.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
           curMonthSpan = 1;
         } else {
           curMonthSpan++;
@@ -1480,7 +1478,8 @@ const app = {
 
     const totalSpanMs = Math.max(timelineMax - timelineMin, 86400000);
     const timelineWidthPx = totalCols * colMinWidth;
-    const totalRowWidthPx = 540 + timelineWidthPx;
+    const leftBlockWidth = 440;
+    const totalRowWidthPx = leftBlockWidth + timelineWidthPx;
 
     // 3. Render Task Rows (strictly sorted by sequential process order)
     const sortedTasks = this.getSortedTasks();
@@ -1507,12 +1506,12 @@ const app = {
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]"
           style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px; flex-shrink: 0;">
           
-          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px, Sticky left-0, z-index: 30) -->
+          <!-- Left Task Info & Direct Editable Date Column (Fixed: ${leftBlockWidth}px, Sticky left-0, z-index: 30) -->
           <div class="gantt-sticky-left flex items-center border-r border-slate-200 dark:border-slate-700/80 transition"
-            style="position: sticky; left: 0; z-index: 30; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
+            style="position: sticky; left: 0; z-index: 30; width: ${leftBlockWidth}px; min-width: ${leftBlockWidth}px; max-width: ${leftBlockWidth}px; flex-shrink: 0;">
             
-            <!-- Column 1: Title & Assignee info (260px) -->
-            <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
+            <!-- Column 1: Title & Assignee info (210px) -->
+            <div class="w-[210px] min-w-[210px] max-w-[210px] flex-shrink-0 pl-2.5 pr-1.5 min-w-0 flex flex-col justify-center">
               <div class="flex items-center gap-1 min-w-0">
                 ${!isProgress ? `
                   <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
@@ -1547,61 +1546,61 @@ const app = {
               </div>
             </div>
 
-            <!-- Column 2: Start Date Picker (115px) -->
-            <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 flex items-center justify-center">
+            <!-- Column 2: Start Date Picker (95px) -->
+            <div class="w-[95px] min-w-[95px] max-w-[95px] flex-shrink-0 flex items-center justify-center">
               ${t.start_date ? `
-                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                <div class="w-[88px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[10.5px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.start_date}"
                     onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)"
                     title="Edit Start Date"
-                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                    class="w-full bg-transparent border-none p-0 text-[10.5px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
                   <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'start_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear Start Date">
                     <i data-lucide="x" class="w-3 h-3"></i>
                   </button>
                 </div>
               ` : `
-                <div class="relative w-[105px] h-7 group/gstart">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
-                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
-                    <span class="truncate">Not Declared</span>
+                <div class="relative w-[88px] h-7 group/gstart">
+                  <div class="w-full h-full text-[9.5px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-0.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                    <i data-lucide="calendar-off" class="w-2.5 h-2.5 text-amber-500 flex-shrink-0"></i>
+                    <span class="truncate">Not Set</span>
                   </div>
                   <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)" title="Click to set start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                 </div>
               `}
             </div>
 
-            <!-- Date Arrow Separator (25px) -->
-            <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
+            <!-- Date Arrow Separator (15px) -->
+            <div class="w-[15px] min-w-[15px] max-w-[15px] flex-shrink-0 text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
 
-            <!-- Column 3: End Date Picker (110px) -->
-            <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex items-center justify-center">
+            <!-- Column 3: End Date Picker (95px) -->
+            <div class="w-[95px] min-w-[95px] max-w-[95px] flex-shrink-0 flex items-center justify-center">
               ${t.due_date ? `
-                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                <div class="w-[88px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[10.5px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                   <input type="date" value="${t.due_date}"
                     onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
                     title="Edit End / Due Date"
-                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                    class="w-full bg-transparent border-none p-0 text-[10.5px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
                   <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
                     <i data-lucide="x" class="w-3 h-3"></i>
                   </button>
                 </div>
               ` : `
-                <div class="relative w-[105px] h-7 group/gdue">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
-                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
-                    <span class="truncate">Not Declared</span>
+                <div class="relative w-[88px] h-7 group/gdue">
+                  <div class="w-full h-full text-[9.5px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-0.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                    <i data-lucide="calendar-off" class="w-2.5 h-2.5 text-amber-500 flex-shrink-0"></i>
+                    <span class="truncate">Not Set</span>
                   </div>
                   <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                 </div>
               `}
             </div>
 
-            <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
-            <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
+            <!-- Column 4: Dedicated Direct Delete Action Column (25px) -->
+            <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 flex items-center justify-center pr-1">
               ${!isProgress ? `
                 <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
                   title="Delete Activity"
-                  class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
+                  class="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
                   <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
                 </button>
               ` : ''}
@@ -1655,7 +1654,7 @@ const app = {
         <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2"
           style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px; flex-shrink: 0;">
           <div class="gantt-milestone-sticky-left pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700"
-            style="position: sticky; left: 0; z-index: 30; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
+            style="position: sticky; left: 0; z-index: 30; width: ${leftBlockWidth}px; min-width: ${leftBlockWidth}px; max-width: ${leftBlockWidth}px; flex-shrink: 0;">
             <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
             <span>Project Milestones</span>
           </div>
@@ -1688,9 +1687,9 @@ const app = {
           <div class="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
             style="display: flex; align-items: center; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
             <div class="gantt-header-sticky-left py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700"
-              style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
-              <span>Process Activities &amp; Schedule</span>
-              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
+              style="position: sticky; left: 0; z-index: 50; width: ${leftBlockWidth}px; min-width: ${leftBlockWidth}px; max-width: ${leftBlockWidth}px; flex-shrink: 0;">
+              <span>Activities &amp; Schedule</span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">overview</span>
             </div>
             <div class="flex bg-slate-100 dark:bg-slate-800"
               style="width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; flex-shrink: 0;">
@@ -1701,12 +1700,12 @@ const app = {
           <div class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850"
             style="display: flex; align-items: center; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
             <div class="gantt-header-sticky-left py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider"
-              style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
-              <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
-              <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 text-center">Start Date</div>
+              style="position: sticky; left: 0; z-index: 50; width: ${leftBlockWidth}px; min-width: ${leftBlockWidth}px; max-width: ${leftBlockWidth}px; flex-shrink: 0;">
+              <div class="w-[210px] min-w-[210px] max-w-[210px] flex-shrink-0 pl-3 pr-1.5">Activity / Owner</div>
+              <div class="w-[95px] min-w-[95px] max-w-[95px] flex-shrink-0 text-center">Start Date</div>
+              <div class="w-[15px] min-w-[15px] max-w-[15px] flex-shrink-0 text-center"></div>
+              <div class="w-[95px] min-w-[95px] max-w-[95px] flex-shrink-0 text-center">End Date</div>
               <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center"></div>
-              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center">End Date</div>
-              <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 text-center"></div>
             </div>
             <div class="flex bg-slate-50 dark:bg-slate-850"
               style="width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; flex-shrink: 0;">
@@ -1727,10 +1726,7 @@ const app = {
 
     // Handle scroll: scroll once on initial open or scale change, otherwise preserve user's scroll position
     if (shouldInitialScroll) {
-      const targetDate = (taskMin && !isNaN(taskMin.getTime())) ? taskMin : now;
-      const offsetMs = Math.max(0, targetDate - timelineMin);
-      const targetPx = (offsetMs / totalSpanMs) * timelineWidthPx;
-      container.scrollLeft = Math.max(0, Math.round(targetPx - 60));
+      container.scrollLeft = 0;
       container.scrollTop = 0;
     } else {
       container.scrollLeft = prevScrollLeft;
