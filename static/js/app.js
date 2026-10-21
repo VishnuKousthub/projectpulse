@@ -1261,26 +1261,45 @@ const app = {
     const offset = this.state.ganttOffset || 0;
     const now = new Date();
 
-    // 1. Calculate base bounds from project tasks (First activity start to last activity end)
+    // 1. Calculate base bounds from project tasks
+    // Timeline calendar view starts strictly from the start date of the first task
+    const sortedTasks = this.getSortedTasks();
     let taskMin = null;
     let taskMax = null;
 
-    this.state.tasks.forEach(t => {
-      if (t.start_date) {
-        const s = new Date(t.start_date + 'T00:00:00');
-        if (!taskMin || s < taskMin) taskMin = s;
-        if (!taskMax || s > taskMax) taskMax = s;
+    // Find the first task in sequential process order that has a declared start date
+    const firstTaskWithStart = sortedTasks.find(t => t.start_date);
+    if (firstTaskWithStart) {
+      taskMin = new Date(firstTaskWithStart.start_date + 'T00:00:00');
+    } else {
+      // Fallback if no task has start_date: check for first task with due_date
+      const firstTaskWithDue = sortedTasks.find(t => t.due_date);
+      if (firstTaskWithDue) {
+        taskMin = new Date(firstTaskWithDue.due_date + 'T00:00:00');
+      } else {
+        taskMin = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       }
+    }
+
+    // Determine taskMax from the latest date among all tasks and milestones
+    sortedTasks.forEach(t => {
       if (t.due_date) {
         const d = new Date(t.due_date + 'T23:59:59');
-        if (!taskMin || d < taskMin) taskMin = d;
         if (!taskMax || d > taskMax) taskMax = d;
+      }
+      if (t.start_date) {
+        const s = new Date(t.start_date + 'T23:59:59');
+        if (!taskMax || s > taskMax) taskMax = s;
       }
     });
 
-    if (!taskMin) {
-      taskMin = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    }
+    (this.state.currentProject?.milestones || []).forEach(m => {
+      if (m.due_date) {
+        const md = new Date(m.due_date + 'T23:59:59');
+        if (!taskMax || md > taskMax) taskMax = md;
+      }
+    });
+
     if (!taskMax || taskMax < taskMin) {
       taskMax = new Date(taskMin.getTime() + (28 * 86400000));
     }
@@ -1481,18 +1500,26 @@ const app = {
     const totalRowWidthPx = 540 + timelineWidthPx;
 
     // 3. Render Task Rows (strictly sorted by sequential process order)
-    const sortedTasks = this.getSortedTasks();
     const isProgress = this.isProgressOnly();
 
     const rowsHtml = sortedTasks.map((t, idx) => {
-      const taskStart = t.start_date ? new Date(t.start_date + 'T00:00:00') : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const taskDue = t.due_date ? new Date(t.due_date + 'T23:59:59') : new Date(taskStart.getTime() + 86400000);
+      const taskStart = t.start_date 
+        ? new Date(t.start_date + 'T00:00:00') 
+        : (t.due_date ? new Date(t.due_date + 'T00:00:00') : new Date(timelineMin.getTime()));
+      const taskDue = t.due_date 
+        ? new Date(t.due_date + 'T23:59:59') 
+        : (t.start_date ? new Date(t.start_date + 'T23:59:59') : new Date(taskStart.getTime() + 86400000));
 
-      const startOffsetMs = Math.max(0, taskStart - timelineMin);
-      const durationMs = Math.max(86400000, taskDue - taskStart);
+      const tStartMs = taskStart.getTime();
+      const tDueMs = Math.max(taskDue.getTime(), tStartMs + 86400000);
+      const tMinMs = timelineMin.getTime();
+      const tMaxMs = timelineMax.getTime();
 
-      const leftPct = Math.min(100, Math.max(0, (startOffsetMs / totalSpanMs) * 100));
-      const widthPct = Math.max(1.5, Math.min(100 - leftPct, (durationMs / totalSpanMs) * 100));
+      const visibleStartMs = Math.max(tMinMs, Math.min(tMaxMs, tStartMs));
+      const visibleEndMs = Math.max(visibleStartMs, Math.min(tMaxMs, tDueMs));
+
+      const leftPct = Math.min(100, Math.max(0, ((visibleStartMs - tMinMs) / totalSpanMs) * 100));
+      const widthPct = Math.max(1.5, Math.min(100 - leftPct, ((visibleEndMs - visibleStartMs) / totalSpanMs) * 100));
 
       const statusStyle = this.getGanttStatusStyle(t.status);
       const barColor = statusStyle.barClass;
