@@ -1200,14 +1200,28 @@ Object.assign(app, {
                         ${u.last_login ? this.fmtDate(u.last_login) : '<span class="italic text-slate-400">Never</span>'}
                       </td>
                       <td class="${UI.td} text-right">
-                        <button
-                          type="button"
-                          onclick="app.promptResetPassword(${u.id}, '${esc(u.username)}')"
-                          class="${UI.btn} ${UI.btnGhost} !h-7 !px-2.5 !text-[11px]"
-                          title="Reset temporary password">
-                          <i data-lucide="key" class="w-3 h-3 text-slate-500"></i>
-                          <span>Reset password</span>
-                        </button>
+                        <div class="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onclick="app.promptResetPassword(${u.id}, '${esc(u.username)}')"
+                            class="${UI.btn} ${UI.btnGhost} !h-7 !px-2.5 !text-[11px]"
+                            title="Reset temporary password">
+                            <i data-lucide="key" class="w-3 h-3 text-slate-500"></i>
+                            <span>Reset password</span>
+                          </button>
+                          ${!isSelf ? `
+                            <button
+                              type="button"
+                              onclick="app.confirmDeleteUser(${u.id}, '${esc(u.username)}')"
+                              class="${UI.btn} !h-7 !px-2.5 !text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 transition"
+                              title="Delete user account">
+                              <i data-lucide="trash-2" class="w-3 h-3 text-rose-500"></i>
+                              <span>Delete</span>
+                            </button>
+                          ` : `
+                            <span class="text-[10px] text-slate-400 italic px-2 select-none">You (Admin)</span>
+                          `}
+                        </div>
                       </td>
                     </tr>
                   `;
@@ -1326,6 +1340,22 @@ Object.assign(app, {
       this.showToast(`Password reset for @${username}. All existing sessions were invalidated.`, 'success');
     } catch (e) {
       this.showToast(e.message || 'Failed to reset password', 'error');
+    }
+  },
+
+  async confirmDeleteUser(userId, username) {
+    if (!confirm(`Are you sure you want to permanently delete user account @${username}?\n\nThis will remove their login access, terminate any active sessions, and delete their account profile.\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await this.api(`/api/users/${userId}`, {
+        method: 'DELETE'
+      });
+      this.showToast(`User account @${username} deleted permanently`, 'success');
+      await this.renderUsers();
+    } catch (e) {
+      this.showToast(e.message || 'Failed to delete user', 'error');
     }
   },
 });

@@ -194,3 +194,43 @@ def register(app, *, get_db, json_response, request, get_current_user,
             conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
 
             return json_response({"success": True, "message": "Password reset successfully"})
+
+    @app.delete("/api/users/<user_id:int>")
+    @app.post("/api/users/<user_id:int>/delete")
+    def delete_user(user_id):
+        current_admin, err = require_admin()
+        if err:
+            return err
+
+        with get_db() as conn:
+            target = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not target:
+                return json_response({"error": "User not found"}, status=404)
+
+            current_admin_id = current_admin["user_id"]
+            target_id = target["id"]
+            current_target_role = (target["role"] or "").lower()
+            current_target_active = target["is_active"] if "is_active" in target.keys() and target["is_active"] is not None else 1
+
+            # Safeguard 1: Administrator cannot delete their own account
+            if target_id == current_admin_id:
+                return json_response({"error": "Administrators cannot delete their own account"}, status=400)
+
+            # Safeguard 2: Cannot delete the last active administrator
+            if current_target_role == "admin" and current_target_active == 1:
+                active_admins_count = conn.execute("""
+                    SELECT COUNT(*) AS count FROM users
+                    WHERE LOWER(role) = 'admin' AND COALESCE(is_active, 1) = 1
+                """).fetchone()["count"]
+                if active_admins_count <= 1:
+                    return json_response({"error": "Cannot delete the last remaining active administrator"}, status=400)
+
+            # Terminate and delete sessions immediately
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            # Delete user account permanently
+            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+            return json_response({
+                "success": True,
+                "message": f"User account @{target['username']} has been deleted permanently"
+            })

@@ -320,6 +320,68 @@ class TestUsersManagement(unittest.TestCase):
             row = conn.execute("SELECT role FROM users WHERE id = ?", (vishnu_id,)).fetchone()
             self.assertEqual(row["role"], "lead")
 
+    def test_09_delete_user_permissions_and_safeguards(self):
+        # 1. Create a disposable user to delete
+        s, created = self._request("/api/users", method="POST", token=self.admin_token, body={
+            "full_name": "Delete Target User",
+            "username": "delete_target",
+            "email": "delete_target@company.internal",
+            "password": "validPassword123",
+            "role": "assignee"
+        })
+        self.assertEqual(s, 201)
+        user_id = created["id"]
+
+        # Log in as this user to create an active session
+        user_token = self._login("delete_target", "validPassword123")
+        self.assertTrue(bool(user_token))
+
+        # 2. Non-admin roles cannot delete users
+        for token in (self.pm_token, self.lead_token, self.assignee_token):
+            s_err, _ = self._request(f"/api/users/{user_id}", method="DELETE", token=token)
+            self.assertEqual(s_err, 403)
+
+        s_unauth, _ = self._request(f"/api/users/{user_id}", method="DELETE")
+        self.assertEqual(s_unauth, 401)
+
+        # 3. Admin cannot delete themselves
+        with get_db() as conn:
+            admin_user = conn.execute("SELECT id FROM users WHERE LOWER(username) = 'admin'").fetchone()
+            admin_id = admin_user["id"]
+        s_self, res_self = self._request(f"/api/users/{admin_id}", method="DELETE", token=self.admin_token)
+        self.assertEqual(s_self, 400)
+        self.assertIn("cannot delete their own account", res_self.get("error", "").lower())
+
+        # 4. Admin cannot delete the last active administrator
+        # Ensure only 1 active admin exists
+        with get_db() as conn:
+            conn.execute("UPDATE users SET is_active = 0 WHERE LOWER(role) = 'admin' AND id != ?", (admin_id,))
+        s_last_admin, res_last = self._request(f"/api/users/{admin_id}", method="DELETE", token=self.admin_token)
+        self.assertEqual(s_last_admin, 400)
+
+        # 5. Non-existent user returns 404
+        s_404, _ = self._request("/api/users/999999", method="DELETE", token=self.admin_token)
+        self.assertEqual(s_404, 404)
+
+        # 6. Admin can successfully delete user
+        s_del, res_del = self._request(f"/api/users/{user_id}", method="DELETE", token=self.admin_token)
+        self.assertEqual(s_del, 200)
+        self.assertTrue(res_del.get("success"))
+
+        # 7. User is gone from database and GET /api/users
+        with get_db() as conn:
+            check_user = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            self.assertIsNone(check_user)
+            check_session = conn.execute("SELECT token FROM sessions WHERE user_id = ?", (user_id,)).fetchone()
+            self.assertIsNone(check_session)
+
+        # 8. User cannot log in anymore
+        s_login, _ = self._request("/api/auth/login", method="POST", body={
+            "username": "delete_target",
+            "password": "validPassword123"
+        })
+        self.assertEqual(s_login, 401)
+
 
 if __name__ == "__main__":
     unittest.main()
