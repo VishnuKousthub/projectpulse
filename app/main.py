@@ -4510,6 +4510,15 @@ def main():
     print(f"============================================================")
     try:
         from waitress import serve
+        if port != 8000:
+            import threading
+            def run_port_8000():
+                try:
+                    serve(app, host=host, port=8000, threads=4)
+                except Exception as ex:
+                    print(f"Dual-port binding on 8000 skipped: {ex}")
+            threading.Thread(target=run_port_8000, daemon=True).start()
+            print(f"  -> Dual local access also active on: http://localhost:8000")
         serve(app, host=host, port=port, threads=8)
     except ImportError:
         run(app, host=host, port=port, reloader=False)
