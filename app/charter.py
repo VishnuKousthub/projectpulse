@@ -11,6 +11,7 @@ from app.database import get_attachments_dir
 
 CHARTER_FIELDS = (
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
+    "project_owner", "task_owner", "po_value", "project_scope",
     "received_date", "delivery_date", "total_deliverable_quantity", "project_budget", "tech_pack"
 )
 
@@ -205,9 +206,17 @@ def register(app, *, get_db, json_response, request, get_current_user,
                     d["dispatch_date"] = d.get("due_date")
                 deliv_list.append(d)
 
+            p_dict = dict(p)
+            owner_val = p_dict.get("project_owner") or p_dict.get("project_manager")
+            p_dict["project_owner"] = owner_val
+            p_dict["project_manager"] = owner_val
+            scope_val = p_dict.get("project_scope") or p_dict.get("description")
+            p_dict["project_scope"] = scope_val
+            p_dict["description"] = scope_val
+
             return json_response({
-                "project": {k: p[k] for k in ("id", "name", "description", "color") if k in p.keys()} |
-                           {f: (p[f] if f in p.keys() else None) for f in CHARTER_FIELDS},
+                "project": {k: p_dict[k] for k in ("id", "name", "description", "color") if k in p_dict} |
+                           {f: (p_dict.get(f)) for f in CHARTER_FIELDS},
                 "deliverables": deliv_list,
                 "risks": [dict(r) for r in risks],
                 "milestones": milestones,

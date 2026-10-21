@@ -150,6 +150,7 @@ def is_progress_only(user=None):
 
 CHARTER_STRIP_FIELDS = {
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
+    "project_owner", "task_owner", "po_value", "project_scope",
     "received_date", "delivery_date", "total_deliverable_quantity", "tech_pack"
 }
 
@@ -625,6 +626,22 @@ def update_project(project_id):
                 else:
                     conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?",
                                  (clean_text(val) or None, project_id))
+
+        # Keep project_owner and project_manager synchronized
+        if "project_owner" in data:
+            po_val = clean_text(data["project_owner"]) or None
+            conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (po_val, po_val, project_id))
+        elif "project_manager" in data:
+            pm_val = clean_text(data["project_manager"]) or None
+            conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (pm_val, pm_val, project_id))
+
+        # Keep project_scope and description synchronized
+        if "project_scope" in data:
+            ps_val = clean_text(data["project_scope"]) or None
+            conn.execute("UPDATE projects SET project_scope = ?, description = ? WHERE id = ?", (ps_val, ps_val, project_id))
+        elif "description" in data:
+            ds_val = clean_text(data["description"]) or None
+            conn.execute("UPDATE projects SET project_scope = ?, description = ? WHERE id = ?", (ds_val, ds_val, project_id))
 
         record_activity(conn, project_id, "User", "Project Updated", "Updated project settings")
         updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
@@ -2856,7 +2873,8 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
         "updated_at": project["updated_at"],
     }
     if is_full:
-        for k in ("project_code", "cas_no", "project_manager", "received_date", "delivery_date", "tech_pack",
+        for k in ("project_code", "cas_no", "project_manager", "project_owner", "task_owner", "po_value", "project_scope",
+                  "received_date", "delivery_date", "tech_pack",
                   "customer_name", "chemist_name", "total_deliverable_quantity", "project_budget"):
             if k in project.keys():
                 proj_dict[k] = project[k]

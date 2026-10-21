@@ -6758,10 +6758,12 @@ const app = {
           <div class="text-xs font-black text-slate-900 dark:text-white truncate pb-0.5">
             ${this.escapeHtml(p.name || 'Project')}
           </div>
-          <div><span class="text-slate-500">Project Manager:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.project_manager || lead.name || '—')}</strong></div>
-          ${(!p.project_manager && lead.email) ? `<div><span class="text-slate-500">Email:</span> <span class="font-mono">${this.escapeHtml(lead.email)}</span></div>` : ''}
+          <div><span class="text-slate-500">Project Owner:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.project_owner || p.project_manager || lead.name || '—')}</strong></div>
+          ${(p.task_owner) ? `<div><span class="text-slate-500">Task Owner:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.task_owner)}</strong></div>` : ''}
+          ${(!p.project_owner && !p.project_manager && lead.email) ? `<div><span class="text-slate-500">Email:</span> <span class="font-mono">${this.escapeHtml(lead.email)}</span></div>` : ''}
           <div><span class="text-slate-500">CAS No.:</span> ${this.escapeHtml(p.cas_no || '—')}</div>
-          <div><span class="text-slate-500">Project Scope:</span> ${this.escapeHtml(p.description || '—')}</div>
+          ${(p.po_value) ? `<div><span class="text-slate-500">PO Value:</span> <strong class="text-amber-600 dark:text-amber-400 font-bold">${!isNaN(Number(p.po_value)) ? this.formatINR(p.po_value) : this.escapeHtml(p.po_value)}</strong></div>` : ''}
+          <div><span class="text-slate-500">Project Scope:</span> ${this.escapeHtml(p.project_scope || p.description || '—')}</div>
         </div>
 
         <!-- Right Panel: Project & Schedule Terms -->

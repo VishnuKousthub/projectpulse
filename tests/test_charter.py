@@ -312,6 +312,32 @@ class TestCharter(unittest.TestCase):
         _, c_after = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         self.assertEqual(c_after["project"]["total_deliverable_quantity"], "104.25 kg")
 
+    def test_14_project_owner_task_owner_po_value_and_scope(self):
+        # Update using project_owner, task_owner, po_value, and project_scope
+        code, _ = call(f"/api/projects/{self.pid}", "PUT", {
+            "project_owner": "Dr. Sarah Connor",
+            "task_owner": "John Doe",
+            "po_value": "5000000",
+            "project_scope": "Full synthesis of AZADOL batch with strict purity >= 99.5% and 3 staged delivery milestones."
+        }, self.pm)
+        self.assertEqual(code, 200)
+
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
+        p = c["project"]
+        self.assertEqual(p["project_owner"], "Dr. Sarah Connor")
+        self.assertEqual(p["project_manager"], "Dr. Sarah Connor")  # synced
+        self.assertEqual(p["task_owner"], "John Doe")
+        self.assertEqual(p["po_value"], "5000000")
+        self.assertEqual(p["project_scope"], "Full synthesis of AZADOL batch with strict purity >= 99.5% and 3 staged delivery milestones.")
+        self.assertEqual(p["description"], "Full synthesis of AZADOL batch with strict purity >= 99.5% and 3 staged delivery milestones.")  # synced
+
+        # Verify sensitive fields stripped for restricted role
+        code, proj_assignee = call(f"/api/projects/{self.pid}", "GET", None, self.assignee)
+        self.assertEqual(code, 200)
+        self.assertNotIn("project_owner", proj_assignee)
+        self.assertNotIn("task_owner", proj_assignee)
+        self.assertNotIn("po_value", proj_assignee)
+
     @classmethod
     def tearDownClass(cls):
         p = os.environ.get("PROJECT_PULSE_DB", "")

@@ -146,7 +146,7 @@ Object.assign(app, {
             </div>
           </div>
         </td>
-        <td class="${UI.td}">${esc(p.project_manager || '—')}</td>
+        <td class="${UI.td}">${esc(p.project_owner || p.project_manager || '—')}</td>
         <td class="${UI.td}">${p.delivery_date ? `${this.fmtDate(p.delivery_date)}<div class="text-[10px] ${p.days_left < 0 ? 'text-rose-500' : 'text-slate-400'}">${this.daysLabel(p.days_left)}</div>` : '<span class="text-slate-400">Not set</span>'}</td>
         <td class="${UI.td}" style="min-width:130px">
           <div class="flex items-center gap-2">
@@ -240,7 +240,7 @@ Object.assign(app, {
       ${panel('Projects', 'Click a project to open its task table', `
         <div class="overflow-x-auto"><table class="w-full">
           <thead class="bg-slate-50 dark:bg-slate-800/80"><tr>
-            <th class="${UI.th}">Project</th><th class="${UI.th}">Manager</th><th class="${UI.th}">Delivery</th>
+            <th class="${UI.th}">Project</th><th class="${UI.th}">Owner</th><th class="${UI.th}">Delivery</th>
             <th class="${UI.th}">Progress</th><th class="${UI.th}">Overdue</th><th class="${UI.th}">Next due</th><th class="${UI.th}">Health</th>
           </tr></thead><tbody>${projectRows}</tbody></table></div>`)}
 
@@ -561,7 +561,7 @@ Object.assign(app, {
         valueHtml = `<div class="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 break-words leading-tight">${view}</div>`;
       } else if (variant === 'quantity') {
         valueHtml = `<div class="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 break-words leading-tight">${view}</div>`;
-      } else if (variant === 'budget') {
+      } else if (variant === 'budget' || variant === 'po-value') {
         valueHtml = `<div class="text-sm sm:text-base font-bold text-amber-600 dark:text-amber-400 break-words leading-tight">${view}</div>`;
       } else {
         valueHtml = `<div class="text-xs font-normal text-slate-700 dark:text-slate-300 break-words leading-snug">${view}</div>`;
@@ -589,15 +589,18 @@ Object.assign(app, {
         <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !h-6 !px-1.5 text-[11px] font-bold" title="Add new chemist">+</button>
       </div>`;
 
+    let poView = '';
+    if (p.po_value != null && p.po_value !== '') {
+      const numVal = Number(p.po_value);
+      poView = (!isNaN(numVal) && numVal > 0) ? this.formatINR(numVal) : esc(p.po_value);
+    }
+
     const header = `
       <div class="${UI.card} p-3.5 sm:p-4">
         <div class="flex flex-wrap items-center justify-between gap-2.5 mb-3">
           <div>
             <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">Project Charter</h2>
-            <div class="flex items-center gap-1.5 mt-0.5">
-              <span class="w-1 h-2.5 bg-blue-600 dark:bg-blue-400 rounded-full inline-block"></span>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Project Scope</span>
-            </div>
+            <div class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">Commercial specifications, timeline &amp; deliverables</div>
           </div>
           <div class="flex items-center gap-2">
             <button onclick="app.openProjectReportModal()" class="${UI.btn} ${UI.btnGhost}"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>Project Report</button>
@@ -607,19 +610,49 @@ Object.assign(app, {
               : `<button onclick="app.editCharterHeader()" class="${UI.btn} ${UI.btnPrimary}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Edit</button>`) : ''}
           </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
           ${field('Project name', esc(p.name), inp('cf-name', p.name), 'blue', 'project-name')}
           ${field('Project code', esc(p.project_code), inp('cf-code', p.project_code), 'blue', 'standard')}
           ${field('CAS no.', esc(p.cas_no), inp('cf-cas', p.cas_no), 'blue', 'standard')}
           ${field('Customer name', esc(p.customer_name), inp('cf-customer', p.customer_name), 'blue', 'standard')}
-          ${field('Project manager', esc(p.project_manager),
-              inp('cf-pm', p.project_manager, 'text', 'list="cf-members"') +
+          ${field('Project owner', esc(p.project_owner || p.project_manager),
+              inp('cf-owner', p.project_owner || p.project_manager, 'text', 'list="cf-members" placeholder="Select or enter owner"') +
               `<datalist id="cf-members">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
+          ${field('Task owner', esc(p.task_owner),
+              inp('cf-task-owner', p.task_owner, 'text', 'list="cf-members-to" placeholder="Select or enter task owner"') +
+              `<datalist id="cf-members-to">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
           ${field('Chemist name', esc(p.chemist_name), chemistSelect, 'violet', 'standard')}
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'), 'emerald', 'standard')}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'), 'emerald', 'standard')}
           ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold opacity-80"'), 'emerald', 'quantity')}
+          ${field('PO Value', poView, inp('cf-po-value', p.po_value != null ? p.po_value : '', 'text', 'placeholder="e.g. 5,00,000 or ₹10,00,000"'), 'amber', 'po-value')}
           ${field('Project budget', (p.project_budget != null && Number(p.project_budget) > 0) ? this.formatINR(p.project_budget) : '', inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'), 'amber', 'budget')}
+        </div>
+
+        <!-- Dedicated Project Scope Field & Description Box -->
+        <div class="mt-3.5 pt-3.5 border-t border-slate-200 dark:border-slate-700/80">
+          <div class="flex items-center gap-1.5 mb-1.5">
+            <span class="w-1.5 h-3.5 bg-blue-600 dark:bg-blue-400 rounded-full inline-block"></span>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">Project Scope</span>
+            <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 lowercase">(project details, milestones &amp; customer requirements)</span>
+          </div>
+          ${editing ? `
+            <div>
+              <textarea id="cf-scope" rows="3" class="${charterInputClass} w-full resize-y font-normal text-xs leading-relaxed"
+                placeholder="Enter details of project, milestones and customer requirements…">${esc(p.project_scope || p.description || '')}</textarea>
+            </div>
+          ` : `
+            <div class="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg border border-slate-200 dark:border-slate-700 border-l-4 border-l-blue-500 shadow-2xs transition-all">
+              ${(p.project_scope || p.description) ? `
+                <div class="text-xs font-normal text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">${esc(p.project_scope || p.description)}</div>
+              ` : `
+                <div class="flex items-center gap-2">
+                  ${notSetPill}
+                  <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">Details of project, milestones and customer requirements will be included here.</span>
+                </div>
+              `}
+            </div>
+          `}
         </div>
       </div>`;
 
@@ -870,6 +903,11 @@ Object.assign(app, {
     let chemistVal = v('cf-chemist');
     if (chemistVal === '__NEW__') chemistVal = '';
 
+    const ownerVal = v('cf-owner') || v('cf-pm');
+    const taskOwnerVal = v('cf-task-owner');
+    const poVal = v('cf-po-value');
+    const scopeVal = v('cf-scope');
+
     const pid = this.state.currentProjectId;
     try {
       await this.api(`/api/projects/${pid}`, {
@@ -879,7 +917,12 @@ Object.assign(app, {
           project_code: v('cf-code'),
           cas_no: v('cf-cas'),
           customer_name: v('cf-customer'),
-          project_manager: v('cf-pm'),
+          project_owner: ownerVal,
+          project_manager: ownerVal,
+          task_owner: taskOwnerVal,
+          po_value: poVal,
+          project_scope: scopeVal,
+          description: scopeVal,
           chemist_name: chemistVal,
           received_date: rec,
           delivery_date: del,
