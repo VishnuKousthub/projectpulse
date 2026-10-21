@@ -271,10 +271,18 @@ def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
     if not req_user:
         req_user = get_current_user()
 
+    charter_data = None
+    if target_id and is_full_access(req_user):
+        try:
+            charter_data = charter_module.build_charter_dict(conn, target_id)
+        except Exception as ex:
+            charter_data = None
+
     return {
         "projects": sanitize_projects_for_user(projects, req_user),
         "current_project": sanitize_project_for_user(current_project, req_user),
-        "tasks": tasks
+        "tasks": tasks,
+        "charter": charter_data
     }
 
 @app.post("/api/auth/login")
@@ -339,7 +347,8 @@ def auth_login():
             "user": user_dict,
             "projects": bootstrap["projects"],
             "current_project": bootstrap["current_project"],
-            "tasks": bootstrap["tasks"]
+            "tasks": bootstrap["tasks"],
+            "charter": bootstrap.get("charter")
         })
 
 @app.post("/api/auth/register")
@@ -419,7 +428,8 @@ def auth_register():
             "user": user_dict,
             "projects": bootstrap["projects"],
             "current_project": bootstrap["current_project"],
-            "tasks": bootstrap["tasks"]
+            "tasks": bootstrap["tasks"],
+            "charter": bootstrap.get("charter")
         }, status=201)
 
 @app.get("/api/auth/me")
@@ -451,7 +461,8 @@ def auth_me():
         },
         "projects": bootstrap["projects"],
         "current_project": bootstrap["current_project"],
-        "tasks": bootstrap["tasks"]
+        "tasks": bootstrap["tasks"],
+        "charter": bootstrap.get("charter")
     })
 
 @app.get("/api/bootstrap")

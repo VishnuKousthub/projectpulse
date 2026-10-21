@@ -152,6 +152,55 @@ def sync_project_total_quantity(conn, project_id):
     return total_str
 
 
+def build_charter_dict(conn, project_id):
+    p = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not p:
+        return None
+    deliverables = conn.execute(
+        "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
+        (project_id,)).fetchall()
+    risks = conn.execute(
+        "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()
+    tasks = conn.execute("""
+        SELECT t.id, t.title, t.start_date, t.due_date, t.status, t.tags,
+               m.name AS assignee_name
+        FROM tasks t LEFT JOIN members m ON t.assignee_id = m.id
+        WHERE t.project_id = ? ORDER BY t.order_index ASC, t.id ASC
+    """, (project_id,)).fetchall()
+    members = conn.execute(
+        "SELECT name FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
+
+    milestones = []
+    for t in tasks:
+        td = dict(t)
+        td["type"] = task_type(td.pop("tags", None))
+        milestones.append(td)
+
+    deliv_list = []
+    for r in deliverables:
+        d = dict(r)
+        if not d.get("dispatch_date"):
+            d["dispatch_date"] = d.get("due_date")
+        deliv_list.append(d)
+
+    p_dict = dict(p)
+    owner_val = p_dict.get("project_owner") or p_dict.get("project_manager")
+    p_dict["project_owner"] = owner_val
+    p_dict["project_manager"] = owner_val
+    scope_val = p_dict.get("project_scope") or p_dict.get("description")
+    p_dict["project_scope"] = scope_val
+    p_dict["description"] = scope_val
+
+    return {
+        "project": {k: p_dict[k] for k in ("id", "name", "description", "color") if k in p_dict} |
+                   {f: (p_dict.get(f)) for f in CHARTER_FIELDS},
+        "deliverables": deliv_list,
+        "risks": [dict(r) for r in risks],
+        "milestones": milestones,
+        "members": [r["name"] for r in members],
+    }
+
+
 def register(app, *, get_db, json_response, request, get_current_user,
              is_full_access, get_now_iso, record_activity, clean_text,
              sanitize_projects_for_user=None):
@@ -176,52 +225,10 @@ def register(app, *, get_db, json_response, request, get_current_user,
         if denied:
             return denied
         with get_db() as conn:
-            p = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
-            if not p:
+            charter = build_charter_dict(conn, project_id)
+            if not charter:
                 return json_response({"error": "Project not found"}, status=404)
-            deliverables = conn.execute(
-                "SELECT * FROM deliverables WHERE project_id = ? ORDER BY COALESCE(due_date, '9999'), id",
-                (project_id,)).fetchall()
-            risks = conn.execute(
-                "SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()
-            tasks = conn.execute("""
-                SELECT t.id, t.title, t.start_date, t.due_date, t.status, t.tags,
-                       m.name AS assignee_name
-                FROM tasks t LEFT JOIN members m ON t.assignee_id = m.id
-                WHERE t.project_id = ? ORDER BY t.order_index ASC, t.id ASC
-            """, (project_id,)).fetchall()
-            members = conn.execute(
-                "SELECT name FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
-
-            milestones = []
-            for t in tasks:
-                td = dict(t)
-                td["type"] = task_type(td.pop("tags", None))
-                milestones.append(td)
-
-            deliv_list = []
-            for r in deliverables:
-                d = dict(r)
-                if not d.get("dispatch_date"):
-                    d["dispatch_date"] = d.get("due_date")
-                deliv_list.append(d)
-
-            p_dict = dict(p)
-            owner_val = p_dict.get("project_owner") or p_dict.get("project_manager")
-            p_dict["project_owner"] = owner_val
-            p_dict["project_manager"] = owner_val
-            scope_val = p_dict.get("project_scope") or p_dict.get("description")
-            p_dict["project_scope"] = scope_val
-            p_dict["description"] = scope_val
-
-            return json_response({
-                "project": {k: p_dict[k] for k in ("id", "name", "description", "color") if k in p_dict} |
-                           {f: (p_dict.get(f)) for f in CHARTER_FIELDS},
-                "deliverables": deliv_list,
-                "risks": [dict(r) for r in risks],
-                "milestones": milestones,
-                "members": [r["name"] for r in members],
-            })
+            return json_response(charter)
 
     # ----------------------------------------------------------------- chemists
     @app.get("/api/chemists")

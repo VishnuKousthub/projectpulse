@@ -521,18 +521,57 @@ Object.assign(app, {
       root.innerHTML = `<div class="py-16 text-center text-xs text-slate-400">Select or create a project first.</div>`;
       return;
     }
-    let c;
+
+    // Fast-path: Instant 0ms cache hydration if available
+    let hasValidCache = false;
+    if (this.state.charter && Number(this.state.charter?.project?.id) === Number(pid)) {
+      hasValidCache = true;
+    } else {
+      try {
+        const cached = localStorage.getItem(`projectpulse_cached_charter_${pid}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Number(parsed?.project?.id) === Number(pid)) {
+            this.state.charter = parsed;
+            hasValidCache = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (hasValidCache) {
+      this.paintCharter();
+    } else {
+      root.innerHTML = `
+        <div class="space-y-4 animate-pulse p-4">
+          <div class="h-44 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80"></div>
+          <div class="h-56 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80"></div>
+          <div class="h-64 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80"></div>
+        </div>
+      `;
+    }
+
+    // Lazy load chemists in background asynchronously (never block initial view)
+    if (!this.state.chemists || this.state.chemists.length === 0) {
+      this.api('/api/chemists').then(ch => {
+        this.state.chemists = ch || [];
+      }).catch(() => {});
+    }
+
+    // Background fresh fetch for latest data
     try {
-      const [charterData, chemists] = await Promise.all([
-        this.api(`/api/projects/${pid}/charter`),
-        this.api('/api/chemists').catch(() => [])
-      ]);
-      c = charterData;
-      this.state.chemists = chemists || [];
-    } catch (e) { return; }
-    if (this.state.activeView !== 'charter' || Number(this.state.currentProjectId) !== Number(pid)) return;
-    this.state.charter = c;
-    this.paintCharter();
+      const charterData = await this.api(`/api/projects/${pid}/charter`);
+      if (this.state.activeView !== 'charter' || Number(this.state.currentProjectId) !== Number(pid)) return;
+      this.state.charter = charterData;
+      try {
+        localStorage.setItem(`projectpulse_cached_charter_${pid}`, JSON.stringify(charterData));
+      } catch (e) {}
+      this.paintCharter();
+    } catch (e) {
+      if (!hasValidCache) {
+        root.innerHTML = `<div class="py-16 text-center text-xs text-rose-500">Could not load the project charter.</div>`;
+      }
+    }
   },
 
   paintCharter() {
@@ -850,7 +889,16 @@ Object.assign(app, {
   },
 
   // -- header edit
-  editCharterHeader() { this.state.charterEditHeader = true; this.paintCharter(); },
+  async editCharterHeader() {
+    this.state.charterEditHeader = true;
+    if (!this.state.chemists || !this.state.chemists.length) {
+      try {
+        const chemists = await this.api('/api/chemists');
+        this.state.chemists = chemists || [];
+      } catch (e) {}
+    }
+    this.paintCharter();
+  },
   cancelCharterHeader() { this.state.charterEditHeader = false; this.paintCharter(); },
   async promptNewChemist() {
     const sel = document.getElementById('cf-chemist');

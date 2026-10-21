@@ -454,6 +454,18 @@ const app = {
     const cachedTasks = localStorage.getItem(`projectpulse_cached_tasks_${projectId}`);
     let hydratedFromCache = false;
 
+    const cachedCharter = localStorage.getItem(`projectpulse_cached_charter_${projectId}`);
+    if (cachedCharter) {
+      try {
+        const parsedCharter = JSON.parse(cachedCharter);
+        if (parsedCharter && Number(parsedCharter.project?.id) === projectId) {
+          this.state.charter = parsedCharter;
+        }
+      } catch (e) {}
+    } else {
+      this.state.charter = null;
+    }
+
     if (cachedProj && cachedTasks && !this.state.searchQuery && !this.state.filterPriority) {
       try {
         const parsedProj = JSON.parse(cachedProj);
@@ -5736,6 +5748,20 @@ const app = {
           }
         }
 
+        if (res.charter) {
+          this.state.charter = res.charter;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_charter_${this.state.currentProjectId}`, JSON.stringify(res.charter));
+          }
+        }
+
+        if (res.charter) {
+          this.state.charter = res.charter;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_charter_${this.state.currentProjectId}`, JSON.stringify(res.charter));
+          }
+        }
+
         this.renderProjectsDropdown();
         this.renderProjectsSidebar();
         this.populateFilterDropdowns();
@@ -6364,6 +6390,13 @@ const app = {
           }
         }
 
+        if (res.charter) {
+          this.state.charter = res.charter;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_charter_${this.state.currentProjectId}`, JSON.stringify(res.charter));
+          }
+        }
+
         // Instant UI Render in 0ms!
         this.updateHeaderUserProfile();
         this.applyRolePermissionsUI();
@@ -6435,6 +6468,13 @@ const app = {
           }
         }
 
+        if (res.charter) {
+          this.state.charter = res.charter;
+          if (this.state.currentProjectId) {
+            localStorage.setItem(`projectpulse_cached_charter_${this.state.currentProjectId}`, JSON.stringify(res.charter));
+          }
+        }
+
         this.updateHeaderUserProfile();
         this.renderProjectsDropdown();
         this.renderProjectsSidebar();
@@ -6465,7 +6505,9 @@ const app = {
     if (activeId) {
       localStorage.removeItem(`projectpulse_cached_project_${activeId}`);
       localStorage.removeItem(`projectpulse_cached_tasks_${activeId}`);
+      localStorage.removeItem(`projectpulse_cached_charter_${activeId}`);
     }
+    this.state.charter = null;
     this.closeUserMenu();
     this.showAuthContainer();
 
