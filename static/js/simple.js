@@ -65,6 +65,11 @@ Object.assign(app, {
       else if (isProgress) count.textContent = '3';
       else count.textContent = '4';
     }
+
+    const taskModalResourcesSec = document.getElementById('task-modal-resources-section');
+    if (taskModalResourcesSec) {
+      taskModalResourcesSec.style.display = isAdmin ? '' : 'none';
+    }
   },
 
   fmtDate(value) {

@@ -218,6 +218,13 @@ const app = {
     const navCharter = document.getElementById('nav-charter');
     if (navCharter) navCharter.style.display = isProgress ? 'none' : '';
 
+    // Hide Mapped Project Resources & Equipment in task modal for PM, Lead, Assignee (Admin only)
+    const taskModalResourcesSec = document.getElementById('task-modal-resources-section');
+    const isAdmin = (this.getUserRole() === 'admin');
+    if (taskModalResourcesSec) {
+      taskModalResourcesSec.style.display = isAdmin ? '' : 'none';
+    }
+
     // Simple mode re-hides what this method may have just un-hidden (e.g. Reset Demo Data)
     this.applySimpleMode();
   },
@@ -3652,6 +3659,12 @@ const app = {
 
     this.populateTaskModalDropdowns();
 
+    const taskModalResourcesSec = document.getElementById('task-modal-resources-section');
+    const isAdmin = (this.getUserRole() === 'admin');
+    if (taskModalResourcesSec) {
+      taskModalResourcesSec.style.display = isAdmin ? '' : 'none';
+    }
+
     const idInput = document.getElementById('task-input-id');
     const titleInput = document.getElementById('task-input-title');
     const descInput = document.getElementById('task-input-description');
@@ -4905,8 +4918,9 @@ const app = {
       insertBeforeId = Number(position.split('_')[1]);
     }
 
+    const isAdmin = (this.getUserRole() === 'admin');
     const selectedChips = document.querySelectorAll('#task-modal-resources-container .task-resource-chip.selected-chip');
-    const resourceIds = Array.from(selectedChips).map(c => Number(c.dataset.resourceId)).filter(Boolean);
+    const resourceIds = isAdmin ? Array.from(selectedChips).map(c => Number(c.dataset.resourceId)).filter(Boolean) : undefined;
 
     const payload = {
       title,
