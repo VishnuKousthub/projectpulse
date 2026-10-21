@@ -53,15 +53,23 @@ const app = {
     this.state.user = null;
     this.showAuthContainer();
 
-    // Pre-fill remembered username if previously saved
+    // Pre-fill remembered username and password if previously saved
     const rememberedUsername = localStorage.getItem('projectpulse_remembered_username');
+    const rememberedPassword = localStorage.getItem('projectpulse_remembered_password');
     const idInput = document.getElementById('login-input-identifier');
     const pwdInput = document.getElementById('login-input-password');
     const rememberBox = document.getElementById('login-input-remember');
     if (rememberedUsername && idInput) {
       idInput.value = rememberedUsername;
+      if (rememberedPassword && pwdInput) {
+        pwdInput.value = rememberedPassword;
+      }
       if (rememberBox) rememberBox.checked = true;
-      pwdInput?.focus();
+      if (rememberedPassword) {
+        document.getElementById('login-submit-btn')?.focus();
+      } else {
+        pwdInput?.focus();
+      }
     } else {
       if (rememberBox) rememberBox.checked = false;
       idInput?.focus();
@@ -6328,11 +6336,13 @@ const app = {
         this.state.authToken = res.token;
         this.state.user = res.user;
 
-        // Remember or clear username based on checkbox
+        // Remember or clear username and password based on checkbox
         if (remember) {
           localStorage.setItem('projectpulse_remembered_username', identifier);
+          localStorage.setItem('projectpulse_remembered_password', password);
         } else {
           localStorage.removeItem('projectpulse_remembered_username');
+          localStorage.removeItem('projectpulse_remembered_password');
         }
 
         if (res.projects && Array.isArray(res.projects) && res.projects.length > 0) {
@@ -6459,16 +6469,29 @@ const app = {
     this.closeUserMenu();
     this.showAuthContainer();
 
-    // Clear password input and focus identifier or password
+    // Clear or restore password and username inputs based on remembered credentials
     const pwdInput = document.getElementById('login-input-password');
-    if (pwdInput) pwdInput.value = '';
     const idInput = document.getElementById('login-input-identifier');
+    const rememberBox = document.getElementById('login-input-remember');
     const rememberedUsername = localStorage.getItem('projectpulse_remembered_username');
+    const rememberedPassword = localStorage.getItem('projectpulse_remembered_password');
     if (rememberedUsername && idInput) {
       idInput.value = rememberedUsername;
-      pwdInput?.focus();
+      if (rememberedPassword && pwdInput) {
+        pwdInput.value = rememberedPassword;
+      } else if (pwdInput) {
+        pwdInput.value = '';
+      }
+      if (rememberBox) rememberBox.checked = true;
+      if (rememberedPassword) {
+        document.getElementById('login-submit-btn')?.focus();
+      } else {
+        pwdInput?.focus();
+      }
     } else {
       if (idInput) idInput.value = '';
+      if (pwdInput) pwdInput.value = '';
+      if (rememberBox) rememberBox.checked = false;
       idInput?.focus();
     }
 
