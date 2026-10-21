@@ -6202,7 +6202,6 @@ const app = {
     const registerTab = document.getElementById('auth-tab-register');
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
-    const demoBar = document.getElementById('auth-demo-bar');
     this.hideAuthError();
 
     if (tab === 'login') {
@@ -6213,7 +6212,6 @@ const app = {
 
       loginForm?.classList.remove('hidden');
       registerForm?.classList.add('hidden');
-      demoBar?.classList.remove('hidden');
       document.getElementById('login-input-identifier')?.focus();
     } else {
       registerTab?.classList.add('bg-blue-600', 'text-white', 'shadow-xs');
@@ -6223,7 +6221,6 @@ const app = {
 
       registerForm?.classList.remove('hidden');
       loginForm?.classList.add('hidden');
-      demoBar?.classList.add('hidden');
       document.getElementById('register-input-fullname')?.focus();
     }
     this.initLucide();
