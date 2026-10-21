@@ -591,8 +591,13 @@ Object.assign(app, {
 
     let poView = '';
     if (p.po_value != null && p.po_value !== '') {
-      const numVal = Number(p.po_value);
-      poView = (!isNaN(numVal) && numVal > 0) ? this.formatINR(numVal) : esc(p.po_value);
+      const raw = String(p.po_value).trim();
+      const cleanNum = Number(raw.replace(/[₹,\s]/g, ''));
+      if (!isNaN(cleanNum) && cleanNum > 0) {
+        poView = this.formatINR(cleanNum);
+      } else if (raw) {
+        poView = raw.startsWith('₹') ? esc(raw) : ('₹' + esc(raw));
+      }
     }
 
     const header = `
@@ -625,7 +630,7 @@ Object.assign(app, {
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'), 'emerald', 'standard')}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'), 'emerald', 'standard')}
           ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold opacity-80"'), 'emerald', 'quantity')}
-          ${field('PO Value', poView, inp('cf-po-value', p.po_value != null ? p.po_value : '', 'text', 'placeholder="e.g. 5,00,000 or ₹10,00,000"'), 'amber', 'po-value')}
+          ${field('PO Value (₹)', poView, inp('cf-po-value', p.po_value != null ? p.po_value : '', 'text', 'placeholder="e.g. ₹1,50,00,000"'), 'amber', 'po-value')}
           ${field('Project budget', (p.project_budget != null && Number(p.project_budget) > 0) ? this.formatINR(p.project_budget) : '', inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'), 'amber', 'budget')}
         </div>
 
