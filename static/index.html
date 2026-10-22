@@ -2,7 +2,7 @@
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ProjectPulse - Modern Project Management</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -26,7 +26,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=2.6.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.8.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -94,6 +94,10 @@
         </div>
 
       </div>
+      <!-- Mobile Close Button -->
+      <button type="button" onclick="app.closeSidebarMobile()" class="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg ml-auto flex-shrink-0 hover:bg-slate-800 transition" title="Close Menu">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
     </div>
 
     <!-- Active Project Switcher -->
@@ -306,6 +310,10 @@
     </div>
   </aside>
 
+  <!-- Mobile Sidebar Backdrop Overlay -->
+  <div id="sidebar-backdrop" onclick="app.closeSidebarMobile()" 
+       class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"></div>
+
   <!-- Sidebar Hover Placeholder for Layout Flow -->
   <div class="sidebar-hover-placeholder"></div>
 
@@ -313,34 +321,34 @@
   <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
     
     <!-- GLOBAL TOP APP BAR (SINGLE FLEX ROW WITH UNIFIED RESPONSIVE SIZING) -->
-    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center px-4 sm:px-6 flex-shrink-0 z-40 shadow-xs gap-2 sm:gap-2.5 select-none">
+    <header class="app-header sticky top-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center px-2.5 sm:px-6 flex-shrink-0 z-40 shadow-xs gap-1.5 sm:gap-2.5 select-none">
       
       <!-- 1. Page Title & Mobile Toggle (flex-shrink-0) -->
-      <div class="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
-        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0" title="Toggle Menu">
+      <div class="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+        <button onclick="app.toggleSidebar()" class="lg:hidden text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0" title="Toggle Menu">
           <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
-        <div class="lg:hidden flex items-center space-x-1.5 flex-shrink-0">
+        <div class="hidden xs:flex lg:hidden items-center space-x-1.5 flex-shrink-0">
           <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-900 to-indigo-950 border border-white/20 p-0.5 flex items-center justify-center shadow-xs">
             <svg class="w-full h-full" viewBox="0 0 36 36" fill="none">
               <path d="M4 18h6l3.5-9 4.5 18 4.5-14 3 5h6.5" stroke="#38BDF8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
         </div>
-        <h1 id="view-title" class="text-sm sm:text-base font-bold text-slate-800 dark:text-white whitespace-nowrap flex-shrink-0 pr-1">
+        <h1 id="view-title" class="text-xs sm:text-base font-bold text-slate-800 dark:text-white whitespace-nowrap flex-shrink-0 pr-1 truncate max-w-[95px] xs:max-w-[130px] sm:max-w-none">
           Gantt & Timeline
         </h1>
       </div>
 
       <!-- 2. Search Task (The ONLY flexible element: flex-1 min-w-0 max-w-xs) -->
-      <div class="relative flex-1 min-w-[90px] max-w-xs">
-        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
-        <input type="text" id="global-search" oninput="app.handleSearch(this.value)" placeholder="Search tasks, tags... (/)"
-          class="w-full h-9 pl-9 pr-7 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-slate-700/80 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition">
-        <span class="absolute right-2.5 top-2.5 px-1.5 py-0.5 bg-slate-200/80 dark:bg-slate-700 text-[10px] text-slate-500 dark:text-slate-400 rounded font-mono pointer-events-none leading-none">/</span>
+      <div class="relative flex-1 min-w-[65px] max-w-xs">
+        <i data-lucide="search" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 absolute left-2.5 sm:left-3 top-2.5 pointer-events-none"></i>
+        <input type="text" id="global-search" oninput="app.handleSearch(this.value)" placeholder="Search... (/)"
+          class="w-full h-9 pl-7 sm:pl-9 pr-2 sm:pr-7 text-xs bg-slate-100/90 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-slate-700/80 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition placeholder:text-slate-400">
+        <span class="hidden sm:inline absolute right-2.5 top-2.5 px-1.5 py-0.5 bg-slate-200/80 dark:bg-slate-700 text-[10px] text-slate-500 dark:text-slate-400 rounded font-mono pointer-events-none leading-none">/</span>
       </div>
 
-      <!-- 3. All Assignees Dropdown (flex-shrink-0, fixed readable width) -->
+      <!-- 3. All Assignees Dropdown (flex-shrink-0, hidden on mobile) -->
       <div class="relative hidden sm:block flex-shrink-0 w-[125px]">
         <select id="filter-assignee" onchange="app.handleFilterChange()" 
           class="w-full h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/80 dark:border-slate-700/80 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer truncate transition">
@@ -349,7 +357,7 @@
         <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
       </div>
 
-      <!-- 4. All Priorities Dropdown (flex-shrink-0, fixed readable width) -->
+      <!-- 4. All Priorities Dropdown (flex-shrink-0, hidden on mobile/tablet) -->
       <div class="relative hidden md:block flex-shrink-0 w-[115px]">
         <select id="filter-priority" onchange="app.handleFilterChange()" 
           class="w-full h-9 bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg pl-3 pr-7 border border-slate-200/80 dark:border-slate-700/80 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer truncate transition">
@@ -362,19 +370,19 @@
         <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
       </div>
 
-      <!-- 5. Mail / Notification Button (flex-shrink-0, fixed 36x36px, envelope icon centered, NO compression) -->
-      <button onclick="app.openNotificationsModal()" class="h-9 w-9 min-w-[36px] bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 rounded-lg flex items-center justify-center shadow-2xs transition flex-shrink-0" title="Outlook Alerts & Notifications">
+      <!-- 5. Mail / Notification Button (hidden on narrow screens, available on tablet/desktop) -->
+      <button onclick="app.openNotificationsModal()" class="h-9 w-9 min-w-[36px] bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 rounded-lg hidden sm:flex items-center justify-center shadow-2xs transition flex-shrink-0" title="Outlook Alerts & Notifications">
         <i data-lucide="mail" class="w-4 h-4 text-sky-500 flex-shrink-0"></i>
       </button>
 
-      <!-- 6. Upload Gantt Button (flex-shrink-0, fixed readable dimensions) -->
-      <button id="header-upload-gantt-btn" onclick="app.openGanttUploadModal()" class="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 transition flex-shrink-0 whitespace-nowrap" title="Upload Excel / CSV Gantt Chart">
+      <!-- 6. Upload Gantt Button (hidden on mobile, available on Gantt view and sidebar) -->
+      <button id="header-upload-gantt-btn" onclick="app.openGanttUploadModal()" class="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg hidden md:flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 transition flex-shrink-0 whitespace-nowrap" title="Upload Excel / CSV Gantt Chart">
         <i data-lucide="file-spreadsheet" class="w-4 h-4 flex-shrink-0"></i>
-        <span class="hidden sm:inline">Upload Gantt</span>
+        <span>Upload Gantt</span>
       </button>
 
-      <!-- 7. New Task Button (flex-shrink-0, fixed readable dimensions) -->
-      <button id="header-new-task-btn" onclick="app.openTaskModal()" class="h-9 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-blue-600/25 transition flex-shrink-0 whitespace-nowrap" title="Create New Activity">
+      <!-- 7. New Task Button (Compact '+' icon on mobile, 'New Task' on desktop) -->
+      <button id="header-new-task-btn" onclick="app.openTaskModal()" class="h-9 px-2.5 sm:px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs shadow-blue-600/25 transition flex-shrink-0 whitespace-nowrap" title="Create New Activity">
         <i data-lucide="plus" class="w-4 h-4 flex-shrink-0"></i>
         <span class="hidden md:inline">New Task</span>
       </button>
@@ -383,8 +391,8 @@
       <div class="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 flex-shrink-0 hidden sm:block"></div>
 
       <!-- 8. User Profile Dropdown (ml-auto, pinned to far right, flex-shrink-0) -->
-      <div class="relative flex-shrink-0 ml-auto">
-        <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="h-9 flex items-center gap-2 px-1.5 sm:px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition flex-shrink-0">
+      <div class="relative flex-shrink-0 ml-auto sm:ml-0">
+        <button id="user-profile-btn" onclick="app.toggleUserMenu()" class="h-9 flex items-center gap-1 sm:gap-2 px-1 sm:px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition flex-shrink-0">
           <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
             A
           </div>
@@ -523,28 +531,29 @@
             <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
               
               <!-- Timeline Scale Segmented Control (Daily, Weekly, Monthly, Yearly) -->
-              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
-                <button type="button" id="gantt-scale-day" onclick="app.setGanttScale('day')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
-                  Daily
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
+                <button type="button" id="gantt-scale-day" onclick="app.setGanttScale('day')" class="gantt-scale-btn h-7 px-2 sm:px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
+                  <span class="sm:hidden">Day</span><span class="hidden sm:inline">Daily</span>
                 </button>
-                <button type="button" id="gantt-scale-week" onclick="app.setGanttScale('week')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition bg-blue-600 text-white shadow-xs font-bold flex items-center justify-center">
-                  Weekly
+                <button type="button" id="gantt-scale-week" onclick="app.setGanttScale('week')" class="gantt-scale-btn h-7 px-2 sm:px-2.5 rounded-lg transition bg-blue-600 text-white shadow-xs font-bold flex items-center justify-center">
+                  <span class="sm:hidden">Week</span><span class="hidden sm:inline">Weekly</span>
                 </button>
-                <button type="button" id="gantt-scale-month" onclick="app.setGanttScale('month')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
-                  Monthly
+                <button type="button" id="gantt-scale-month" onclick="app.setGanttScale('month')" class="gantt-scale-btn h-7 px-2 sm:px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
+                  <span class="sm:hidden">Month</span><span class="hidden sm:inline">Monthly</span>
                 </button>
-                <button type="button" id="gantt-scale-year" onclick="app.setGanttScale('year')" class="gantt-scale-btn h-7 px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
-                  Yearly
+                <button type="button" id="gantt-scale-year" onclick="app.setGanttScale('year')" class="gantt-scale-btn h-7 px-2 sm:px-2.5 rounded-lg transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center">
+                  <span class="sm:hidden">Year</span><span class="hidden sm:inline">Yearly</span>
                 </button>
               </div>
 
               <!-- Navigation Shift Buttons (Fit All & Arrows) -->
-              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+              <div class="flex items-center bg-slate-100 dark:bg-slate-900/80 p-0.5 sm:p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
                 <button onclick="app.shiftGanttTimeline(-1)" title="Previous Window" class="h-7 w-7 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition">
                   <i data-lucide="chevron-left" class="w-4 h-4"></i>
                 </button>
-                <button onclick="app.resetGanttToToday()" class="h-7 px-2.5 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg flex items-center justify-center transition">
-                  Fit All
+                <button onclick="app.resetGanttToToday()" title="Center timeline on today" class="h-7 px-2 sm:px-2.5 font-bold text-blue-600 dark:text-blue-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg flex items-center gap-1 justify-center transition">
+                  <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+                  <span>Today</span>
                 </button>
                 <button onclick="app.shiftGanttTimeline(1)" title="Next Window" class="h-7 w-7 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition">
                   <i data-lucide="chevron-right" class="w-4 h-4"></i>
@@ -3108,7 +3117,7 @@
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- APPLICATION SCRIPT -->
-  <script src="/static/js/app.js?v=2.18.0"></script>
-  <script src="/static/js/simple.js?v=2.6.0"></script>
+  <script src="/static/js/app.js?v=2.20.0"></script>
+  <script src="/static/js/simple.js?v=2.8.0"></script>
 </body>
 </html>

@@ -274,7 +274,34 @@ const app = {
 
   toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
-    if (sidebar) sidebar.classList.toggle('-translate-x-full');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.contains('mobile-open');
+    if (isOpen) {
+      this.closeSidebarMobile();
+    } else {
+      this.openSidebarMobile();
+    }
+  },
+
+  openSidebarMobile() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (sidebar) {
+      sidebar.classList.add('mobile-open');
+      sidebar.classList.remove('-translate-x-full');
+    }
+    if (backdrop) backdrop.classList.remove('hidden');
+    document.body.classList.add('mobile-sidebar-active');
+  },
+
+  closeSidebarMobile() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (sidebar) {
+      sidebar.classList.remove('mobile-open');
+    }
+    if (backdrop) backdrop.classList.add('hidden');
+    document.body.classList.remove('mobile-sidebar-active');
   },
 
   async api(endpoint, options = {}) {
@@ -570,6 +597,7 @@ const app = {
       return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
     }
 
+    this.closeSidebarMobile();
     this.state.activeView = viewName;
 
     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -1232,10 +1260,11 @@ const app = {
     if (tasksCount) tasksCount.textContent = `${this.state.tasks.length} tasks`;
     if (!container) return;
 
-    // Enforce container is the single scroll container (overflow auto both ways)
+    // Enforce container is the single scroll container with safe responsive min-height
     container.style.overflow = 'auto';
-    container.style.maxHeight = 'calc(100vh - 240px)';
     container.style.position = 'relative';
+    container.style.minHeight = (window.innerWidth < 768) ? '320px' : '380px';
+    container.style.maxHeight = (window.innerWidth < 768) ? 'calc(100vh - 250px)' : 'calc(100vh - 220px)';
 
     const prevScrollLeft = container.scrollLeft;
     const prevScrollTop = container.scrollTop;
@@ -1524,7 +1553,17 @@ const app = {
 
     const totalSpanMs = Math.max(timelineMax - timelineMin, 86400000);
     const timelineWidthPx = totalCols * colMinWidth;
-    const totalRowWidthPx = 540 + timelineWidthPx;
+
+    // Responsive Left Column width
+    const isMobileGantt = window.innerWidth < 768;
+    const isTabletGantt = !isMobileGantt && window.innerWidth < 1024;
+    const leftColWidth = isMobileGantt ? 140 : (isTabletGantt ? 280 : 540);
+    const totalRowWidthPx = leftColWidth + timelineWidthPx;
+
+    const isTodayInTimeline = (now.getTime() >= timelineMin.getTime() && now.getTime() <= timelineMax.getTime());
+    const todayOffsetPct = isTodayInTimeline 
+      ? Math.min(99.5, Math.max(0.5, ((now.getTime() - timelineMin.getTime()) / totalSpanMs) * 100))
+      : null;
 
     // 3. Render Task Rows (strictly sorted by sequential process order)
     const isProgress = this.isProgressOnly();
@@ -1559,106 +1598,134 @@ const app = {
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]"
           style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px; flex-shrink: 0;">
           
-          <!-- Left Task Info & Direct Editable Date Column (Fixed: 540px, Sticky left-0, z-index: 30) -->
+          <!-- Left Task Info Column (Sticky left-0, z-index: 30) -->
           <div class="gantt-sticky-left flex items-center border-r border-slate-200 dark:border-slate-700/80 transition"
-            style="position: sticky; left: 0; z-index: 30; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
-            
-            <!-- Column 1: Title & Assignee info (260px) -->
-            <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
-              <div class="flex items-center gap-1 min-w-0">
-                ${!isProgress ? `
-                  <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
-                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+            style="position: sticky; left: 0; z-index: 30; width: ${leftColWidth}px; min-width: ${leftColWidth}px; max-width: ${leftColWidth}px; flex-shrink: 0;">
+            ${isMobileGantt ? `
+              <!-- Mobile Compact Task Column (140px) -->
+              <div class="w-full flex-shrink-0 px-2 min-w-0 flex flex-col justify-center">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="w-2 h-2 rounded-full flex-shrink-0 ${statusStyle.dotColor || 'bg-blue-600'}"></span>
+                  <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
+                </div>
+                <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 pl-3.5">
+                  <span class="truncate max-w-[70px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
+                  ${pct > 0 ? `<span class="text-slate-300 dark:text-slate-600">•</span><span class="font-mono font-semibold text-slate-500 dark:text-slate-300">${pct}%</span>` : ''}
+                </div>
+              </div>
+            ` : (isTabletGantt ? `
+              <!-- Tablet Medium Task Column (280px) -->
+              <div class="w-[170px] min-w-[170px] max-w-[170px] flex-shrink-0 px-2 min-w-0 flex flex-col justify-center">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
+                  <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
+                </div>
+                <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 pl-5">
+                  <span class="truncate max-w-[90px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
+                  ${pct > 0 ? `<span class="text-slate-300 dark:text-slate-600">•</span><span class="font-mono font-semibold text-slate-500 dark:text-slate-300">${pct}%</span>` : ''}
+                </div>
+              </div>
+              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                ${t.start_date ? t.start_date.slice(5) : '—'} → ${t.due_date ? t.due_date.slice(5) : '—'}
+              </div>
+            ` : `
+              <!-- Desktop Full Task & Editable Dates Column (540px) -->
+              <!-- Column 1: Title & Assignee info (260px) -->
+              <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-2.5 pr-2 min-w-0 flex flex-col justify-center">
+                <div class="flex items-center gap-1 min-w-0">
+                  ${!isProgress ? `
+                    <div class="gantt-drag-handle cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 transition flex-shrink-0" title="Drag to reorder activity">
+                      <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                    </div>
+                  ` : ''}
+                  <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
+                  ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
+                  <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer group-hover:text-blue-600 dark:group-hover:text-blue-400 transition" title="Click to view/edit details">${this.escapeHtml(t.title)}</span>
+                  
+                  ${!isProgress ? `
+                    <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto flex-shrink-0 transition">
+                      <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'up')" title="Move Up" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === 0 ? 'invisible pointer-events-none' : ''}">
+                        <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
+                      </button>
+                      <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'down')" title="Move Down" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === sortedTasks.length - 1 ? 'invisible pointer-events-none' : ''}">
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                      </button>
+                      <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition">
+                        <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
+                      </button>
+                      <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})" title="Delete Activity" class="p-0.5 text-slate-400 hover:text-rose-500 rounded transition">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                      </button>
+                    </div>
+                  ` : ''}
+                </div>
+                <div class="flex items-center gap-1.5 mt-0.5 text-[10px] ${!isProgress ? 'pl-5' : 'pl-0'}">
+                  <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
+                  <span class="text-slate-300 dark:text-slate-600">•</span>
+                  <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
+                </div>
+              </div>
+
+              <!-- Column 2: Start Date Picker (115px) -->
+              <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 flex items-center justify-center">
+                ${t.start_date ? `
+                  <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                    <input type="date" value="${t.start_date}"
+                      onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)"
+                      title="Edit Start Date"
+                      class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                    <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'start_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear Start Date">
+                      <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
                   </div>
-                ` : ''}
-                <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
-                ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
-                <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer group-hover:text-blue-600 dark:group-hover:text-blue-400 transition" title="Click to view/edit details">${this.escapeHtml(t.title)}</span>
-                
-                ${!isProgress ? `
-                  <div class="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto flex-shrink-0 transition">
-                    <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'up')" title="Move Up" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === 0 ? 'invisible pointer-events-none' : ''}">
-                      <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); app.moveTaskOrder(${t.id}, 'down')" title="Move Down" class="p-0.5 text-slate-400 hover:text-blue-600 rounded transition ${idx === sortedTasks.length - 1 ? 'invisible pointer-events-none' : ''}">
-                      <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition">
-                      <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})" title="Delete Activity" class="p-0.5 text-slate-400 hover:text-rose-500 rounded transition">
-                      <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                ` : `
+                  <div class="relative w-[105px] h-7 group/gstart">
+                    <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                      <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                      <span class="truncate">Not Declared</span>
+                    </div>
+                    <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)" title="Click to set start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                  </div>
+                `}
+              </div>
+
+              <!-- Date Arrow Separator (25px) -->
+              <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
+
+              <!-- Column 3: End Date Picker (110px) -->
+              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex items-center justify-center">
+                ${t.due_date ? `
+                  <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                    <input type="date" value="${t.due_date}"
+                      onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
+                      title="Edit End / Due Date"
+                      class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                    <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
+                      <i data-lucide="x" class="w-3 h-3"></i>
                     </button>
                   </div>
+                ` : `
+                  <div class="relative w-[105px] h-7 group/gdue">
+                    <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
+                      <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
+                      <span class="truncate">Not Declared</span>
+                    </div>
+                    <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                  </div>
+                `}
+              </div>
+
+              <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
+              <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
+                ${!isProgress ? `
+                  <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
+                    title="Delete Activity"
+                    class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
+                  </button>
                 ` : ''}
               </div>
-              <div class="flex items-center gap-1.5 mt-0.5 text-[10px] ${!isProgress ? 'pl-5' : 'pl-0'}">
-                <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
-                <span class="text-slate-300 dark:text-slate-600">•</span>
-                <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
-              </div>
-            </div>
-
-            <!-- Column 2: Start Date Picker (115px) -->
-            <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 flex items-center justify-center">
-              ${t.start_date ? `
-                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
-                  <input type="date" value="${t.start_date}"
-                    onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)"
-                    title="Edit Start Date"
-                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
-                  <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'start_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear Start Date">
-                    <i data-lucide="x" class="w-3 h-3"></i>
-                  </button>
-                </div>
-              ` : `
-                <div class="relative w-[105px] h-7 group/gstart">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
-                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
-                    <span class="truncate">Not Declared</span>
-                  </div>
-                  <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'start_date', this.value)" title="Click to set start date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-                </div>
-              `}
-            </div>
-
-            <!-- Date Arrow Separator (25px) -->
-            <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
-
-            <!-- Column 3: End Date Picker (110px) -->
-            <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex items-center justify-center">
-              ${t.due_date ? `
-                <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
-                  <input type="date" value="${t.due_date}"
-                    onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
-                    title="Edit End / Due Date"
-                    class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
-                  <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
-                    <i data-lucide="x" class="w-3 h-3"></i>
-                  </button>
-                </div>
-              ` : `
-                <div class="relative w-[105px] h-7 group/gdue">
-                  <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
-                    <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
-                    <span class="truncate">Not Declared</span>
-                  </div>
-                  <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-                </div>
-              `}
-            </div>
-
-            <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
-            <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
-              ${!isProgress ? `
-                <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
-                  title="Delete Activity"
-                  class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
-                  <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
-                </button>
-              ` : ''}
-            </div>
-
+            `)}
           </div>
 
           <!-- Column 5: Right Timeline Bar Area with explicit width matching header -->
@@ -1671,6 +1738,12 @@ const app = {
                   style="width: ${colMinWidth}px; min-width: ${colMinWidth}px; max-width: ${colMinWidth}px; flex-shrink: 0;"></div>
               `).join('')}
             </div>
+
+            ${isTodayInTimeline ? `
+              <!-- Today vertical guideline -->
+              <div class="absolute top-0 bottom-0 pointer-events-none z-20 border-l-2 border-rose-500/60 border-dashed"
+                style="left: ${todayOffsetPct}%;"></div>
+            ` : ''}
 
             ${(!t.start_date && !t.due_date) ? `
               <div class="relative z-10 h-6 px-2.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/90 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shadow-2xs"
@@ -1706,13 +1779,17 @@ const app = {
       milestoneRowHtml = `
         <div class="flex items-center border-t-2 border-slate-200 dark:border-slate-700 bg-amber-50/30 dark:bg-amber-950/20 py-2"
           style="width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px; flex-shrink: 0;">
-          <div class="gantt-milestone-sticky-left pl-3 pr-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 border-r border-slate-200 dark:border-slate-700"
-            style="position: sticky; left: 0; z-index: 30; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
-            <i data-lucide="flag" class="w-4 h-4 text-amber-500 flex-shrink-0"></i>
-            <span>Project Milestones</span>
+          <div class="gantt-milestone-sticky-left px-2.5 text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5 border-r border-slate-200 dark:border-slate-700 truncate"
+            style="position: sticky; left: 0; z-index: 30; width: ${leftColWidth}px; min-width: ${leftColWidth}px; max-width: ${leftColWidth}px; flex-shrink: 0;">
+            <i data-lucide="flag" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0"></i>
+            <span class="truncate">${isMobileGantt ? 'Milestones' : 'Project Milestones'}</span>
           </div>
           <div class="gantt-timeline-cell flex items-center"
             style="position: relative; overflow: hidden; z-index: 0; width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; max-width: ${timelineWidthPx}px; flex-shrink: 0; height: 28px;">
+            ${isTodayInTimeline ? `
+              <div class="absolute top-0 bottom-0 pointer-events-none z-20 border-l-2 border-rose-500/60 border-dashed"
+                style="left: ${todayOffsetPct}%;"></div>
+            ` : ''}
             ${milestones.map(m => {
               if (!m.due_date) return '';
               const mDate = new Date(m.due_date + 'T12:00:00');
@@ -1739,27 +1816,46 @@ const app = {
           <!-- Top Tier Header (Months/Years) -->
           <div class="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
             style="display: flex; align-items: center; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
-            <div class="gantt-header-sticky-left py-2 pl-3 pr-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700"
-              style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
-              <span>Process Activities &amp; Schedule</span>
-              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase">timeline overview</span>
+            <div class="gantt-header-sticky-left py-2 px-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center justify-between border-r border-slate-200 dark:border-slate-700 truncate"
+              style="position: sticky; left: 0; z-index: 50; width: ${leftColWidth}px; min-width: ${leftColWidth}px; max-width: ${leftColWidth}px; flex-shrink: 0;">
+              <span class="truncate">${isMobileGantt ? 'Activities' : 'Process Activities &amp; Schedule'}</span>
+              ${!isMobileGantt ? `<span class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold lowercase flex-shrink-0">timeline</span>` : ''}
             </div>
-            <div class="flex bg-slate-100 dark:bg-slate-800"
+            <div class="relative flex bg-slate-100 dark:bg-slate-800"
               style="width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; flex-shrink: 0;">
               ${topHeaders.join('')}
+              ${isTodayInTimeline ? `
+                <div class="absolute -top-0.5 pointer-events-none z-30 flex flex-col items-center"
+                  style="left: ${todayOffsetPct}%; transform: translateX(-50%);">
+                  <span class="bg-rose-500 text-white text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-xs tracking-wider">Today</span>
+                </div>
+              ` : ''}
             </div>
           </div>
           <!-- Bottom Tier Header (Columns & Timeline Granularity) -->
           <div class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850"
             style="display: flex; align-items: center; width: ${totalRowWidthPx}px; min-width: ${totalRowWidthPx}px;">
-            <div class="gantt-header-sticky-left py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider"
-              style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
-              <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
-              <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 text-center">Start Date</div>
-              <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center"></div>
-              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center">End Date</div>
-              <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 text-center"></div>
-            </div>
+            ${isMobileGantt ? `
+              <div class="gantt-header-sticky-left py-1.5 px-2.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider truncate"
+                style="position: sticky; left: 0; z-index: 50; width: ${leftColWidth}px; min-width: ${leftColWidth}px; max-width: ${leftColWidth}px; flex-shrink: 0;">
+                <div class="w-full truncate">Task / Assignee</div>
+              </div>
+            ` : (isTabletGantt ? `
+              <div class="gantt-header-sticky-left py-1.5 px-2 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider truncate"
+                style="position: sticky; left: 0; z-index: 50; width: ${leftColWidth}px; min-width: ${leftColWidth}px; max-width: ${leftColWidth}px; flex-shrink: 0;">
+                <div class="w-[170px] min-w-[170px] max-w-[170px] truncate">Activity</div>
+                <div class="w-[110px] min-w-[110px] max-w-[110px] text-center">Schedule</div>
+              </div>
+            ` : `
+              <div class="gantt-header-sticky-left py-1.5 flex items-center border-r border-slate-200 dark:border-slate-700 text-[10.5px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider"
+                style="position: sticky; left: 0; z-index: 50; width: 540px; min-width: 540px; max-width: 540px; flex-shrink: 0;">
+                <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
+                <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 text-center">Start Date</div>
+                <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center"></div>
+                <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center">End Date</div>
+                <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 text-center"></div>
+              </div>
+            `)}
             <div class="flex bg-slate-50 dark:bg-slate-850"
               style="width: ${timelineWidthPx}px; min-width: ${timelineWidthPx}px; flex-shrink: 0;">
               ${bottomHeaders.join('')}
@@ -1777,9 +1873,33 @@ const app = {
       </div>
     `;
 
-    // Handle scroll: scroll once on initial open or scale change, otherwise preserve user's scroll position
+    // Handle scroll: focus on today or active tasks on initial load or scale change
     if (shouldInitialScroll) {
-      container.scrollLeft = 0;
+      let targetMs = null;
+      const nowMs = now.getTime();
+      const minMs = timelineMin.getTime();
+      const maxMs = timelineMax.getTime();
+
+      if (nowMs >= minMs && nowMs <= maxMs) {
+        // Center around today with active/recent tasks visible (look back 12 days)
+        targetMs = Math.max(minMs, nowMs - (12 * 86400000));
+      } else {
+        const activeTask = sortedTasks.find(t => (t.status === 'in_progress' || t.status === 'todo') && (t.start_date || t.due_date));
+        if (activeTask) {
+          targetMs = new Date((activeTask.start_date || activeTask.due_date) + 'T00:00:00').getTime();
+        } else if (firstTaskWithStart) {
+          targetMs = new Date(firstTaskWithStart.start_date + 'T00:00:00').getTime();
+        }
+      }
+
+      if (targetMs !== null && targetMs >= minMs) {
+        const ratio = Math.min(1, Math.max(0, (targetMs - minMs) / totalSpanMs));
+        const targetPx = ratio * timelineWidthPx;
+        const visibleTimeline = Math.max((container.clientWidth || window.innerWidth) - leftColWidth, 180);
+        container.scrollLeft = Math.max(0, Math.round(targetPx - (visibleTimeline * 0.15)));
+      } else {
+        container.scrollLeft = 0;
+      }
       container.scrollTop = 0;
     } else {
       container.scrollLeft = prevScrollLeft;
@@ -8180,4 +8300,13 @@ const app = {
 
 document.addEventListener('DOMContentLoaded', () => {
   app.init();
+  let _lastGanttW = window.innerWidth;
+  window.addEventListener('resize', () => {
+    const curW = window.innerWidth;
+    const crossed = (_lastGanttW < 768 && curW >= 768) || (_lastGanttW >= 768 && curW < 768) || (_lastGanttW < 1024 && curW >= 1024) || (_lastGanttW >= 1024 && curW < 1024);
+    _lastGanttW = curW;
+    if (crossed && app.state.activeView === 'gantt') {
+      app.renderGantt();
+    }
+  });
 });
