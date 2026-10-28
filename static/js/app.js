@@ -5079,7 +5079,7 @@ const app = {
       actual_hours: isNaN(actHours) ? 0.0 : actHours,
       tags,
       subtasks: tempSubtasks,
-      resource_ids: resourceIds
+      ...(Array.isArray(resourceIds) ? { resource_ids: resourceIds } : {})
     };
 
     // Close modal immediately (instant 0ms UX)
@@ -5104,9 +5104,9 @@ const app = {
           estimated_hours: isNaN(estHours) ? 0.0 : estHours,
           actual_hours: isNaN(actHours) ? 0.0 : actHours,
           tags,
-          resource_ids: resourceIds
+          ...(Array.isArray(resourceIds) ? { resource_ids: resourceIds } : {})
         });
-        if (this.state.projectResources) {
+        if (this.state.projectResources && Array.isArray(resourceIds)) {
           localTask.resources = this.state.projectResources
             .filter(r => resourceIds.includes(r.id))
             .map(r => ({
