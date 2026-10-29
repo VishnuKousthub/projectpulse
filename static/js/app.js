@@ -572,13 +572,33 @@ const app = {
     const unique = [];
     const seen = new Set();
     members.forEach(m => {
-      const clean = (m.name || '').trim().toLowerCase();
+      const clean = (m && m.name ? m.name : '').trim().toLowerCase();
       if (clean && !seen.has(clean)) {
         seen.add(clean);
         unique.push(m);
       }
     });
     return unique;
+  },
+
+  getTaskAssigneeName(t) {
+    if (!t) return '';
+    if (t.assignee_name && String(t.assignee_name).trim()) return String(t.assignee_name).trim();
+    if (t.assignee_id) {
+      const member = this.state.currentProject?.members?.find(m => m && Number(m.id) === Number(t.assignee_id));
+      if (member && member.name) return member.name;
+    }
+    return '';
+  },
+
+  getTaskAssigneeAvatar(t) {
+    if (!t) return '#6366F1';
+    if (t.assignee_avatar) return t.assignee_avatar;
+    if (t.assignee_id) {
+      const member = this.state.currentProject?.members?.find(m => m && Number(m.id) === Number(t.assignee_id));
+      if (member && member.avatar_color) return member.avatar_color;
+    }
+    return '#6366F1';
   },
 
   populateFilterDropdowns() {
@@ -1614,6 +1634,8 @@ const app = {
 
       const pct = (t.progress_pct !== undefined && t.progress_pct !== null) ? Number(t.progress_pct) : statusStyle.defaultProgress;
       const progressWidth = Math.min(100, Math.max(0, pct));
+      const assigneeName = this.getTaskAssigneeName(t);
+      const assigneeAvatar = this.getTaskAssigneeAvatar(t);
 
       return `
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]"
@@ -1630,7 +1652,7 @@ const app = {
                   <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
                 </div>
                 <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 pl-3.5">
-                  <span class="truncate max-w-[70px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
+                  <span class="truncate max-w-[70px]">${assigneeName ? this.escapeHtml(assigneeName) : 'Unassigned'}</span>
                   ${pct > 0 ? `<span class="text-slate-300 dark:text-slate-600">•</span><span class="font-mono font-semibold text-slate-500 dark:text-slate-300">${pct}%</span>` : ''}
                 </div>
               </div>
@@ -1642,7 +1664,7 @@ const app = {
                   <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="${this.escapeHtml(t.title)}">${this.escapeHtml(t.title)}</span>
                 </div>
                 <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 pl-5">
-                  <span class="truncate max-w-[90px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
+                  <span class="truncate max-w-[90px]">${assigneeName ? this.escapeHtml(assigneeName) : 'Unassigned'}</span>
                   ${pct > 0 ? `<span class="text-slate-300 dark:text-slate-600">•</span><span class="font-mono font-semibold text-slate-500 dark:text-slate-300">${pct}%</span>` : ''}
                 </div>
               </div>
@@ -1660,7 +1682,7 @@ const app = {
                     </div>
                   ` : ''}
                   <span class="text-[10px] font-bold text-slate-400 font-mono flex-shrink-0">#${(idx + 1).toString().padStart(2, '0')}</span>
-                  ${t.assignee_name ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${t.assignee_avatar || '#6366F1'}">${this.escapeHtml(t.assignee_name.charAt(0).toUpperCase())}</span>` : ''}
+                  ${assigneeName ? `<span class="w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center flex-shrink-0 shadow-2xs" style="background-color: ${assigneeAvatar}">${this.escapeHtml(assigneeName.charAt(0).toUpperCase())}</span>` : ''}
                   <span onclick="app.openTaskModal({id: ${t.id}})" class="text-xs font-bold text-slate-800 dark:text-white truncate cursor-pointer group-hover:text-blue-600 dark:group-hover:text-blue-400 transition" title="Click to view/edit details">${this.escapeHtml(t.title)}</span>
                   
                   ${!isProgress ? `
@@ -1683,7 +1705,7 @@ const app = {
                 <div class="flex items-center gap-1.5 mt-0.5 text-[10px] ${!isProgress ? 'pl-5' : 'pl-0'}">
                   <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
                   <span class="text-slate-300 dark:text-slate-600">•</span>
-                  <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${t.assignee_name ? this.escapeHtml(t.assignee_name) : 'Unassigned'}</span>
+                  <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${assigneeName ? this.escapeHtml(assigneeName) : 'Unassigned'}</span>
                 </div>
               </div>
 
@@ -1778,7 +1800,7 @@ const app = {
               <div class="gantt-bar absolute h-6 rounded-md text-[10px] font-bold text-white flex items-center px-2.5 shadow-xs cursor-pointer truncate transition-all duration-150 ${barColor}"
                 style="left: ${leftPct}%; width: ${Math.max(widthPct, 1.5)}%; min-width: 80px; z-index: 10;"
                 onclick="app.openTaskModal({id: ${t.id}})"
-                title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(t.assignee_name || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h${t.risk_count ? `&#10;Risks: ${t.risk_count}${t.has_high_risk ? ' (High open)' : ''}` : ''}&#10;Click to open task details">
+                title="${this.escapeHtml(t.title)}&#10;Owner: ${this.escapeHtml(assigneeName || 'Unassigned')}&#10;Timeline: ${t.start_date || 'Not Declared'} to ${t.due_date || 'Not Declared'}&#10;Status: ${statusStyle.name}&#10;Progress: ${progressWidth}%&#10;Est: ${t.estimated_hours || 0}h | Act: ${t.actual_hours || 0}h${t.risk_count ? `&#10;Risks: ${t.risk_count}${t.has_high_risk ? ' (High open)' : ''}` : ''}&#10;Click to open task details">
                 
                 <!-- Progress Fill Overlay -->
                 <div class="absolute inset-0 bg-white/20 rounded-md pointer-events-none" style="width: ${progressWidth}%"></div>
@@ -3874,13 +3896,13 @@ const app = {
           userRoleSpan.textContent = this.state.user?.role || 'Lead';
         }
       }
-      [titleInput, descInput, prioritySelect, manualAssigneeInput, tagsInput, posSelect].forEach(el => {
+      [titleInput, descInput, prioritySelect, tagsInput, posSelect].forEach(el => {
         if (el) {
           el.disabled = true;
           el.classList.add('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
         }
       });
-      [statusSelect, assigneeSelect, startInput, dueInput, estInput, actInput, progressNum, progressSlider].forEach(el => {
+      [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider].forEach(el => {
         if (el) {
           el.disabled = false;
           el.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
@@ -4091,6 +4113,8 @@ const app = {
 
   closeTaskModal() {
     document.getElementById('task-modal')?.classList.add('hidden');
+    const idInput = document.getElementById('task-input-id');
+    if (idInput) idInput.value = '';
     const taskFileInput = document.getElementById('task-attachment-file-input');
     if (taskFileInput) taskFileInput.value = '';
     const riskFileInput = document.getElementById('risk-attachment-file-input');
@@ -4988,19 +5012,60 @@ const app = {
         return;
       }
       const status = document.getElementById('task-input-status')?.value || 'todo';
+      const isManualAssignee = !document.getElementById('task-assignee-manual-container')?.classList.contains('hidden');
+      const manualAssigneeName = document.getElementById('task-input-assignee-manual')?.value.trim();
       const selectAssigneeVal = document.getElementById('task-input-assignee')?.value;
-      const assigneeId = (selectAssigneeVal && selectAssigneeVal !== '__manual__' && selectAssigneeVal !== '__manage__') ? Number(selectAssigneeVal) : null;
+
+      let assigneeId = null;
+      let assigneeName = null;
+      let assigneeAvatar = null;
+
+      if (isManualAssignee && manualAssigneeName) {
+        assigneeName = manualAssigneeName;
+        const matched = this.state.currentProject?.members?.find(m => m && m.name && m.name.toLowerCase() === manualAssigneeName.toLowerCase());
+        if (matched) {
+          assigneeId = matched.id;
+          assigneeAvatar = matched.avatar_color;
+        } else {
+          assigneeId = null;
+          assigneeAvatar = '#3B82F6';
+        }
+      } else if (!isManualAssignee && selectAssigneeVal && selectAssigneeVal !== '__manual__' && selectAssigneeVal !== '__manage__') {
+        assigneeId = Number(selectAssigneeVal);
+        const matched = this.state.currentProject?.members?.find(m => m && Number(m.id) === assigneeId);
+        assigneeName = matched ? matched.name : null;
+        assigneeAvatar = matched ? matched.avatar_color : null;
+      }
+
       const startDate = document.getElementById('task-input-startdate')?.value || null;
       const dueDate = document.getElementById('task-input-duedate')?.value || null;
       const estHours = parseFloat(document.getElementById('task-input-esthours')?.value || 0);
 
       this.closeTaskModal();
-      const localTask = this.state.tasks.find(t => t.id === numTaskId);
+      const localTask = this.state.tasks.find(t => t && (t.id === numTaskId || Number(t.id) === numTaskId));
+      const prevCopy = localTask ? { ...localTask } : null;
+
+      if (localTask) {
+        Object.assign(localTask, {
+          progress_pct: progressPct,
+          status: status,
+          assignee_id: assigneeId,
+          assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : assigneeName,
+          assignee_avatar: assigneeAvatar,
+          start_date: startDate,
+          due_date: dueDate,
+          estimated_hours: isNaN(estHours) ? 0.0 : estHours,
+          actual_hours: isNaN(actHours) ? 0.0 : actHours
+        });
+        this.renderCurrentView();
+        this.syncCurrentProjectCache();
+      }
 
       const payload = {
         progress_pct: progressPct,
         status: status,
         assignee_id: assigneeId,
+        assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : (assigneeName || undefined),
         start_date: startDate,
         due_date: dueDate,
         estimated_hours: isNaN(estHours) ? 0.0 : estHours,
@@ -5014,14 +5079,40 @@ const app = {
         });
         if (localTask && updated) {
           Object.assign(localTask, updated);
+          if (this.state.currentProject && updated.assignee_id && updated.assignee_name) {
+            if (!this.state.currentProject.members) this.state.currentProject.members = [];
+            const cleanName = updated.assignee_name.trim().toLowerCase();
+            const existingIdx = this.state.currentProject.members.findIndex(m => 
+              m && (m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName)
+            );
+            if (existingIdx !== -1) {
+              this.state.currentProject.members[existingIdx].id = updated.assignee_id;
+              this.state.currentProject.members[existingIdx].name = updated.assignee_name;
+              if (updated.assignee_avatar) this.state.currentProject.members[existingIdx].avatar_color = updated.assignee_avatar;
+            } else {
+              this.state.currentProject.members.push({
+                id: updated.assignee_id,
+                name: updated.assignee_name,
+                role: 'Member',
+                avatar_color: updated.assignee_avatar || '#3B82F6'
+              });
+            }
+          }
+          this.populateTaskModalDropdowns();
+          this.populateFilterDropdowns();
           this.syncCurrentProjectCache();
           this.renderCurrentView();
+          await this.fetchTasks();
         }
         this.showToast('Activity updated successfully', 'success');
       } catch (e) {
         console.error('Failed to update task:', e);
+        if (localTask && prevCopy) {
+          Object.assign(localTask, prevCopy);
+          this.syncCurrentProjectCache();
+          this.renderCurrentView();
+        }
         this.showToast(e.message || 'Failed to update activity', 'error');
-        this.renderCurrentView();
       }
       return;
     }
@@ -5048,7 +5139,7 @@ const app = {
     if (isManualAssignee && manualAssigneeName) {
       assigneeName = manualAssigneeName;
       // Check if matches an existing member
-      const matched = this.state.currentProject?.members?.find(m => m.name.toLowerCase() === manualAssigneeName.toLowerCase());
+      const matched = this.state.currentProject?.members?.find(m => m && m.name && m.name.toLowerCase() === manualAssigneeName.toLowerCase());
       if (matched) {
         assigneeId = matched.id;
         assigneeAvatar = matched.avatar_color;
@@ -5056,9 +5147,9 @@ const app = {
         assigneeId = null;
         assigneeAvatar = '#3B82F6';
       }
-    } else if (!isManualAssignee && selectAssigneeVal && selectAssigneeVal !== '__manual__') {
+    } else if (!isManualAssignee && selectAssigneeVal && selectAssigneeVal !== '__manual__' && selectAssigneeVal !== '__manage__') {
       assigneeId = Number(selectAssigneeVal);
-      const matched = this.state.currentProject?.members?.find(m => m.id === assigneeId);
+      const matched = this.state.currentProject?.members?.find(m => m && Number(m.id) === assigneeId);
       assigneeName = matched ? matched.name : null;
       assigneeAvatar = matched ? matched.avatar_color : null;
     }
@@ -5108,7 +5199,7 @@ const app = {
 
     if (isExistingTask) {
       // EDIT EXISTING TASK (Optimistic)
-      const localTask = this.state.tasks.find(t => t.id === numTaskId);
+      const localTask = this.state.tasks.find(t => t && (t.id === numTaskId || Number(t.id) === numTaskId));
       const prevCopy = localTask ? { ...localTask } : null;
       if (localTask) {
         Object.assign(localTask, {
@@ -5118,7 +5209,7 @@ const app = {
           priority,
           progress_pct: progressPct,
           assignee_id: assigneeId,
-          assignee_name: assigneeName,
+          assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : assigneeName,
           assignee_avatar: assigneeAvatar,
           start_date: startDate,
           due_date: dueDate,
@@ -5129,7 +5220,7 @@ const app = {
         });
         if (this.state.projectResources && Array.isArray(resourceIds)) {
           localTask.resources = this.state.projectResources
-            .filter(r => resourceIds.includes(r.id))
+            .filter(r => r && resourceIds.includes(r.id))
             .map(r => ({
               id: r.id,
               name: r.name,
@@ -5154,7 +5245,7 @@ const app = {
             if (!this.state.currentProject.members) this.state.currentProject.members = [];
             const cleanName = updated.assignee_name.trim().toLowerCase();
             const existingIdx = this.state.currentProject.members.findIndex(m => 
-              m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+              m && (m.id === updated.assignee_id || (m.name || '').trim().toLowerCase() === cleanName)
             );
             if (existingIdx !== -1) {
               this.state.currentProject.members[existingIdx].id = updated.assignee_id;
@@ -5169,8 +5260,11 @@ const app = {
               });
             }
           }
+          this.populateTaskModalDropdowns();
+          this.populateFilterDropdowns();
           this.syncCurrentProjectCache();
           this.renderCurrentView();
+          await this.fetchTasks();
         }
       } catch (e) {
         console.error('Failed to update task:', e);
@@ -5179,6 +5273,7 @@ const app = {
           this.syncCurrentProjectCache();
           this.renderCurrentView();
         }
+        this.showToast(e.message || 'Failed to update activity', 'error');
       }
     } else {
       // CREATE NEW TASK (Optimistic 0ms UI insertion)
@@ -5249,7 +5344,7 @@ const app = {
             if (!this.state.currentProject.members) this.state.currentProject.members = [];
             const cleanName = created.assignee_name.trim().toLowerCase();
             const existingIdx = this.state.currentProject.members.findIndex(m => 
-              m.id === created.assignee_id || (m.name || '').trim().toLowerCase() === cleanName
+              m && (m.id === created.assignee_id || (m.name || '').trim().toLowerCase() === cleanName)
             );
             if (existingIdx !== -1) {
               this.state.currentProject.members[existingIdx].id = created.assignee_id;
@@ -5264,6 +5359,8 @@ const app = {
               });
             }
           }
+          this.populateTaskModalDropdowns();
+          this.populateFilterDropdowns();
           this.syncCurrentProjectCache();
           this.renderCurrentView();
           await this.fetchTasks();
