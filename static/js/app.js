@@ -275,11 +275,23 @@ const app = {
   toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
-    const isOpen = sidebar.classList.contains('mobile-open');
-    if (isOpen) {
-      this.closeSidebarMobile();
+
+    if (window.innerWidth < 768) {
+      // Mobile drawer mode (< 768px)
+      const isOpen = sidebar.classList.contains('mobile-open');
+      if (isOpen) {
+        this.closeSidebarMobile();
+      } else {
+        this.openSidebarMobile();
+      }
     } else {
-      this.openSidebarMobile();
+      // Desktop / Tablet mode (>= 768px): toggle between expanded and collapsed
+      const isCollapsed = sidebar.classList.contains('sidebar-collapsed') || sidebar.classList.contains('sidebar-hover-expand');
+      if (isCollapsed) {
+        this.setSidebarMode('expanded');
+      } else {
+        this.setSidebarMode('collapsed');
+      }
     }
   },
 
@@ -295,6 +307,13 @@ const app = {
   },
 
   closeSidebarMobile() {
+    if (window.innerWidth >= 768) {
+      // On desktop and tablet, do not hide docked sidebar
+      const backdrop = document.getElementById('sidebar-backdrop');
+      if (backdrop) backdrop.classList.add('hidden');
+      document.body.classList.remove('mobile-sidebar-active');
+      return;
+    }
     const sidebar = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebar-backdrop');
     if (sidebar) {
@@ -617,7 +636,9 @@ const app = {
       return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
     }
 
-    this.closeSidebarMobile();
+    if (window.innerWidth < 768) {
+      this.closeSidebarMobile();
+    }
     this.state.activeView = viewName;
 
     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -7374,8 +7395,8 @@ const app = {
     if (!sidebar) return;
 
     // Reset mode classes
-    sidebar.classList.remove('sidebar-collapsed', 'sidebar-hover-expand');
-    document.body.classList.remove('sidebar-mode-collapsed', 'sidebar-mode-hover');
+    sidebar.classList.remove('sidebar-collapsed', 'sidebar-hover-expand', 'sidebar-expanded');
+    document.body.classList.remove('sidebar-mode-collapsed', 'sidebar-mode-hover', 'sidebar-mode-expanded');
 
     if (mode === 'collapsed') {
       sidebar.classList.add('sidebar-collapsed');
@@ -7383,6 +7404,9 @@ const app = {
     } else if (mode === 'hover') {
       sidebar.classList.add('sidebar-hover-expand');
       document.body.classList.add('sidebar-mode-hover');
+    } else {
+      sidebar.classList.add('sidebar-expanded');
+      document.body.classList.add('sidebar-mode-expanded');
     }
 
     // Close popover

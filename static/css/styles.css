@@ -613,6 +613,66 @@ main.app-main {
   transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ==================== EXPANDED MODE ==================== */
+
+#sidebar.sidebar-expanded {
+  width: 16rem !important;
+}
+
+@media (min-width: 768px) {
+  #sidebar.sidebar-expanded {
+    position: sticky !important;
+    transform: translateX(0) !important;
+    display: flex !important;
+  }
+}
+
+#sidebar.sidebar-expanded .sidebar-label,
+#sidebar.sidebar-expanded .sidebar-footer-btn-text,
+#sidebar.sidebar-expanded .brand-text {
+  max-width: 180px !important;
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-expanded .sidebar-extra {
+  max-height: 28px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-expanded #project-select-container {
+  max-height: 120px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-expanded #projects-list-sidebar {
+  max-height: 160px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#sidebar.sidebar-expanded .brand-header-inner {
+  justify-content: flex-start !important;
+}
+
+#sidebar.sidebar-expanded .nav-item {
+  justify-content: flex-start !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
+#sidebar.sidebar-expanded .sidebar-footer-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+#sidebar.sidebar-expanded #sidebar-control-btn {
+  justify-content: space-between !important;
+  padding-left: 0.625rem !important;
+}
+
 /* ==================== COLLAPSED MODE & UNHOVERED HOVER-MODE ==================== */
 
 #sidebar.sidebar-collapsed {
@@ -857,8 +917,8 @@ select.bg-slate-900 option,
 
 
 
-/* ==================== MOBILE & TABLET RESPONSIVE DRAWER & SAFE AREA ==================== */
-@media (max-width: 1023.98px) {
+/* ==================== MOBILE PHONE RESPONSIVE DRAWER & SAFE AREA (< 768px) ==================== */
+@media (max-width: 767.98px) {
   #sidebar {
     position: fixed !important;
     top: 0 !important;
