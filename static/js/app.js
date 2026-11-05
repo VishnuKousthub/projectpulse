@@ -3889,6 +3889,9 @@ const app = {
     }
 
     const isProgress = this.isProgressOnly();
+    const userRole = this.getUserRole();
+    const isLead = userRole === 'lead' || userRole === 'team lead';
+
     if (isProgress) {
       if (roleBanner) {
         roleBanner.classList.remove('hidden');
@@ -3896,13 +3899,26 @@ const app = {
           userRoleSpan.textContent = this.state.user?.role || 'Lead';
         }
       }
-      [titleInput, descInput, prioritySelect, tagsInput, posSelect].forEach(el => {
+
+      // Fields disabled:
+      // For Lead: title, priority, position are restricted; description and tags are enabled!
+      // For Assignee/Member: title, description, priority, tags, position are restricted.
+      const disabledFields = isLead
+        ? [titleInput, prioritySelect, posSelect]
+        : [titleInput, descInput, prioritySelect, tagsInput, posSelect];
+
+      disabledFields.forEach(el => {
         if (el) {
           el.disabled = true;
           el.classList.add('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
         }
       });
-      [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider].forEach(el => {
+
+      const enabledFields = isLead
+        ? [descInput, tagsInput, statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider]
+        : [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider];
+
+      enabledFields.forEach(el => {
         if (el) {
           el.disabled = false;
           el.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
@@ -4794,13 +4810,14 @@ const app = {
       return;
     }
 
-    const isPmOrAdmin = this.isFullAccess();
+    const userRole = this.getUserRole();
+    const canUploadTaskDoc = this.isFullAccess() || userRole === 'lead' || userRole === 'team lead';
     if (uploadBtn) {
-      if (isPmOrAdmin) uploadBtn.classList.remove('hidden');
+      if (canUploadTaskDoc) uploadBtn.classList.remove('hidden');
       else uploadBtn.classList.add('hidden');
     }
     if (dropzone) {
-      if (isPmOrAdmin) dropzone.classList.remove('hidden');
+      if (canUploadTaskDoc) dropzone.classList.remove('hidden');
       else dropzone.classList.add('hidden');
     }
 
@@ -4810,7 +4827,11 @@ const app = {
       return;
     }
 
+    const currentUserName = (this.state.user?.full_name || this.state.user?.username || '').trim().toLowerCase();
+
     container.innerHTML = actAttachments.map(att => {
+      const isUploader = att.uploaded_by && (att.uploaded_by.trim().toLowerCase() === currentUserName);
+      const canDelete = this.isFullAccess() || isUploader;
       return `
         <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-xs">
           <div class="flex items-center gap-2 min-w-0">
@@ -4829,7 +4850,7 @@ const app = {
             <button type="button" onclick="app.downloadAttachment(${att.id}, '${this.escapeHtml(att.original_name)}')" class="px-2 py-1 rounded text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center gap-1 transition" title="Download">
               <i data-lucide="download" class="w-3.5 h-3.5"></i> Download
             </button>
-            ${isPmOrAdmin ? `
+            ${canDelete ? `
             <button type="button" onclick="app.deleteAttachment(${att.id})" class="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition" title="Delete document">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
             </button>` : ''}
@@ -5041,6 +5062,14 @@ const app = {
       const dueDate = document.getElementById('task-input-duedate')?.value || null;
       const estHours = parseFloat(document.getElementById('task-input-esthours')?.value || 0);
 
+      const userRole = this.getUserRole();
+      const isLead = userRole === 'lead' || userRole === 'team lead';
+
+      const desc = isLead ? (document.getElementById('task-input-description')?.value || '') : undefined;
+      const tagsRaw = isLead ? (document.getElementById('task-input-tags')?.value || '') : '';
+      const tags = isLead ? tagsRaw.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) : undefined;
+      const tempSubtasks = isLead ? Array.from(document.querySelectorAll('.temporary-subtask')).map(el => el.textContent) : undefined;
+
       this.closeTaskModal();
       const localTask = this.state.tasks.find(t => t && (t.id === numTaskId || Number(t.id) === numTaskId));
       const prevCopy = localTask ? { ...localTask } : null;
@@ -5055,7 +5084,8 @@ const app = {
           start_date: startDate,
           due_date: dueDate,
           estimated_hours: isNaN(estHours) ? 0.0 : estHours,
-          actual_hours: isNaN(actHours) ? 0.0 : actHours
+          actual_hours: isNaN(actHours) ? 0.0 : actHours,
+          ...(isLead ? { description: desc, tags: tags || [] } : {})
         });
         this.renderCurrentView();
         this.syncCurrentProjectCache();
@@ -5069,7 +5099,8 @@ const app = {
         start_date: startDate,
         due_date: dueDate,
         estimated_hours: isNaN(estHours) ? 0.0 : estHours,
-        actual_hours: isNaN(actHours) ? 0.0 : actHours
+        actual_hours: isNaN(actHours) ? 0.0 : actHours,
+        ...(isLead ? { description: desc, tags: tags, subtasks: tempSubtasks } : {})
       };
 
       try {

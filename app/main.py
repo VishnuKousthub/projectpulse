@@ -1612,8 +1612,12 @@ def update_task(task_id):
 
         # Check for restricted role (Lead / Assignee / Member)
         if user and not is_full_access(user):
+            user_role = (user.get("role") or "").strip().lower()
+            is_lead = user_role in ("lead", "team lead")
+
             # Whitelisted keys for restricted roles:
-            # progress %, status, assignee, start date, end date, estimated hours, actual hours
+            # For Assignee/Member: progress %, status, assignee, start date, end date, estimated hours, actual hours
+            # For Lead: also allow description, tags, and subtasks
             ALLOWED_KEYS = {
                 "progress_pct", "progress",
                 "status",
@@ -1623,13 +1627,16 @@ def update_task(task_id):
                 "actual_hours",
                 "id", "task_id",
             }
+            if is_lead:
+                ALLOWED_KEYS.update({"description", "tags", "subtasks"})
+
             forbidden_attempted = False
 
-            # Check title change
+            # Check title change (never allowed for restricted roles)
             if "title" in data and clean_text(data["title"]) and clean_text(data["title"]) != task["title"]:
                 forbidden_attempted = True
-            # Check description change
-            if "description" in data and data["description"] is not None and str(data["description"]).strip() != str(task["description"] or "").strip():
+            # Check description change (allowed for Lead, forbidden for others)
+            if not is_lead and "description" in data and data["description"] is not None and str(data["description"]).strip() != str(task["description"] or "").strip():
                 forbidden_attempted = True
             # Check priority change
             if "priority" in data and data["priority"] and str(data["priority"]).strip() != str(task["priority"]).strip():
@@ -1646,8 +1653,8 @@ def update_task(task_id):
                 new_res = sorted([int(r) for r in data["resource_ids"] if str(r).isdigit()])
                 if curr_res != new_res:
                     forbidden_attempted = True
-            # Check tags change
-            if "tags" in data:
+            # Check tags change (allowed for Lead, forbidden for others)
+            if not is_lead and "tags" in data:
                 try:
                     curr_tags = json.loads(task["tags"]) if task["tags"] else []
                 except Exception:
@@ -1661,8 +1668,8 @@ def update_task(task_id):
                     new_tags = []
                 if sorted([t.lower() for t in curr_tags]) != sorted([t.lower() for t in new_tags]):
                     forbidden_attempted = True
-            # Check subtasks change
-            if "subtasks" in data and data["subtasks"]:
+            # Check subtasks change (allowed for Lead, forbidden for others)
+            if not is_lead and "subtasks" in data and data["subtasks"]:
                 forbidden_attempted = True
             # Check order_index change
             if "order_index" in data and safe_int(data["order_index"]) != task["order_index"]:
@@ -1676,9 +1683,12 @@ def update_task(task_id):
                         forbidden_attempted = True
 
             if forbidden_attempted:
-                return json_response({
-                    "error": f"Permission Denied: User role '{user.get('role')}' can only edit progress %, status, assignee, start date, end date, estimated hours, and actual hours."
-                }, status=403)
+                err_msg = (
+                    f"Permission Denied: User role '{user.get('role')}' can only edit description, tags, subtasks, progress %, status, assignee, start date, end date, estimated hours, and actual hours."
+                    if is_lead else
+                    f"Permission Denied: User role '{user.get('role')}' can only edit progress %, status, assignee, start date, end date, estimated hours, and actual hours."
+                )
+                return json_response({"error": err_msg}, status=403)
 
             # Assignee validation for restricted roles: must be an existing member of that project or empty (never create a new member)
             if data.get("assignee_name") or data.get("new_assignee_name"):
@@ -4370,11 +4380,14 @@ def upload_task_attachment(task_id):
 
         # Role checks:
         # PM and Admin can attach to activity or risk.
-        # Lead and Assignee can attach ONLY to a risk!
+        # Lead can also attach directly to activity or risk!
+        # Assignee and other restricted roles can attach ONLY to a risk.
         if user and not is_full_access(user):
-            if user.get("role") == "viewer":
+            user_role = (user.get("role") or "").strip().lower()
+            if user_role == "viewer":
                 return json_response({"error": "Permission Denied: Viewers cannot upload attachments."}, status=403)
-            if not risk_id:
+            is_lead = user_role in ("lead", "team lead")
+            if not is_lead and not risk_id:
                 return json_response({
                     "error": f"Permission Denied: User role '{user.get('role')}' can only upload attachments to specific risks, not directly to the activity."
                 }, status=403)
@@ -4429,13 +4442,16 @@ def delete_attachment(attachment_id):
 
         # Check permissions:
         # Full access (PM/Admin) can delete any attachment.
-        # Restricted roles (Lead/Assignee) can only delete if:
+        # Lead can delete activity-level attachments they uploaded, or any attachment they uploaded.
+        # Restricted roles (Assignee/Member) can only delete if:
         # 1. Attachment is tied to a risk (att['risk_id'] is not None)
         # 2. Attachment was uploaded by the user
         if user and not is_full_access(user):
-            if user.get("role") == "viewer":
+            user_role = (user.get("role") or "").strip().lower()
+            if user_role == "viewer":
                 return json_response({"error": "Permission Denied: Viewers cannot delete attachments."}, status=403)
-            if not att["risk_id"]:
+            is_lead = user_role in ("lead", "team lead")
+            if not is_lead and not att["risk_id"]:
                 return json_response({
                     "error": f"Permission Denied: User role '{user.get('role')}' cannot delete activity-level attachments."
                 }, status=403)

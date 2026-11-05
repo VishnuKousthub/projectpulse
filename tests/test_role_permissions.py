@@ -174,7 +174,7 @@ class TestRolePermissions(unittest.TestCase):
                 self.assertEqual(st_code, 200, f"{role_name} should be allowed to update assignee_id: {res}")
                 self.assertEqual(res["assignee_id"], mid)
 
-    # 3b. Test Lead & Assignee forbidden fields on tasks (403)
+    # 3b. Test Lead & Assignee field permissions on tasks
     def test_03b_lead_and_assignee_forbidden_task_fields(self):
         status, tasks = self._request("/api/projects/1/tasks", token=self.pm_token)
         task_id = tasks[0]["id"]
@@ -182,16 +182,38 @@ class TestRolePermissions(unittest.TestCase):
         cur_priority = tasks[0].get("priority")
         diff_priority = "low" if cur_priority != "low" else "urgent"
 
-        for token, role_name in [(self.lead_token, "Lead"), (self.assignee_token, "Assignee")]:
-            for forbidden_body, field_name in [
-                ({"title": "Altered Title"}, "title"),
-                ({"description": "Altered Description"}, "description"),
-                ({"priority": diff_priority}, "priority"),
-                ({"sprint_id": 2}, "sprint_id"),
-                ({"tags": ["custom-tag"]}, "tags"),
-            ]:
-                st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body=forbidden_body)
-                self.assertEqual(st_code, 403, f"{role_name} should be blocked from updating {field_name}: {res}")
+        # Lead CAN edit description, tags, and subtasks (200 OK)
+        st_desc, res_desc = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"description": "Lead Updated Description"})
+        self.assertEqual(st_desc, 200, f"Lead should be allowed to update description: {res_desc}")
+        self.assertEqual(res_desc["description"], "Lead Updated Description")
+
+        st_tags, res_tags = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"tags": ["lead-tag"]})
+        self.assertEqual(st_tags, 200, f"Lead should be allowed to update tags: {res_tags}")
+        self.assertIn("lead-tag", res_tags["tags"])
+
+        st_sub, res_sub = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"subtasks": ["Subtask 1 from Lead"]})
+        self.assertEqual(st_sub, 200, f"Lead should be allowed to update subtasks: {res_sub}")
+
+        # Lead CANNOT edit title, priority, sprint_id (403 Forbidden)
+        for forbidden_body, field_name in [
+            ({"title": "Altered Title"}, "title"),
+            ({"priority": diff_priority}, "priority"),
+            ({"sprint_id": 2}, "sprint_id"),
+        ]:
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body=forbidden_body)
+            self.assertEqual(st_code, 403, f"Lead should be blocked from updating {field_name}: {res}")
+
+        # Assignee CANNOT edit title, description, priority, sprint_id, tags, subtasks (403 Forbidden)
+        for forbidden_body, field_name in [
+            ({"title": "Altered Title"}, "title"),
+            ({"description": "Altered Description"}, "description"),
+            ({"priority": diff_priority}, "priority"),
+            ({"sprint_id": 2}, "sprint_id"),
+            ({"tags": ["custom-tag"]}, "tags"),
+            ({"subtasks": ["Forbidden Subtask"]}, "subtasks"),
+        ]:
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.assignee_token, body=forbidden_body)
+            self.assertEqual(st_code, 403, f"Assignee should be blocked from updating {field_name}: {res}")
 
     # 3c. Test validation errors: assignee outside project (400), end date before start (400)
     def test_03c_validation_errors_restricted_roles(self):

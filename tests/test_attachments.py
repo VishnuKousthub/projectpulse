@@ -183,8 +183,8 @@ class TestAttachments(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(task_data["attachment_count"], 1)
 
-    # 2. Lead / Assignee CANNOT upload directly to activity (403)
-    def test_02_lead_cannot_upload_activity_attachment(self):
+    # 2. Lead CAN upload activity document, Assignee CANNOT (403)
+    def test_02_lead_can_upload_activity_attachment(self):
         body, ct = self._build_multipart("lead_doc.pdf", b"%PDF-1.4 dummy", "application/pdf")
         status, data, _ = self._request(
             f"/api/tasks/{self.task_id}/attachments",
@@ -193,8 +193,21 @@ class TestAttachments(unittest.TestCase):
             token=self.lead_token,
             headers={"Content-Type": ct}
         )
-        self.assertEqual(status, 403)
-        self.assertIn("Permission Denied", data.get("error", ""))
+        self.assertEqual(status, 201, f"Lead upload failed: {data}")
+        self.assertEqual(data["original_name"], "lead_doc.pdf")
+        self.assertIsNone(data["risk_id"])
+
+        # Assignee CANNOT upload directly to activity
+        body_a, ct_a = self._build_multipart("assignee_doc.pdf", b"%PDF-1.4 dummy", "application/pdf")
+        status_a, data_a, _ = self._request(
+            f"/api/tasks/{self.task_id}/attachments",
+            method="POST",
+            body=body_a,
+            token=self.assignee_token,
+            headers={"Content-Type": ct_a}
+        )
+        self.assertEqual(status_a, 403)
+        self.assertIn("Permission Denied", data_a.get("error", ""))
 
     # 3. Lead / Assignee CAN upload to a specific risk (201)
     def test_03_lead_can_upload_risk_attachment(self):
