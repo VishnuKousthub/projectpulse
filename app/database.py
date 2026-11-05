@@ -174,6 +174,13 @@ def seed_default_users(cursor):
                 INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (username, email, hash_password(pwd), full_name, role, color, now_str))
+        elif username.lower() == "admin":
+            # Ensure the admin account always has a known working password and active status on startup
+            cursor.execute("""
+                UPDATE users
+                SET password_hash = ?, is_active = 1, role = 'admin'
+                WHERE LOWER(username) = 'admin'
+            """, (hash_password("admin123"),))
 
 def init_db():
     with get_db() as conn:
