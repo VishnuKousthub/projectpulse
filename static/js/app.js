@@ -3894,9 +3894,13 @@ const app = {
 
     if (isProgress) {
       if (roleBanner) {
-        roleBanner.classList.remove('hidden');
-        if (userRoleSpan) {
-          userRoleSpan.textContent = this.state.user?.role || 'Lead';
+        if (isLead) {
+          roleBanner.classList.add('hidden');
+        } else {
+          roleBanner.classList.remove('hidden');
+          if (userRoleSpan) {
+            userRoleSpan.textContent = this.state.user?.role || 'Assignee';
+          }
         }
       }
 
@@ -3939,8 +3943,8 @@ const app = {
     }
 
     if (params.id) {
-      document.getElementById('task-modal-title').textContent = isProgress ? 'Edit Activity (Limited edit)' : 'Edit Task Details';
-      document.getElementById('task-modal-type-badge').textContent = isProgress ? 'Limited edit' : ('Task #' + params.id);
+      document.getElementById('task-modal-title').textContent = (isProgress && !isLead) ? 'Edit Activity (Limited edit)' : 'Edit Task Details';
+      document.getElementById('task-modal-type-badge').textContent = (isProgress && !isLead) ? 'Limited edit' : ('Task #' + params.id);
       if (delBtn) {
         if (isProgress) delBtn.classList.add('hidden');
         else delBtn.classList.remove('hidden');
