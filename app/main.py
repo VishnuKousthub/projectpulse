@@ -204,12 +204,35 @@ def check_project_owner_match(owner_str, user):
         return True
     return False
 
+def user_has_assigned_projects(conn, user):
+    """
+    Checks if a user is assigned as Project Owner (or manager) to at least one project.
+    """
+    if not user:
+        return False
+    u_name = (user.get("username") or "").strip().lower()
+    u_full = (user.get("full_name") or "").strip().lower()
+    if not u_name:
+        return False
+    row = conn.execute("""
+        SELECT id FROM projects
+        WHERE LOWER(TRIM(COALESCE(project_owner, project_manager, ''))) = ?
+           OR (',' || REPLACE(REPLACE(LOWER(COALESCE(project_owner, project_manager, '')), ', ', ','), ' ,', ',') || ',') LIKE ('%,' || ? || ',%')
+           OR (? != '' AND LOWER(TRIM(COALESCE(project_owner, project_manager, ''))) = ?)
+           OR (? != '' AND (',' || REPLACE(REPLACE(LOWER(COALESCE(project_owner, project_manager, '')), ', ', ','), ' ,', ',') || ',') LIKE ('%,' || ? || ',%'))
+        LIMIT 1
+    """, (u_name, u_name, u_full, u_full, u_full, u_full)).fetchone()
+    return row is not None
+
 def user_can_access_project(user, project_id, conn=None):
     """
     Enforces project-level access control based on the Project Owner field in the Project Charter:
     - Administrators (role='admin') retain unrestricted access to all projects.
     - Unauthenticated internal requests (where role defaults to 'admin') retain access.
-    - Project owners only have access if their username matches the project's
+    - For lead users, assignees, and members: if they are not assigned with any project,
+      they have access to all projects listed as usual. If assigned to specific projects,
+      they are restricted to their assigned projects.
+    - Project owners (e.g. PMs) only have access if their username matches the project's
       Project Charter 'project_owner' (or 'project_manager').
     """
     if not user:
@@ -219,6 +242,10 @@ def user_can_access_project(user, project_id, conn=None):
         return True
 
     def _eval(c):
+        # If user is a lead, assignee, or member and not assigned with any project, grant access to all projects as usual
+        if role in ("lead", "assignee", "member", "viewer", "team lead") and not user_has_assigned_projects(c, user):
+            return True
+
         p = c.execute("SELECT id, project_owner, project_manager FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not p:
             return False
@@ -243,7 +270,7 @@ def get_all_projects_aggregated(conn, user=None):
         user = get_current_user()
     role = get_user_role(user) if user else "admin"
 
-    if role == "admin":
+    if role == "admin" or (role in ("lead", "assignee", "member", "viewer", "team lead") and not user_has_assigned_projects(conn, user)):
         return conn.execute("""
             SELECT
                 p.*,

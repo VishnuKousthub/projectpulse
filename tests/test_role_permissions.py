@@ -26,8 +26,6 @@ class TestRolePermissions(unittest.TestCase):
     def setUpClass(cls):
         init_db()
         seed_database()
-        with get_db() as conn:
-            conn.execute("UPDATE projects SET project_owner = 'pm, lead, assignee', project_manager = 'pm, lead, assignee' WHERE id = 1")
 
     def setUp(self):
         self.admin_token = self._login('admin', 'admin123')

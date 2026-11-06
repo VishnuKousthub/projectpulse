@@ -66,19 +66,25 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
         # Seed two distinct PM users: 'amit' and 'priya'
         now_str = "2026-11-06T10:00:00"
         with get_db() as conn:
-            conn.execute("""
-                INSERT OR IGNORE INTO users (username, email, password_hash, role, full_name, created_at, must_reset_password)
-                VALUES (?, ?, ?, ?, ?, ?, 0)
-            """, ('amit', 'amit@example.com', hash_password('amit123'), 'pm', 'Amit Kumar', now_str))
-
-            conn.execute("""
-                INSERT OR IGNORE INTO users (username, email, password_hash, role, full_name, created_at, must_reset_password)
-                VALUES (?, ?, ?, ?, ?, ?, 0)
-            """, ('priya', 'priya@example.com', hash_password('priya123'), 'pm', 'Priya Sharma', now_str))
+            for u, e, p, r, fn in [
+                ('amit', 'amit@example.com', 'amit123', 'pm', 'Amit Kumar'),
+                ('priya', 'priya@example.com', 'priya123', 'pm', 'Priya Sharma'),
+                ('unassigned_lead', 'unassigned_lead@example.com', 'lead123', 'lead', 'Unassigned Lead'),
+                ('unassigned_assignee', 'unassigned_assignee@example.com', 'assignee123', 'assignee', 'Unassigned Assignee'),
+                ('assigned_lead', 'assigned_lead@example.com', 'lead123', 'lead', 'Assigned Lead'),
+            ]:
+                conn.execute("DELETE FROM users WHERE username = ?", (u,))
+                conn.execute("""
+                    INSERT INTO users (username, email, password_hash, role, full_name, created_at, must_reset_password)
+                    VALUES (?, ?, ?, ?, ?, ?, 0)
+                """, (u, e, hash_password(p), r, fn, now_str))
 
         cls.admin_token = login("admin", "admin123")
         cls.amit_token = login("amit", "amit123")
         cls.priya_token = login("priya", "priya123")
+        cls.unassigned_lead_token = login("unassigned_lead", "lead123")
+        cls.unassigned_assignee_token = login("unassigned_assignee", "assignee123")
+        cls.assigned_lead_token = login("assigned_lead", "lead123")
 
     def test_01_case_insensitive_and_whitespace_matching(self):
         """Verify Amit, amit, AMIT, and '  amit  ' all match user 'amit'."""
@@ -299,6 +305,72 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
         # Priya cannot access it
         c_priya, _ = wsgi_call(f"/api/projects/{new_id}", "GET", token=self.priya_token)
         self.assertEqual(c_priya, 403)
+
+    def test_07_unassigned_lead_and_assignee_see_all_projects(self):
+        """Lead users or assignees not assigned to any project should access all projects as usual."""
+        code, all_projects = wsgi_call("/api/projects", "GET", token=self.admin_token)
+        self.assertEqual(code, 200)
+        all_ids = {p["id"] for p in all_projects}
+        self.assertGreater(len(all_ids), 0)
+
+        # 1. Unassigned Lead sees all projects
+        code_lead, lead_projects = wsgi_call("/api/projects", "GET", token=self.unassigned_lead_token)
+        self.assertEqual(code_lead, 200)
+        lead_ids = {p["id"] for p in lead_projects}
+        self.assertEqual(lead_ids, all_ids)
+
+        # Unassigned Lead can fetch direct project details and tasks
+        for pid in list(all_ids)[:3]:
+            c_p, _ = wsgi_call(f"/api/projects/{pid}", "GET", token=self.unassigned_lead_token)
+            self.assertEqual(c_p, 200)
+            c_t, _ = wsgi_call(f"/api/projects/{pid}/tasks", "GET", token=self.unassigned_lead_token)
+            self.assertEqual(c_t, 200)
+
+        # 2. Unassigned Assignee sees all projects
+        code_asg, asg_projects = wsgi_call("/api/projects", "GET", token=self.unassigned_assignee_token)
+        self.assertEqual(code_asg, 200)
+        asg_ids = {p["id"] for p in asg_projects}
+        self.assertEqual(asg_ids, all_ids)
+
+        # Unassigned Assignee can fetch direct project details and tasks
+        for pid in list(all_ids)[:3]:
+            c_p, _ = wsgi_call(f"/api/projects/{pid}", "GET", token=self.unassigned_assignee_token)
+            self.assertEqual(c_p, 200)
+            c_t, _ = wsgi_call(f"/api/projects/{pid}/tasks", "GET", token=self.unassigned_assignee_token)
+            self.assertEqual(c_t, 200)
+
+        # 3. Unassigned Lead and Assignee see all projects in bootstrap
+        code_b_lead, b_lead = wsgi_call("/api/bootstrap", "GET", token=self.unassigned_lead_token)
+        self.assertEqual(code_b_lead, 200)
+        self.assertEqual({p["id"] for p in b_lead.get("projects", [])}, all_ids)
+
+    def test_08_assigned_lead_restricted_to_assigned_project(self):
+        """If a lead user IS assigned to a project, they should only see their assigned project."""
+        with get_db() as conn:
+            conn.execute("DELETE FROM projects WHERE project_owner = 'assigned_lead' OR name = 'Lead Dedicated Project'")
+            c = conn.execute("""
+                INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
+                VALUES ('Lead Dedicated Project', 'assigned_lead', 'assigned_lead', '#14B8A6', '2026-11-06', '2026-11-06')
+            """)
+            lead_pid = c.lastrowid
+
+        code, lead_projects = wsgi_call("/api/projects", "GET", token=self.assigned_lead_token)
+        self.assertEqual(code, 200)
+        lead_ids = {p["id"] for p in lead_projects}
+
+        # Must only see the dedicated project
+        self.assertEqual(lead_ids, {lead_pid})
+
+        # Can access their dedicated project
+        c_ok, _ = wsgi_call(f"/api/projects/{lead_pid}", "GET", token=self.assigned_lead_token)
+        self.assertEqual(c_ok, 200)
+
+        # Blocked from accessing other projects
+        code, all_projects = wsgi_call("/api/projects", "GET", token=self.admin_token)
+        other_pids = [p["id"] for p in all_projects if p["id"] != lead_pid]
+        if other_pids:
+            c_blocked, _ = wsgi_call(f"/api/projects/{other_pids[0]}", "GET", token=self.assigned_lead_token)
+            self.assertEqual(c_blocked, 403)
 
 
 if __name__ == '__main__':

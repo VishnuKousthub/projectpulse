@@ -24,8 +24,8 @@ def seed_database():
             "CloudScale Platform 2.0",
             "Next-generation distributed cloud infrastructure, microservices orchestration, and real-time observability dashboard.",
             "#3B82F6",
-            "pm, lead, assignee",
-            "pm, lead, assignee",
+            "pm",
+            "pm",
             (now - timedelta(days=20)).isoformat(),
             now_str
         ))
