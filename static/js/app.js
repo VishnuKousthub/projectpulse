@@ -127,9 +127,18 @@ const app = {
     return role === 'admin' || role === 'pm' || role === 'project manager' || role === 'manager' || !this.state.authToken;
   },
 
+  isLead() {
+    const role = this.getUserRole();
+    return role === 'lead' || role === 'team lead';
+  },
+
+  canCreateTask() {
+    return this.isFullAccess() || this.isLead();
+  },
+
   isProgressOnly() {
     const role = this.getUserRole();
-    return role === 'lead' || role === 'team lead' || role === 'assignee' || role === 'member' || role === 'developer';
+    return role === 'assignee' || role === 'member' || role === 'developer' || role === 'viewer';
   },
 
   formatINR(amount) {
@@ -188,12 +197,14 @@ const app = {
 
   applyRolePermissionsUI() {
     const isProgress = this.isProgressOnly();
+    const canAdd = this.canCreateTask();
+    const isFull = this.isFullAccess();
 
     // Header buttons
     const headerNewTaskBtn = document.getElementById('header-new-task-btn');
     const headerUploadGanttBtn = document.getElementById('header-upload-gantt-btn');
-    if (headerNewTaskBtn) headerNewTaskBtn.style.display = isProgress ? 'none' : '';
-    if (headerUploadGanttBtn) headerUploadGanttBtn.style.display = isProgress ? 'none' : '';
+    if (headerNewTaskBtn) headerNewTaskBtn.style.display = canAdd ? '' : 'none';
+    if (headerUploadGanttBtn) headerUploadGanttBtn.style.display = isFull ? '' : 'none';
 
     // Sidebar project administration & backup buttons
     const sbManageProject = document.getElementById('sidebar-manage-project-btn');
@@ -202,11 +213,11 @@ const app = {
     const sbImportExport = document.getElementById('sidebar-import-export-btn');
     const sbResetDemo = document.getElementById('sidebar-reset-demo-btn');
 
-    if (sbManageProject) sbManageProject.style.display = isProgress ? 'none' : '';
-    if (sbNewProject) sbNewProject.style.display = isProgress ? 'none' : '';
-    if (sbAddProjIcon) sbAddProjIcon.style.display = isProgress ? 'none' : '';
-    if (sbImportExport) sbImportExport.style.display = isProgress ? 'none' : '';
-    if (sbResetDemo) sbResetDemo.style.display = isProgress ? 'none' : '';
+    if (sbManageProject) sbManageProject.style.display = isFull ? '' : 'none';
+    if (sbNewProject) sbNewProject.style.display = isFull ? '' : 'none';
+    if (sbAddProjIcon) sbAddProjIcon.style.display = isFull ? '' : 'none';
+    if (sbImportExport) sbImportExport.style.display = isFull ? '' : 'none';
+    if (sbResetDemo) sbResetDemo.style.display = isFull ? '' : 'none';
 
     // View specific buttons
     const kanbanAddBtn = document.getElementById('kanban-add-task-btn');
@@ -216,15 +227,18 @@ const app = {
     const resAddBtn = document.getElementById('res-add-library-btn');
     const resMapBtn = document.getElementById('res-map-project-btn');
 
-    if (kanbanAddBtn) kanbanAddBtn.style.display = isProgress ? 'none' : '';
-    if (tableAddBtn) tableAddBtn.style.display = isProgress ? 'none' : '';
-    if (calendarAddBtn) calendarAddBtn.style.display = isProgress ? 'none' : '';
-    if (ganttImportBtn) ganttImportBtn.style.display = isProgress ? 'none' : '';
-    if (resAddBtn) resAddBtn.style.display = isProgress ? 'none' : '';
-    if (resMapBtn) resMapBtn.style.display = isProgress ? 'none' : '';
+    if (kanbanAddBtn) kanbanAddBtn.style.display = canAdd ? '' : 'none';
+    if (tableAddBtn) tableAddBtn.style.display = canAdd ? '' : 'none';
+    if (calendarAddBtn) calendarAddBtn.style.display = canAdd ? '' : 'none';
+    if (ganttImportBtn) ganttImportBtn.style.display = isFull ? '' : 'none';
+    if (resAddBtn) resAddBtn.style.display = isFull ? '' : 'none';
+    if (resMapBtn) resMapBtn.style.display = isFull ? '' : 'none';
 
     const navCharter = document.getElementById('nav-charter');
-    if (navCharter) navCharter.style.display = isProgress ? 'none' : '';
+    if (navCharter) navCharter.style.display = isFull ? '' : 'none';
+
+    const navDashboard = document.getElementById('nav-dashboard');
+    if (navDashboard) navDashboard.style.display = isFull ? '' : 'none';
 
     // Hide Mapped Project Resources & Equipment in task modal for PM, Lead, Assignee (Admin only)
     const taskModalResourcesSec = document.getElementById('task-modal-resources-section');
@@ -1696,9 +1710,11 @@ const app = {
                       <button onclick="event.stopPropagation(); app.openTaskModal({ insert_after_id: ${t.id} })" title="Insert Activity Below" class="p-0.5 text-slate-400 hover:text-emerald-500 rounded transition">
                         <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-500"></i>
                       </button>
+                      ${this.isFullAccess() ? `
                       <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})" title="Delete Activity" class="p-0.5 text-slate-400 hover:text-rose-500 rounded transition">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-500"></i>
                       </button>
+                      ` : ''}
                     </div>
                   ` : ''}
                 </div>
@@ -1760,7 +1776,7 @@ const app = {
 
               <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
               <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 flex items-center justify-center pr-1">
-                ${!isProgress ? `
+                ${this.isFullAccess() ? `
                   <button onclick="event.stopPropagation(); app.confirmDeleteActivity(${t.id})"
                     title="Delete Activity"
                     class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition flex items-center justify-center">
@@ -2322,7 +2338,7 @@ const app = {
               <button onclick="app.openTaskModal({id: ${t.id}})" class="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Open Full Details / Update Progress">
                 <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
               </button>
-              ${!isProgress ? `
+              ${this.isFullAccess() ? `
               <button onclick="app.inlineDeleteTask(${t.id})" class="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Delete Activity">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
               </button>
@@ -2507,7 +2523,7 @@ const app = {
   },
 
   confirmDeleteActivity(taskId) {
-    if (this.isProgressOnly()) {
+    if (!this.isFullAccess()) {
       this.showToast('Activity deletion is restricted to Project Manager and Admin.', 'warning');
       return;
     }
@@ -3833,8 +3849,8 @@ const app = {
   },
 
   async openTaskModal(params = {}) {
-    if (this.isProgressOnly() && !params.id) {
-      this.showToast('Activity creation is restricted to Project Manager and Admin.', 'warning');
+    if (!this.canCreateTask() && !params.id) {
+      this.showToast('Activity creation is restricted to Project Manager, Admin, and Lead.', 'warning');
       return;
     }
     const modal = document.getElementById('task-modal');
@@ -3890,26 +3906,18 @@ const app = {
 
     const isProgress = this.isProgressOnly();
     const userRole = this.getUserRole();
-    const isLead = userRole === 'lead' || userRole === 'team lead';
+    const isLead = this.isLead();
 
     if (isProgress) {
       if (roleBanner) {
-        if (isLead) {
-          roleBanner.classList.add('hidden');
-        } else {
-          roleBanner.classList.remove('hidden');
-          if (userRoleSpan) {
-            userRoleSpan.textContent = this.state.user?.role || 'Assignee';
-          }
+        roleBanner.classList.remove('hidden');
+        if (userRoleSpan) {
+          userRoleSpan.textContent = this.state.user?.role || 'Assignee';
         }
       }
 
-      // Fields disabled:
-      // For Lead: title, priority, position are restricted; description and tags are enabled!
-      // For Assignee/Member: title, description, priority, tags, position are restricted.
-      const disabledFields = isLead
-        ? [titleInput, prioritySelect, posSelect]
-        : [titleInput, descInput, prioritySelect, tagsInput, posSelect];
+      // Fields disabled for Assignee/Member: title, description, priority, tags, position are restricted.
+      const disabledFields = [titleInput, descInput, prioritySelect, tagsInput, posSelect];
 
       disabledFields.forEach(el => {
         if (el) {
@@ -3918,9 +3926,7 @@ const app = {
         }
       });
 
-      const enabledFields = isLead
-        ? [descInput, tagsInput, statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider]
-        : [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider];
+      const enabledFields = [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider];
 
       enabledFields.forEach(el => {
         if (el) {
@@ -3939,15 +3945,17 @@ const app = {
           el.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
         }
       });
+      if (delBtn) delBtn.classList.add('hidden');
+      if (posWrapper) posWrapper.classList.remove('hidden');
       if (saveBtn) saveBtn.textContent = params.id ? 'Save Task' : 'Create Task';
     }
 
     if (params.id) {
-      document.getElementById('task-modal-title').textContent = (isProgress && !isLead) ? 'Edit Activity (Limited edit)' : 'Edit Task Details';
-      document.getElementById('task-modal-type-badge').textContent = (isProgress && !isLead) ? 'Limited edit' : ('Task #' + params.id);
+      document.getElementById('task-modal-title').textContent = isProgress ? 'Edit Activity (Limited edit)' : 'Edit Task Details';
+      document.getElementById('task-modal-type-badge').textContent = isProgress ? 'Limited edit' : ('Task #' + params.id);
       if (delBtn) {
-        if (isProgress) delBtn.classList.add('hidden');
-        else delBtn.classList.remove('hidden');
+        if (this.isFullAccess()) delBtn.classList.remove('hidden');
+        else delBtn.classList.add('hidden');
       }
       if (posWrapper) posWrapper.classList.add('hidden');
 
@@ -5412,7 +5420,7 @@ const app = {
   },
 
   async handleDeleteTask() {
-    if (this.isProgressOnly()) {
+    if (!this.isFullAccess()) {
       this.showToast('Activity deletion is restricted to Project Manager and Admin.', 'warning');
       return;
     }

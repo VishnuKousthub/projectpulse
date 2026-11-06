@@ -56,7 +56,7 @@ Object.assign(app, {
 
     const navDashboard = document.getElementById('nav-dashboard');
     if (navDashboard) {
-      navDashboard.style.display = isProgress ? 'none' : '';
+      navDashboard.style.display = this.isFullAccess() ? '' : 'none';
     }
 
     const count = document.getElementById('core-views-count');

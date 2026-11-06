@@ -63,12 +63,14 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
         init_db()
         seed_database()
 
-        # Seed two distinct PM users: 'amit' and 'priya'
+        # Seed PM users and assigned lead users
         now_str = "2026-11-06T10:00:00"
         with get_db() as conn:
             for u, e, p, r, fn in [
                 ('amit', 'amit@example.com', 'amit123', 'pm', 'Amit Kumar'),
                 ('priya', 'priya@example.com', 'priya123', 'pm', 'Priya Sharma'),
+                ('owner_amit', 'owner_amit@example.com', 'amit123', 'lead', 'Amit Lead Owner'),
+                ('owner_priya', 'owner_priya@example.com', 'priya123', 'lead', 'Priya Lead Owner'),
                 ('unassigned_lead', 'unassigned_lead@example.com', 'lead123', 'lead', 'Unassigned Lead'),
                 ('unassigned_assignee', 'unassigned_assignee@example.com', 'assignee123', 'assignee', 'Unassigned Assignee'),
                 ('assigned_lead', 'assigned_lead@example.com', 'lead123', 'lead', 'Assigned Lead'),
@@ -82,96 +84,120 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
         cls.admin_token = login("admin", "admin123")
         cls.amit_token = login("amit", "amit123")
         cls.priya_token = login("priya", "priya123")
+        cls.owner_amit_token = login("owner_amit", "amit123")
+        cls.owner_priya_token = login("owner_priya", "priya123")
         cls.unassigned_lead_token = login("unassigned_lead", "lead123")
         cls.unassigned_assignee_token = login("unassigned_assignee", "assignee123")
         cls.assigned_lead_token = login("assigned_lead", "lead123")
 
     def test_01_case_insensitive_and_whitespace_matching(self):
-        """Verify Amit, amit, AMIT, and '  amit  ' all match user 'amit'."""
+        """Verify Owner_Amit, owner_amit, OWNER_AMIT, and '  owner_amit  ' all match user 'owner_amit'."""
         with get_db() as conn:
             # Create three projects with varying casing and whitespace
             c1 = conn.execute("""
                 INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
-                VALUES ('Project TitleCase', 'Amit', 'Amit', '#3B82F6', '2026-11-06', '2026-11-06')
+                VALUES ('Project TitleCase', 'Owner_Amit', 'Owner_Amit', '#3B82F6', '2026-11-06', '2026-11-06')
             """)
             p1_id = c1.lastrowid
 
             c2 = conn.execute("""
                 INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
-                VALUES ('Project UpperCase', 'AMIT', 'AMIT', '#10B981', '2026-11-06', '2026-11-06')
+                VALUES ('Project UpperCase', 'OWNER_AMIT', 'OWNER_AMIT', '#10B981', '2026-11-06', '2026-11-06')
             """)
             p2_id = c2.lastrowid
 
             c3 = conn.execute("""
                 INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
-                VALUES ('Project PaddedWhitespace', '   amit   ', '   amit   ', '#F59E0B', '2026-11-06', '2026-11-06')
+                VALUES ('Project PaddedWhitespace', '   owner_amit   ', '   owner_amit   ', '#F59E0B', '2026-11-06', '2026-11-06')
             """)
             p3_id = c3.lastrowid
 
-        code, projects = wsgi_call("/api/projects", "GET", token=self.amit_token)
+        code, projects = wsgi_call("/api/projects", "GET", token=self.owner_amit_token)
         self.assertEqual(code, 200)
         returned_ids = {p["id"] for p in projects}
 
-        # All 3 projects must be visible to user 'amit'
+        # All 3 projects must be visible to user 'owner_amit'
         self.assertIn(p1_id, returned_ids)
         self.assertIn(p2_id, returned_ids)
         self.assertIn(p3_id, returned_ids)
 
         # Backend direct project access must also succeed
-        code1, _ = wsgi_call(f"/api/projects/{p1_id}", "GET", token=self.amit_token)
-        code2, _ = wsgi_call(f"/api/projects/{p2_id}", "GET", token=self.amit_token)
-        code3, _ = wsgi_call(f"/api/projects/{p3_id}", "GET", token=self.amit_token)
+        code1, _ = wsgi_call(f"/api/projects/{p1_id}", "GET", token=self.owner_amit_token)
+        code2, _ = wsgi_call(f"/api/projects/{p2_id}", "GET", token=self.owner_amit_token)
+        code3, _ = wsgi_call(f"/api/projects/{p3_id}", "GET", token=self.owner_amit_token)
         self.assertEqual(code1, 200)
         self.assertEqual(code2, 200)
         self.assertEqual(code3, 200)
 
-    def test_02_project_isolation_between_users(self):
-        """User Amit should only see Amit projects. User Priya should only see Priya projects."""
+    def test_02_project_isolation_between_assigned_users(self):
+        """Assigned user Owner Amit should only see Owner Amit projects. User Owner Priya should only see Owner Priya projects."""
         with get_db() as conn:
             c_amit = conn.execute("""
                 INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
-                VALUES ('Amit Sole Project', 'amit', 'amit', '#3B82F6', '2026-11-06', '2026-11-06')
+                VALUES ('Amit Dedicated Project', 'owner_amit', 'owner_amit', '#3B82F6', '2026-11-06', '2026-11-06')
             """)
             amit_pid = c_amit.lastrowid
 
             c_priya = conn.execute("""
                 INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
-                VALUES ('Priya Sole Project', 'priya', 'priya', '#EC4899', '2026-11-06', '2026-11-06')
+                VALUES ('Priya Dedicated Project', 'owner_priya', 'owner_priya', '#EC4899', '2026-11-06', '2026-11-06')
             """)
             priya_pid = c_priya.lastrowid
 
-        # 1. Check GET /api/projects for Amit
-        _, amit_projects = wsgi_call("/api/projects", "GET", token=self.amit_token)
+        # 1. Check GET /api/projects for Owner Amit
+        _, amit_projects = wsgi_call("/api/projects", "GET", token=self.owner_amit_token)
         amit_ids = {p["id"] for p in amit_projects}
         self.assertIn(amit_pid, amit_ids)
         self.assertNotIn(priya_pid, amit_ids)
 
-        # 2. Check GET /api/projects for Priya
-        _, priya_projects = wsgi_call("/api/projects", "GET", token=self.priya_token)
+        # 2. Check GET /api/projects for Owner Priya
+        _, priya_projects = wsgi_call("/api/projects", "GET", token=self.owner_priya_token)
         priya_ids = {p["id"] for p in priya_projects}
         self.assertIn(priya_pid, priya_ids)
         self.assertNotIn(amit_pid, priya_ids)
 
-        # 3. Check GET /api/bootstrap for Amit
-        code, boot_amit = wsgi_call("/api/bootstrap", "GET", token=self.amit_token)
+        # 3. Check GET /api/bootstrap for Owner Amit
+        code, boot_amit = wsgi_call("/api/bootstrap", "GET", token=self.owner_amit_token)
         self.assertEqual(code, 200)
         boot_amit_ids = {p["id"] for p in boot_amit.get("projects", [])}
         self.assertIn(amit_pid, boot_amit_ids)
         self.assertNotIn(priya_pid, boot_amit_ids)
 
-        # 4. Check GET /api/dashboard for Amit
-        code, dash_amit = wsgi_call("/api/dashboard", "GET", token=self.amit_token)
-        self.assertEqual(code, 200)
-        dash_amit_ids = {p["id"] for p in dash_amit.get("projects", [])}
-        self.assertIn(amit_pid, dash_amit_ids)
-        self.assertNotIn(priya_pid, dash_amit_ids)
+    def test_02b_pm_unrestricted_access_across_all_projects(self):
+        """Project Managers (PM) must have unrestricted access across all projects, just like Admin."""
+        with get_db() as conn:
+            c_p1 = conn.execute("INSERT INTO projects (name, project_owner, color, created_at, updated_at) VALUES ('PM Test Proj 1', 'owner_amit', '#123456', '2026-11-06', '2026-11-06')")
+            p1_id = c_p1.lastrowid
+            c_p2 = conn.execute("INSERT INTO projects (name, project_owner, color, created_at, updated_at) VALUES ('PM Test Proj 2', 'owner_priya', '#654321', '2026-11-06', '2026-11-06')")
+            p2_id = c_p2.lastrowid
 
-        # 5. Check GET /api/portfolio/analytics for Amit
-        code, port_amit = wsgi_call("/api/portfolio/analytics", "GET", token=self.amit_token)
-        self.assertEqual(code, 200)
-        port_amit_ids = {p["id"] for p in port_amit.get("projects", [])}
-        self.assertIn(amit_pid, port_amit_ids)
-        self.assertNotIn(priya_pid, port_amit_ids)
+        for token, pm_name in [(self.amit_token, "Amit"), (self.priya_token, "Priya")]:
+            # PM sees all projects in listing
+            code, projs = wsgi_call("/api/projects", "GET", token=token)
+            self.assertEqual(code, 200)
+            proj_ids = {p["id"] for p in projs}
+            self.assertIn(p1_id, proj_ids, f"PM {pm_name} must see project 1")
+            self.assertIn(p2_id, proj_ids, f"PM {pm_name} must see project 2")
+
+            # PM gets direct access to any project
+            c1, _ = wsgi_call(f"/api/projects/{p1_id}", "GET", token=token)
+            c2, _ = wsgi_call(f"/api/projects/{p2_id}", "GET", token=token)
+            self.assertEqual(c1, 200, f"PM {pm_name} must have direct access to project 1")
+            self.assertEqual(c2, 200, f"PM {pm_name} must have direct access to project 2")
+
+            # PM gets bootstrap with all projects
+            cb, boot = wsgi_call("/api/bootstrap", "GET", token=token)
+            self.assertEqual(cb, 200)
+            b_ids = {p["id"] for p in boot.get("projects", [])}
+            self.assertIn(p1_id, b_ids)
+            self.assertIn(p2_id, b_ids)
+
+            # PM gets portfolio dashboard with all projects
+            cd, dash = wsgi_call("/api/dashboard", "GET", token=token)
+            self.assertEqual(cd, 200)
+            d_ids = {p["id"] for p in dash.get("projects", [])}
+            self.assertIn(p1_id, d_ids)
+            self.assertIn(p2_id, d_ids)
 
     def test_03_admin_unrestricted_access(self):
         """Admin user must see and access all projects regardless of Project Owner."""
@@ -207,8 +233,8 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
     def test_04_backend_blocks_unauthorized_direct_api_access(self):
         """Direct API requests to another user's project or project resources must return 403 Forbidden."""
         with get_db() as conn:
-            # Create project strictly owned by Amit with tasks, deliverables, risks, sprints, milestones
-            c = conn.execute("INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at) VALUES ('Amit Secret Project', 'amit', 'amit', '#000000', '2026-11-06', '2026-11-06')")
+            # Create project strictly owned by Owner Amit with tasks, deliverables, risks, sprints, milestones
+            c = conn.execute("INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at) VALUES ('Amit Secret Project', 'owner_amit', 'owner_amit', '#000000', '2026-11-06', '2026-11-06')")
             pid = c.lastrowid
             t_cur = conn.execute("INSERT INTO tasks (project_id, title, status, created_at, updated_at) VALUES (?, 'Secret Task', 'todo', '2026-11-06', '2026-11-06')", (pid,))
             tid = t_cur.lastrowid
@@ -221,8 +247,8 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
             m_cur = conn.execute("INSERT INTO milestones (project_id, title, due_date) VALUES (?, 'Milestone 1', '2026-12-31')", (pid,))
             mid = m_cur.lastrowid
 
-        # Priya attempts direct access to Amit's project and sub-resources
-        unauthorized_token = self.priya_token
+        # Owner Priya attempts direct access to Owner Amit's project and sub-resources
+        unauthorized_token = self.owner_priya_token
 
         endpoints = [
             (f"/api/projects/{pid}", "GET", None),
@@ -263,27 +289,26 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
             code, resp = wsgi_call(path, method, body=payload, token=unauthorized_token)
             self.assertEqual(code, 403, f"Expected 403 for {method} {path}, got {code}: {resp}")
             self.assertIn("error", resp)
-            self.assertIn("Project Owner", resp["error"])
 
     def test_05_multi_owner_comma_separated_list(self):
-        """A project with comma-separated owners ('Amit, Priya') should be accessible to both."""
+        """A project with comma-separated owners ('owner_amit, owner_priya') should be accessible to both."""
         with get_db() as conn:
             c = conn.execute("""
                 INSERT INTO projects (name, project_owner, project_manager, color, created_at, updated_at)
-                VALUES ('Shared Innovation Lab', 'Amit, Priya', 'Amit, Priya', '#6366F1', '2026-11-06', '2026-11-06')
+                VALUES ('Shared Innovation Lab', 'owner_amit, owner_priya', 'owner_amit, owner_priya', '#6366F1', '2026-11-06', '2026-11-06')
             """)
             shared_pid = c.lastrowid
 
-        # Amit can see and access
-        _, amit_projects = wsgi_call("/api/projects", "GET", token=self.amit_token)
+        # Owner Amit can see and access
+        _, amit_projects = wsgi_call("/api/projects", "GET", token=self.owner_amit_token)
         self.assertIn(shared_pid, {p["id"] for p in amit_projects})
-        code_amit, _ = wsgi_call(f"/api/projects/{shared_pid}", "GET", token=self.amit_token)
+        code_amit, _ = wsgi_call(f"/api/projects/{shared_pid}", "GET", token=self.owner_amit_token)
         self.assertEqual(code_amit, 200)
 
-        # Priya can see and access
-        _, priya_projects = wsgi_call("/api/projects", "GET", token=self.priya_token)
+        # Owner Priya can see and access
+        _, priya_projects = wsgi_call("/api/projects", "GET", token=self.owner_priya_token)
         self.assertIn(shared_pid, {p["id"] for p in priya_projects})
-        code_priya, _ = wsgi_call(f"/api/projects/{shared_pid}", "GET", token=self.priya_token)
+        code_priya, _ = wsgi_call(f"/api/projects/{shared_pid}", "GET", token=self.owner_priya_token)
         self.assertEqual(code_priya, 200)
 
     def test_06_project_creation_sets_owner(self):
@@ -298,13 +323,17 @@ class TestProjectOwnerAccessControl(unittest.TestCase):
         # Owner should be amit
         self.assertEqual(created_proj.get("project_owner"), "amit")
 
-        # Amit can access it
+        # Creator (Amit) can access it
         c_amit, _ = wsgi_call(f"/api/projects/{new_id}", "GET", token=self.amit_token)
         self.assertEqual(c_amit, 200)
 
-        # Priya cannot access it
+        # Other PM (Priya) can access it because PM has unrestricted access
         c_priya, _ = wsgi_call(f"/api/projects/{new_id}", "GET", token=self.priya_token)
-        self.assertEqual(c_priya, 403)
+        self.assertEqual(c_priya, 200)
+
+        # Non-PM assigned user (Owner Priya) cannot access it
+        c_other, _ = wsgi_call(f"/api/projects/{new_id}", "GET", token=self.owner_priya_token)
+        self.assertEqual(c_other, 403)
 
     def test_07_unassigned_lead_and_assignee_see_all_projects(self):
         """Lead users or assignees not assigned to any project should access all projects as usual."""

@@ -150,7 +150,7 @@ def is_full_access(user=None):
 
 def is_progress_only(user=None):
     role = get_user_role(user)
-    return role in ("lead", "assignee", "member", "viewer")
+    return role in ("assignee", "member", "viewer")
 
 CHARTER_STRIP_FIELDS = {
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
@@ -238,7 +238,7 @@ def user_can_access_project(user, project_id, conn=None):
     if not user:
         return True
     role = get_user_role(user)
-    if role == "admin":
+    if role == "admin" or is_full_access(user):
         return True
 
     def _eval(c):
@@ -270,7 +270,7 @@ def get_all_projects_aggregated(conn, user=None):
         user = get_current_user()
     role = get_user_role(user) if user else "admin"
 
-    if role == "admin" or (role in ("lead", "assignee", "member", "viewer", "team lead") and not user_has_assigned_projects(conn, user)):
+    if is_full_access(user) or (role in ("lead", "assignee", "member", "viewer", "team lead") and not user_has_assigned_projects(conn, user)):
         return conn.execute("""
             SELECT
                 p.*,
@@ -535,8 +535,8 @@ def auth_register():
             "role": assigned_role,
             "avatar_color": avatar_color,
             "must_reset_password": False,
-            "is_full_access": False,
-            "is_progress_only": True
+            "is_full_access": is_full_access({"role": assigned_role}),
+            "is_progress_only": is_progress_only({"role": assigned_role})
         }
 
         bootstrap = get_bootstrap_payload(conn, user_id)
@@ -1556,9 +1556,10 @@ def get_tasks(project_id):
 @app.post("/api/projects/<project_id:int>/tasks")
 def create_task(project_id):
     user = get_current_user()
-    if user and not is_full_access(user):
+    user_role = get_user_role(user)
+    if user and not is_full_access(user) and user_role not in ("lead", "team lead"):
         return json_response({
-            "error": f"Permission Denied: User role '{user.get('role')}' cannot create new activities. Only PM and Admin have full access control."
+            "error": f"Permission Denied: User role '{user.get('role')}' cannot create new activities. Only PM, Admin, and Lead have permission."
         }, status=403)
     denied = verify_project_access(project_id, user)
     if denied:
@@ -1840,85 +1841,78 @@ def update_task(task_id):
         cursor = conn.cursor()
         now_str = get_now_iso()
 
-        # Check for restricted role (Lead / Assignee / Member)
+        # Check for restricted role (Assignee / Member)
         if user and not is_full_access(user):
             user_role = (user.get("role") or "").strip().lower()
             is_lead = user_role in ("lead", "team lead")
 
-            # Whitelisted keys for restricted roles:
-            # For Assignee/Member: progress %, status, assignee, start date, end date, estimated hours, actual hours
-            # For Lead: also allow description, tags, and subtasks
-            ALLOWED_KEYS = {
-                "progress_pct", "progress",
-                "status",
-                "assignee_id", "assignee_name", "new_assignee_name",
-                "start_date", "end_date", "due_date",
-                "estimated_hours",
-                "actual_hours",
-                "id", "task_id",
-            }
-            if is_lead:
-                ALLOWED_KEYS.update({"description", "tags", "subtasks"})
+            # Lead users can edit all fields inside the task activity dialog!
+            # For other restricted roles (Assignee / Member), enforce field restrictions:
+            if not is_lead:
+                ALLOWED_KEYS = {
+                    "progress_pct", "progress",
+                    "status",
+                    "assignee_id", "assignee_name", "new_assignee_name",
+                    "start_date", "end_date", "due_date",
+                    "estimated_hours",
+                    "actual_hours",
+                    "id", "task_id",
+                }
 
-            forbidden_attempted = False
+                forbidden_attempted = False
 
-            # Check title change (never allowed for restricted roles)
-            if "title" in data and clean_text(data["title"]) and clean_text(data["title"]) != task["title"]:
-                forbidden_attempted = True
-            # Check description change (allowed for Lead, forbidden for others)
-            if not is_lead and "description" in data and data["description"] is not None and str(data["description"]).strip() != str(task["description"] or "").strip():
-                forbidden_attempted = True
-            # Check priority change
-            if "priority" in data and data["priority"] and str(data["priority"]).strip() != str(task["priority"]).strip():
-                forbidden_attempted = True
-            # Check sprint_id change
-            if "sprint_id" in data:
-                sp = safe_int(data["sprint_id"])
-                sp = sp if (sp and sp > 0) else None
-                if sp != task["sprint_id"]:
+                # Check title change (never allowed for Assignee)
+                if "title" in data and clean_text(data["title"]) and clean_text(data["title"]) != task["title"]:
                     forbidden_attempted = True
-            # Check resource_ids change
-            if "resource_ids" in data and isinstance(data["resource_ids"], list):
-                curr_res = sorted([r["resource_id"] for r in conn.execute("SELECT resource_id FROM task_resources WHERE task_id = ?", (task_id,)).fetchall()])
-                new_res = sorted([int(r) for r in data["resource_ids"] if str(r).isdigit()])
-                if curr_res != new_res:
+                # Check description change (forbidden for Assignee)
+                if "description" in data and data["description"] is not None and str(data["description"]).strip() != str(task["description"] or "").strip():
                     forbidden_attempted = True
-            # Check tags change (allowed for Lead, forbidden for others)
-            if not is_lead and "tags" in data:
-                try:
-                    curr_tags = json.loads(task["tags"]) if task["tags"] else []
-                except Exception:
-                    curr_tags = []
-                raw_tags = data["tags"]
-                if isinstance(raw_tags, list):
-                    new_tags = [str(t).strip().lstrip('#') for t in raw_tags if str(t).strip()]
-                elif isinstance(raw_tags, str):
-                    new_tags = [t.strip().lstrip('#') for t in raw_tags.split(',') if t.strip()]
-                else:
-                    new_tags = []
-                if sorted([t.lower() for t in curr_tags]) != sorted([t.lower() for t in new_tags]):
+                # Check priority change
+                if "priority" in data and data["priority"] and str(data["priority"]).strip() != str(task["priority"]).strip():
                     forbidden_attempted = True
-            # Check subtasks change (allowed for Lead, forbidden for others)
-            if not is_lead and "subtasks" in data and data["subtasks"]:
-                forbidden_attempted = True
-            # Check order_index change
-            if "order_index" in data and safe_int(data["order_index"]) != task["order_index"]:
-                forbidden_attempted = True
-            # Check any other keys in data
-            for k in data.keys():
-                if k not in ALLOWED_KEYS and data[k] is not None:
-                    if k in task.keys() and data[k] != task[k]:
+                # Check sprint_id change
+                if "sprint_id" in data:
+                    sp = safe_int(data["sprint_id"])
+                    sp = sp if (sp and sp > 0) else None
+                    if sp != task["sprint_id"]:
                         forbidden_attempted = True
-                    elif k not in task.keys():
+                # Check resource_ids change
+                if "resource_ids" in data and isinstance(data["resource_ids"], list):
+                    curr_res = sorted([r["resource_id"] for r in conn.execute("SELECT resource_id FROM task_resources WHERE task_id = ?", (task_id,)).fetchall()])
+                    new_res = sorted([int(r) for r in data["resource_ids"] if str(r).isdigit()])
+                    if curr_res != new_res:
                         forbidden_attempted = True
+                # Check tags change (forbidden for Assignee)
+                if "tags" in data:
+                    try:
+                        curr_tags = json.loads(task["tags"]) if task["tags"] else []
+                    except Exception:
+                        curr_tags = []
+                    raw_tags = data["tags"]
+                    if isinstance(raw_tags, list):
+                        new_tags = [str(t).strip().lstrip('#') for t in raw_tags if str(t).strip()]
+                    elif isinstance(raw_tags, str):
+                        new_tags = [t.strip().lstrip('#') for t in raw_tags.split(',') if t.strip()]
+                    else:
+                        new_tags = []
+                    if sorted([t.lower() for t in curr_tags]) != sorted([t.lower() for t in new_tags]):
+                        forbidden_attempted = True
+                # Check subtasks change (forbidden for Assignee)
+                if "subtasks" in data and data["subtasks"]:
+                    forbidden_attempted = True
+                # Check order_index change
+                if "order_index" in data and safe_int(data["order_index"]) != task["order_index"]:
+                    forbidden_attempted = True
+                # Check any other keys in data
+                for k in data.keys():
+                    if k not in ALLOWED_KEYS and data[k] is not None:
+                        if k in task.keys() and data[k] != task[k]:
+                            forbidden_attempted = True
+                        elif k not in task.keys():
+                            forbidden_attempted = True
 
-            if forbidden_attempted:
-                err_msg = (
-                    f"Permission Denied: User role '{user.get('role')}' can only edit description, tags, subtasks, progress %, status, assignee, start date, end date, estimated hours, and actual hours."
-                    if is_lead else
-                    f"Permission Denied: User role '{user.get('role')}' can only edit progress %, status, assignee, start date, end date, estimated hours, and actual hours."
-                )
-                return json_response({"error": err_msg}, status=403)
+                if forbidden_attempted:
+                    return json_response({"error": f"Permission Denied: User role '{user.get('role')}' can only edit progress %, status, assignee, start date, end date, estimated hours, and actual hours."}, status=403)
 
             # Assignee validation for restricted roles: must be an existing member of that project or empty (never create a new member)
             if data.get("assignee_name") or data.get("new_assignee_name"):
@@ -2163,8 +2157,9 @@ def update_task(task_id):
 @app.post("/api/tasks/reorder")
 def reorder_tasks():
     user = get_current_user()
-    if user and not is_full_access(user):
-        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities or change status. Only PM and Admin have full access control."}, status=403)
+    user_role = get_user_role(user)
+    if user and not is_full_access(user) and user_role not in ("lead", "team lead"):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities. Only PM, Admin, and Lead have permission."}, status=403)
 
     items = request.json or []
     if isinstance(items, dict) and "task_ids" in items:
@@ -2209,8 +2204,9 @@ def reorder_tasks():
 @app.post("/api/projects/<project_id:int>/tasks/reorder")
 def reorder_project_tasks(project_id):
     user = get_current_user()
-    if user and not is_full_access(user):
-        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities. Only PM and Admin have full access control."}, status=403)
+    user_role = get_user_role(user)
+    if user and not is_full_access(user) and user_role not in ("lead", "team lead"):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities. Only PM, Admin, and Lead have permission."}, status=403)
     denied = verify_project_access(project_id, user)
     if denied:
         return denied
@@ -2243,8 +2239,9 @@ def reorder_project_tasks(project_id):
 @app.post("/api/tasks/<task_id:int>/move")
 def move_task(task_id):
     user = get_current_user()
-    if user and not is_full_access(user):
-        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot move activities. Only PM and Admin have full access control."}, status=403)
+    user_role = get_user_role(user)
+    if user and not is_full_access(user) and user_role not in ("lead", "team lead"):
+        return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot move activities. Only PM, Admin, and Lead have permission."}, status=403)
 
     data = request.json or {}
     direction = data.get("direction", "down")  # "up" or "down"

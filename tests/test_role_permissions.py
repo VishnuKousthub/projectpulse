@@ -88,7 +88,7 @@ class TestRolePermissions(unittest.TestCase):
         for role, token, expected_full, expected_prog in [
             ("admin", self.admin_token, True, False),
             ("pm", self.pm_token, True, False),
-            ("lead", self.lead_token, False, True),
+            ("lead", self.lead_token, False, False),
             ("assignee", self.assignee_token, False, True),
         ]:
             status, data = self._request("/api/auth/me", token=token)
@@ -182,7 +182,15 @@ class TestRolePermissions(unittest.TestCase):
         cur_priority = tasks[0].get("priority")
         diff_priority = "low" if cur_priority != "low" else "urgent"
 
-        # Lead CAN edit description, tags, and subtasks (200 OK)
+        # Lead CAN edit all task dialog fields: title, priority, description, tags, subtasks (200 OK)
+        st_title, res_title = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"title": "Lead Updated Title"})
+        self.assertEqual(st_title, 200, f"Lead should be allowed to update title: {res_title}")
+        self.assertEqual(res_title["title"], "Lead Updated Title")
+
+        st_prio, res_prio = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"priority": diff_priority})
+        self.assertEqual(st_prio, 200, f"Lead should be allowed to update priority: {res_prio}")
+        self.assertEqual(res_prio["priority"], diff_priority)
+
         st_desc, res_desc = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"description": "Lead Updated Description"})
         self.assertEqual(st_desc, 200, f"Lead should be allowed to update description: {res_desc}")
         self.assertEqual(res_desc["description"], "Lead Updated Description")
@@ -194,20 +202,14 @@ class TestRolePermissions(unittest.TestCase):
         st_sub, res_sub = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body={"subtasks": ["Subtask 1 from Lead"]})
         self.assertEqual(st_sub, 200, f"Lead should be allowed to update subtasks: {res_sub}")
 
-        # Lead CANNOT edit title, priority, sprint_id (403 Forbidden)
-        for forbidden_body, field_name in [
-            ({"title": "Altered Title"}, "title"),
-            ({"priority": diff_priority}, "priority"),
-            ({"sprint_id": 2}, "sprint_id"),
-        ]:
-            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=self.lead_token, body=forbidden_body)
-            self.assertEqual(st_code, 403, f"Lead should be blocked from updating {field_name}: {res}")
-
         # Assignee CANNOT edit title, description, priority, sprint_id, tags, subtasks (403 Forbidden)
+        # Note: fetch fresh task priority to ensure test payload differs from current value
+        _, cur_t = self._request(f"/api/tasks/{task_id}", token=self.pm_token)
+        ass_diff_priority = "high" if cur_t.get("priority") != "high" else "urgent"
         for forbidden_body, field_name in [
             ({"title": "Altered Title"}, "title"),
             ({"description": "Altered Description"}, "description"),
-            ({"priority": diff_priority}, "priority"),
+            ({"priority": ass_diff_priority}, "priority"),
             ({"sprint_id": 2}, "sprint_id"),
             ({"tags": ["custom-tag"]}, "tags"),
             ({"subtasks": ["Forbidden Subtask"]}, "subtasks"),
@@ -285,18 +287,19 @@ class TestRolePermissions(unittest.TestCase):
             st_del, _ = self._request(f"/api/risks/{risk_id}", method="DELETE", token=token)
             self.assertEqual(st_del, 200, f"{role_name} should be able to delete risk")
 
-    # 4. Test Lead/Assignee CANNOT create or delete tasks (403 Forbidden)
+    # 4. Test Lead CAN create tasks; Assignee CANNOT; neither can delete tasks
     def test_04_lead_and_assignee_forbidden_task_create_delete(self):
-        # Attempt task creation by Lead
-        status_l_create, _ = self._request(
+        # Task creation by Lead -> Allowed (201 Created)
+        status_l_create, l_data = self._request(
             "/api/projects/1/tasks",
             method="POST",
             token=self.lead_token,
-            body={"title": "Unauthorized Task by Lead", "status": "todo"}
+            body={"title": "Authorized Task by Lead", "status": "todo"}
         )
-        self.assertEqual(status_l_create, 403)
+        self.assertIn(status_l_create, [200, 201], f"Lead should be able to create tasks: {l_data}")
+        created_tid = l_data["id"]
 
-        # Attempt task creation by Assignee
+        # Attempt task creation by Assignee -> 403 Forbidden
         status_a_create, _ = self._request(
             "/api/projects/1/tasks",
             method="POST",
@@ -305,12 +308,12 @@ class TestRolePermissions(unittest.TestCase):
         )
         self.assertEqual(status_a_create, 403)
 
-        # Attempt task deletion by Lead
-        status_l_del, _ = self._request("/api/tasks/1", method="DELETE", token=self.lead_token)
+        # Attempt task deletion by Lead -> 403 Forbidden
+        status_l_del, _ = self._request(f"/api/tasks/{created_tid}", method="DELETE", token=self.lead_token)
         self.assertEqual(status_l_del, 403)
 
-        # Attempt task deletion by Assignee
-        status_a_del, _ = self._request("/api/tasks/1", method="DELETE", token=self.assignee_token)
+        # Attempt task deletion by Assignee -> 403 Forbidden
+        status_a_del, _ = self._request(f"/api/tasks/{created_tid}", method="DELETE", token=self.assignee_token)
         self.assertEqual(status_a_del, 403)
 
     # 5. Test Lead/Assignee CANNOT manage resources or project settings (403 Forbidden)
