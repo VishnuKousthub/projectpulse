@@ -8,7 +8,10 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from bottle import Bottle, request, response, static_file, run
 
-from app.database import get_db, init_db, hash_password, verify_password, normalize_project_task_order, get_attachments_dir
+from app.database import (
+    get_db, init_db, hash_password, verify_password, encrypt_secret, decrypt_secret,
+    normalize_project_task_order, get_attachments_dir
+)
 from app.seed import seed_database
 from app import charter as charter_module
 from app import users as users_module
@@ -124,7 +127,8 @@ def get_current_user():
     with get_db() as conn:
         session = conn.execute("""
             SELECT s.*, u.id as user_id, u.username, u.email, u.full_name, u.role, u.avatar_color,
-                   COALESCE(u.is_active, 1) as is_active
+                   COALESCE(u.is_active, 1) as is_active,
+                   COALESCE(u.must_reset_password, 0) as must_reset_password
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token = ? AND s.expires_at > datetime('now')
@@ -330,6 +334,7 @@ def auth_login():
             "full_name": user["full_name"],
             "role": user["role"],
             "avatar_color": user["avatar_color"],
+            "must_reset_password": bool(user.get("must_reset_password")),
             "is_full_access": is_full_access(user),
             "is_progress_only": is_progress_only(user)
         }
@@ -396,9 +401,9 @@ def auth_register():
 
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at, last_login)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (username, email, pwd_hash, full_name, assigned_role, avatar_color, now_str, now_str))
+            INSERT INTO users (username, email, password_hash, clear_secret, must_reset_password, full_name, role, avatar_color, created_at, last_login)
+            VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+        """, (username, email, pwd_hash, encrypt_secret(password), full_name, assigned_role, avatar_color, now_str, now_str))
         user_id = cursor.lastrowid
 
         token = secrets.token_hex(32)
@@ -415,6 +420,7 @@ def auth_register():
             "full_name": full_name,
             "role": assigned_role,
             "avatar_color": avatar_color,
+            "must_reset_password": False,
             "is_full_access": False,
             "is_progress_only": True
         }
@@ -456,6 +462,7 @@ def auth_me():
             "full_name": user["full_name"],
             "role": user["role"],
             "avatar_color": user["avatar_color"],
+            "must_reset_password": bool(user.get("must_reset_password")),
             "is_full_access": is_full_access(user),
             "is_progress_only": is_progress_only(user)
         },
@@ -463,6 +470,32 @@ def auth_me():
         "current_project": bootstrap["current_project"],
         "tasks": bootstrap["tasks"],
         "charter": bootstrap.get("charter")
+    })
+
+@app.post("/api/auth/first_login_reset")
+@app.post("/api/auth/reset_my_password")
+def auth_first_login_reset():
+    user = get_current_user()
+    if not user:
+        return json_response({"error": "Authentication required"}, status=401)
+
+    data = request.json or {}
+    new_password = data.get("new_password") or ""
+    if not new_password or len(new_password) < 8:
+        return json_response({"error": "New password must be at least 8 characters"}, status=400)
+
+    with get_db() as conn:
+        pwd_hash = hash_password(new_password)
+        enc_secret = encrypt_secret(new_password)
+        conn.execute("""
+            UPDATE users
+            SET password_hash = ?, clear_secret = ?, must_reset_password = 0
+            WHERE id = ?
+        """, (pwd_hash, enc_secret, user["user_id"]))
+
+    return json_response({
+        "success": True,
+        "message": "Password updated successfully"
     })
 
 @app.get("/api/bootstrap")

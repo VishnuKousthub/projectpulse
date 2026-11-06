@@ -2,6 +2,7 @@ import sqlite3
 import os
 import hashlib
 import secrets
+import base64
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 
@@ -157,6 +158,41 @@ def verify_password(password: str, stored_hash: str) -> bool:
     computed = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
     return secrets.compare_digest(computed, hash_val)
 
+_ENCRYPTION_SECRET = os.environ.get("PROJECTPULSE_SECRET_KEY", "projectpulse_admin_secret_key_v1_secure_2026")
+
+def encrypt_secret(plain_text: str) -> str:
+    if not plain_text:
+        return ""
+    salt = secrets.token_bytes(16)
+    key = hashlib.sha256(salt + _ENCRYPTION_SECRET.encode("utf-8")).digest()
+    data = plain_text.encode("utf-8")
+    keystream = bytearray()
+    counter = 0
+    while len(keystream) < len(data):
+        keystream.extend(hashlib.sha256(key + counter.to_bytes(4, "big")).digest())
+        counter += 1
+    cipher = bytes(b ^ k for b, k in zip(data, keystream))
+    return base64.b64encode(salt + cipher).decode("ascii")
+
+def decrypt_secret(cipher_text: str) -> str:
+    if not cipher_text:
+        return ""
+    try:
+        raw = base64.b64decode(cipher_text.encode("ascii"))
+        if len(raw) <= 16:
+            return ""
+        salt, cipher = raw[:16], raw[16:]
+        key = hashlib.sha256(salt + _ENCRYPTION_SECRET.encode("utf-8")).digest()
+        keystream = bytearray()
+        counter = 0
+        while len(keystream) < len(cipher):
+            keystream.extend(hashlib.sha256(key + counter.to_bytes(4, "big")).digest())
+            counter += 1
+        data = bytes(b ^ k for b, k in zip(cipher, keystream))
+        return data.decode("utf-8")
+    except Exception:
+        return ""
+
 def seed_default_users(cursor):
     now_str = datetime.now(timezone.utc).isoformat()
     default_users = [
@@ -168,19 +204,24 @@ def seed_default_users(cursor):
         ("alex", "alex.morgan@company.internal", "alex123", "Alex Morgan", "assignee", "#10B981")
     ]
     for username, email, pwd, full_name, role, color in default_users:
-        existing = cursor.execute("SELECT id FROM users WHERE LOWER(username) = ?", (username.lower(),)).fetchone()
+        existing = cursor.execute("SELECT id, clear_secret FROM users WHERE LOWER(username) = ?", (username.lower(),)).fetchone()
         if not existing:
             cursor.execute("""
-                INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (username, email, hash_password(pwd), full_name, role, color, now_str))
-        elif username.lower() == "admin":
-            # Ensure the admin account always has a known working password and active status on startup
-            cursor.execute("""
-                UPDATE users
-                SET password_hash = ?, is_active = 1, role = 'admin'
-                WHERE LOWER(username) = 'admin'
-            """, (hash_password("admin123"),))
+                INSERT INTO users (username, email, password_hash, clear_secret, must_reset_password, full_name, role, avatar_color, created_at)
+                VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
+            """, (username, email, hash_password(pwd), encrypt_secret(pwd), full_name, role, color, now_str))
+        else:
+            if not existing.get("clear_secret"):
+                cursor.execute("""
+                    UPDATE users SET clear_secret = ? WHERE LOWER(username) = ?
+                """, (encrypt_secret(pwd), username.lower()))
+            if username.lower() == "admin":
+                # Ensure the admin account always has a known working password, clear_secret, and active status on startup
+                cursor.execute("""
+                    UPDATE users
+                    SET password_hash = ?, clear_secret = ?, is_active = 1, role = 'admin'
+                    WHERE LOWER(username) = 'admin'
+                """, (hash_password("admin123"), encrypt_secret("admin123")))
 
 def init_db():
     with get_db() as conn:
@@ -408,6 +449,22 @@ def init_db():
             pass
         try:
             cursor.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
+        except Exception:
+            pass
+
+        # Additive migration: users.must_reset_password INTEGER DEFAULT 0
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN must_reset_password INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            cursor.execute("UPDATE users SET must_reset_password = 0 WHERE must_reset_password IS NULL")
+        except Exception:
+            pass
+
+        # Additive migration: users.clear_secret TEXT (encrypted secret retrievable by admin)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN clear_secret TEXT")
         except Exception:
             pass
 

@@ -3,7 +3,7 @@ User management endpoints (Admin only).
 Handles listing users, creating accounts, modifying roles/status,
 and resetting passwords with strict admin-only authorization and safeguards.
 """
-from app.database import hash_password
+from app.database import hash_password, encrypt_secret, decrypt_secret
 
 ALLOWED_ROLES = ("admin", "pm", "lead", "assignee")
 
@@ -29,11 +29,19 @@ def register(app, *, get_db, json_response, request, get_current_user,
             rows = conn.execute("""
                 SELECT id, username, full_name, email, role,
                        COALESCE(is_active, 1) AS is_active,
+                       COALESCE(must_reset_password, 0) AS must_reset_password,
+                       clear_secret,
                        last_login, created_at
                 FROM users
                 ORDER BY id ASC
             """).fetchall()
-            return json_response([dict(r) for r in rows])
+            user_list = []
+            for r in rows:
+                u = dict(r)
+                secret = u.pop("clear_secret", None)
+                u["password_preview"] = decrypt_secret(secret) if secret else ""
+                user_list.append(u)
+            return json_response(user_list)
 
     @app.post("/api/users")
     def create_user():
@@ -77,18 +85,21 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO users (username, email, password_hash, full_name, role, avatar_color, is_active, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-            """, (username, email, pwd_hash, full_name, role, avatar_color, now_str))
+                INSERT INTO users (username, email, password_hash, clear_secret, must_reset_password, full_name, role, avatar_color, is_active, created_at)
+                VALUES (?, ?, ?, ?, 1, ?, ?, ?, 1, ?)
+            """, (username, email, pwd_hash, encrypt_secret(password), full_name, role, avatar_color, now_str))
             new_id = cursor.lastrowid
 
             created = conn.execute("""
                 SELECT id, username, full_name, email, role,
                        COALESCE(is_active, 1) AS is_active,
+                       COALESCE(must_reset_password, 0) AS must_reset_password,
                        last_login, created_at
                 FROM users WHERE id = ?
             """, (new_id,)).fetchone()
-            return json_response(dict(created), status=201)
+            res_dict = dict(created)
+            res_dict["password_preview"] = password
+            return json_response(res_dict, status=201)
 
     @app.put("/api/users/<user_id:int>")
     def update_user(user_id):
@@ -188,12 +199,20 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 return json_response({"error": "User not found"}, status=404)
 
             pwd_hash = hash_password(new_password)
-            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pwd_hash, user_id))
+            enc_secret = encrypt_secret(new_password)
+            conn.execute("""
+                UPDATE users
+                SET password_hash = ?, clear_secret = ?, must_reset_password = 1
+                WHERE id = ?
+            """, (pwd_hash, enc_secret, user_id))
 
             # Invalidate sessions immediately
             conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
 
-            return json_response({"success": True, "message": "Password reset successfully"})
+            return json_response({
+                "success": True,
+                "message": "Password reset successfully. User will be prompted to reset on next login."
+            })
 
     @app.delete("/api/users/<user_id:int>")
     @app.post("/api/users/<user_id:int>/delete")

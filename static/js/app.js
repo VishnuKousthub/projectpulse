@@ -6459,6 +6459,9 @@ const app = {
           this.state.user = data.user;
           this.updateHeaderUserProfile();
           this.hideAuthContainer();
+          if (data.user.must_reset_password) {
+            this.showFirstLoginResetModal();
+          }
 
           if (data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
             this.state.projects = data.projects;
@@ -6680,6 +6683,10 @@ const app = {
         this.switchView(landing);
         this.hideAuthContainer();
         this.showToast(`Welcome back, ${res.user.full_name}!`, 'success');
+
+        if (res.user.must_reset_password) {
+          this.showFirstLoginResetModal();
+        }
       }
     } catch (err) {
       this.showAuthError(err.message || 'Login failed. Check your credentials.');
@@ -6687,6 +6694,89 @@ const app = {
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
+        this.initLucide();
+      }
+    }
+  },
+
+  showFirstLoginResetModal() {
+    const modal = document.getElementById('first-login-modal');
+    if (!modal) return;
+    const errBox = document.getElementById('first-login-error');
+    if (errBox) {
+      errBox.classList.add('hidden');
+      errBox.textContent = '';
+    }
+    const newPwd = document.getElementById('first-login-new-password');
+    const confirmPwd = document.getElementById('first-login-confirm-password');
+    if (newPwd) newPwd.value = '';
+    if (confirmPwd) confirmPwd.value = '';
+    modal.classList.remove('hidden');
+    this.initLucide();
+    setTimeout(() => newPwd?.focus(), 100);
+  },
+
+  closeFirstLoginResetModal() {
+    const modal = document.getElementById('first-login-modal');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  skipFirstLoginPasswordReset() {
+    this.closeFirstLoginResetModal();
+    this.showToast('You can reset your password anytime or request your administrator for assistance.', 'info');
+  },
+
+  async submitFirstLoginPasswordReset() {
+    const newPwdInput = document.getElementById('first-login-new-password');
+    const confirmPwdInput = document.getElementById('first-login-confirm-password');
+    const errBox = document.getElementById('first-login-error');
+    const submitBtn = document.getElementById('first-login-submit-btn');
+
+    const newPwd = newPwdInput?.value || '';
+    const confirmPwd = confirmPwdInput?.value || '';
+
+    const showError = (msg) => {
+      if (errBox) {
+        errBox.textContent = msg;
+        errBox.classList.remove('hidden');
+      }
+    };
+
+    if (errBox) errBox.classList.add('hidden');
+
+    if (!newPwd || newPwd.length < 8) {
+      showError('Password must be at least 8 characters long');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      showError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    const origHtml = submitBtn?.innerHTML;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Saving...</span>';
+      this.initLucide();
+    }
+
+    try {
+      await this.api('/api/auth/first_login_reset', {
+        method: 'POST',
+        body: JSON.stringify({ new_password: newPwd })
+      });
+
+      if (this.state.user) {
+        this.state.user.must_reset_password = false;
+      }
+      this.closeFirstLoginResetModal();
+      this.showToast('Your new password has been set successfully!', 'success');
+    } catch (e) {
+      showError(e.message || 'Failed to update password');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
         this.initLucide();
       }
     }

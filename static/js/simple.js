@@ -1189,13 +1189,14 @@ Object.assign(app, {
 
         <!-- Users Table Card -->
         <div class="${UI.card} overflow-hidden">
-          <div class="overflow-x-auto min-w-[720px]">
+          <div class="overflow-x-auto min-w-[760px]">
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th class="${UI.th}">Name & Username</th>
                   <th class="${UI.th}">Email</th>
                   <th class="${UI.th}">Role</th>
+                  <th class="${UI.th}">Password</th>
                   <th class="${UI.th}">Status</th>
                   <th class="${UI.th}">Last Login</th>
                   <th class="${UI.th} text-right">Actions</th>
@@ -1234,6 +1235,21 @@ Object.assign(app, {
                           <option value="lead" ${u.role === 'lead' ? 'selected' : ''}>Lead</option>
                           <option value="assignee" ${u.role === 'assignee' ? 'selected' : ''}>Assignee</option>
                         </select>
+                      </td>
+                      <td class="${UI.td}">
+                        <div class="flex items-center gap-1.5 font-mono text-[11px]">
+                          <span id="user-pwd-text-${u.id}" class="text-slate-500 select-all tracking-wider font-semibold">••••••••</span>
+                          <button
+                            type="button"
+                            onclick="app.toggleUserPasswordPeek(${u.id}, '${esc(u.password_preview || '')}')"
+                            class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                            title="Reveal / Hide password">
+                            <i id="user-pwd-icon-${u.id}" data-lucide="eye" class="w-3.5 h-3.5"></i>
+                          </button>
+                          ${u.must_reset_password ? `
+                            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" title="User must reset temporary password on next login">Temp</span>
+                          ` : ''}
+                        </div>
                       </td>
                       <td class="${UI.td}">
                         <button
@@ -1377,6 +1393,29 @@ Object.assign(app, {
     }
   },
 
+  toggleUserPasswordPeek(userId, plainPassword) {
+    const textEl = document.getElementById(`user-pwd-text-${userId}`);
+    const iconEl = document.getElementById(`user-pwd-icon-${userId}`);
+    if (!textEl) return;
+    const isMasked = textEl.textContent === '••••••••';
+    if (isMasked) {
+      textEl.textContent = plainPassword || '(none)';
+      textEl.classList.remove('text-slate-500');
+      textEl.classList.add('text-blue-600', 'dark:text-blue-400', 'font-bold');
+      if (iconEl) {
+        iconEl.setAttribute('data-lucide', 'eye-off');
+      }
+    } else {
+      textEl.textContent = '••••••••';
+      textEl.classList.remove('text-blue-600', 'dark:text-blue-400', 'font-bold');
+      textEl.classList.add('text-slate-500');
+      if (iconEl) {
+        iconEl.setAttribute('data-lucide', 'eye');
+      }
+    }
+    this.initLucide();
+  },
+
   async promptResetPassword(userId, username) {
     const newPassword = prompt(`Enter new temporary password for @${username} (min 8 characters):`);
     if (newPassword === null) return;
@@ -1390,7 +1429,8 @@ Object.assign(app, {
         method: 'POST',
         body: JSON.stringify({ new_password: newPassword })
       });
-      this.showToast(`Password reset for @${username}. All existing sessions were invalidated.`, 'success');
+      this.showToast(`Temporary password reset for @${username}. User will be prompted to reset on next login.`, 'success');
+      await this.renderUsers();
     } catch (e) {
       this.showToast(e.message || 'Failed to reset password', 'error');
     }

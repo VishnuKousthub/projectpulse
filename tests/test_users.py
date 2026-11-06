@@ -382,6 +382,81 @@ class TestUsersManagement(unittest.TestCase):
         })
         self.assertEqual(s_login, 401)
 
+    def test_13_first_login_password_reset_and_admin_oversight(self):
+        # 1. Admin creates a new user with temporary password
+        status, created = self._request("/api/users", method="POST", token=self.admin_token, body={
+            "full_name": "Temporary User",
+            "username": "temp_user",
+            "email": "temp_user@company.com",
+            "password": "TempPassword123!",
+            "role": "assignee"
+        })
+        self.assertEqual(status, 201)
+        self.assertEqual(created.get("must_reset_password"), 1)
+        self.assertEqual(created.get("password_preview"), "TempPassword123!")
+        user_id = created["id"]
+
+        # 2. Admin inspects GET /api/users to oversee password
+        status, users = self._request("/api/users", token=self.admin_token)
+        self.assertEqual(status, 200)
+        found = [u for u in users if u["id"] == user_id]
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].get("password_preview"), "TempPassword123!")
+        self.assertEqual(found[0].get("must_reset_password"), 1)
+
+        # 3. User logs in with temporary password
+        status, login_res = self._request("/api/auth/login", method="POST", body={
+            "username": "temp_user",
+            "password": "TempPassword123!"
+        })
+        self.assertEqual(status, 200)
+        user_token = login_res["token"]
+        self.assertTrue(login_res["user"]["must_reset_password"])
+
+        # 4. User resets their password on first login
+        status, reset_res = self._request("/api/auth/first_login_reset", method="POST", token=user_token, body={
+            "new_password": "MyNewSecurePassword2026!"
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(reset_res.get("success"))
+
+        # 5. User's must_reset_password flag is now 0 on /api/auth/me
+        status, me_res = self._request("/api/auth/me", token=user_token)
+        self.assertEqual(status, 200)
+        self.assertFalse(me_res["user"]["must_reset_password"])
+
+        # 6. Admin can oversee the new password in GET /api/users
+        status, users_after = self._request("/api/users", token=self.admin_token)
+        self.assertEqual(status, 200)
+        found_after = [u for u in users_after if u["id"] == user_id]
+        self.assertEqual(len(found_after), 1)
+        self.assertEqual(found_after[0].get("password_preview"), "MyNewSecurePassword2026!")
+        self.assertEqual(found_after[0].get("must_reset_password"), 0)
+
+        # 7. User can log in with their newly set password
+        status, login_new = self._request("/api/auth/login", method="POST", body={
+            "username": "temp_user",
+            "password": "MyNewSecurePassword2026!"
+        })
+        self.assertEqual(status, 200)
+        self.assertFalse(login_new["user"]["must_reset_password"])
+
+        # 8. Admin resets user's password if user forgets
+        status, admin_reset = self._request(f"/api/users/{user_id}/reset_password", method="POST", token=self.admin_token, body={
+            "new_password": "AdminResetTempPass789!"
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(admin_reset.get("success"))
+
+        # 9. Admin oversees the new temp password, and user must reset again
+        status, users_admin_reset = self._request("/api/users", token=self.admin_token)
+        found_reset = [u for u in users_admin_reset if u["id"] == user_id][0]
+        self.assertEqual(found_reset.get("password_preview"), "AdminResetTempPass789!")
+        self.assertEqual(found_reset.get("must_reset_password"), 1)
+
+        # Clean up created user
+        self._request(f"/api/users/{user_id}", method="DELETE", token=self.admin_token)
+
 
 if __name__ == "__main__":
     unittest.main()
