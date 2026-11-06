@@ -18,12 +18,14 @@ def seed_database():
         
         # Project 1: CloudScale Platform 2.0
         cursor.execute("""
-            INSERT INTO projects (name, description, color, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects (name, description, color, project_owner, project_manager, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             "CloudScale Platform 2.0",
             "Next-generation distributed cloud infrastructure, microservices orchestration, and real-time observability dashboard.",
             "#3B82F6",
+            "pm, lead, assignee",
+            "pm, lead, assignee",
             (now - timedelta(days=20)).isoformat(),
             now_str
         ))
@@ -31,12 +33,14 @@ def seed_database():
 
         # Project 2: Mobile App MVP
         cursor.execute("""
-            INSERT INTO projects (name, description, color, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects (name, description, color, project_owner, project_manager, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             "Mobile App MVP (iOS & Android)",
             "Cross-platform client application built with real-time biometric auth, offline caching, and push notifications.",
             "#8B5CF6",
+            "pm",
+            "pm",
             (now - timedelta(days=15)).isoformat(),
             now_str
         ))
@@ -44,12 +48,14 @@ def seed_database():
 
         # Project 3: Brand & Design System Overhaul
         cursor.execute("""
-            INSERT INTO projects (name, description, color, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects (name, description, color, project_owner, project_manager, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             "Design System & Brand 2026",
             "Modern design token architecture, accessible component library, and marketing asset toolkit.",
             "#10B981",
+            "admin",
+            "admin",
             (now - timedelta(days=10)).isoformat(),
             now_str
         ))

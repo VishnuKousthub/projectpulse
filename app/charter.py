@@ -185,8 +185,9 @@ def build_charter_dict(conn, project_id):
 
     p_dict = dict(p)
     owner_val = p_dict.get("project_owner") or p_dict.get("project_manager")
+    mgr_val = p_dict.get("project_manager") or p_dict.get("project_owner")
     p_dict["project_owner"] = owner_val
-    p_dict["project_manager"] = owner_val
+    p_dict["project_manager"] = mgr_val
     scope_val = p_dict.get("project_scope") or p_dict.get("description")
     p_dict["project_scope"] = scope_val
     p_dict["description"] = scope_val
@@ -203,7 +204,8 @@ def build_charter_dict(conn, project_id):
 
 def register(app, *, get_db, json_response, request, get_current_user,
              is_full_access, get_now_iso, record_activity, clean_text,
-             sanitize_projects_for_user=None):
+             sanitize_projects_for_user=None, user_can_access_project=None,
+             check_project_owner_match=None):
 
     def deny_if_not_pm():
         user = get_current_user()
@@ -224,6 +226,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
+        if user_can_access_project and not user_can_access_project(user, project_id):
+            return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
         with get_db() as conn:
             charter = build_charter_dict(conn, project_id)
             if not charter:
@@ -264,6 +269,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
+        if user_can_access_project and not user_can_access_project(user, project_id):
+            return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
         with get_db() as conn:
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
@@ -283,6 +291,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
+        if user_can_access_project and not user_can_access_project(user, project_id):
+            return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
         data = request.json or {}
         title = clean_text(data.get("title"))
         if not title:
@@ -314,11 +325,14 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
         data = request.json or {}
         with get_db() as conn:
             row = conn.execute("SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
             if not row:
                 return json_response({"error": "Deliverable not found"}, status=404)
+            if user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             title = clean_text(data["title"]) if "title" in data else row["title"]
             if not title:
                 return json_response({"error": "Deliverable name is required"}, status=400)
@@ -349,8 +363,11 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
         with get_db() as conn:
             row = conn.execute("SELECT project_id FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
+            if row and user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             conn.execute("DELETE FROM deliverables WHERE id = ?", (deliverable_id,))
             if row:
                 sync_project_total_quantity(conn, row["project_id"])
@@ -366,6 +383,8 @@ def register(app, *, get_db, json_response, request, get_current_user,
             task = conn.execute("SELECT id, project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
             if not task:
                 return json_response({"error": "Task not found"}, status=404)
+            if user_can_access_project and not user_can_access_project(user, task["project_id"], conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             rows = conn.execute("SELECT * FROM project_risks WHERE task_id = ? ORDER BY id", (task_id,)).fetchall()
             return json_response([dict(r) for r in rows])
 
@@ -384,6 +403,8 @@ def register(app, *, get_db, json_response, request, get_current_user,
             task = conn.execute("SELECT id, project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
             if not task:
                 return json_response({"error": "Task not found"}, status=404)
+            if user_can_access_project and not user_can_access_project(user, task["project_id"], conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             project_id = task["project_id"]
             code = clean_text(data.get("risk_code"))
             if not code:
@@ -405,9 +426,12 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
         with get_db() as conn:
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
+            if user_can_access_project and not user_can_access_project(user, project_id, conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             rows = conn.execute("SELECT * FROM project_risks WHERE project_id = ? ORDER BY id", (project_id,)).fetchall()
             return json_response([dict(r) for r in rows])
 
@@ -416,6 +440,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
         data = request.json or {}
         desc = clean_text(data.get("description"))
         if not desc:
@@ -425,6 +450,8 @@ def register(app, *, get_db, json_response, request, get_current_user,
         with get_db() as conn:
             if not project_exists(conn, project_id):
                 return json_response({"error": "Project not found"}, status=404)
+            if user_can_access_project and not user_can_access_project(user, project_id, conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             code = clean_text(data.get("risk_code"))
             if not code:
                 n = conn.execute("SELECT COUNT(*) AS c FROM project_risks WHERE project_id = ?",
@@ -450,6 +477,8 @@ def register(app, *, get_db, json_response, request, get_current_user,
             row = conn.execute("SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
             if not row:
                 return json_response({"error": "Risk not found"}, status=404)
+            if user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             desc = clean_text(data["description"]) if "description" in data else row["description"]
             if not desc:
                 return json_response({"error": "Risk description is required"}, status=400)
@@ -473,7 +502,11 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
         with get_db() as conn:
+            row = conn.execute("SELECT project_id FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
+            if row and user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
+                return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             # Delete attachments belonging to this risk and their files on disk
             try:
                 folder = get_attachments_dir()
@@ -494,25 +527,47 @@ def register(app, *, get_db, json_response, request, get_current_user,
         denied = deny_if_not_pm()
         if denied:
             return denied
+        user = get_current_user()
         today = date.today()
         with get_db() as conn:
-            projects = conn.execute("SELECT * FROM projects ORDER BY name COLLATE NOCASE").fetchall()
-            tasks = conn.execute("""
+            all_projects = conn.execute("SELECT * FROM projects ORDER BY name COLLATE NOCASE").fetchall()
+            if user and user.get("role") != "admin" and user_can_access_project:
+                projects = [p for p in all_projects if user_can_access_project(user, p["id"], conn)]
+            else:
+                projects = all_projects
+            project_ids = [p["id"] for p in projects]
+            if not project_ids:
+                return json_response({
+                    "today": today.isoformat(),
+                    "kpis": {
+                        "projects": 0, "overdue_tasks": 0, "due_this_week": 0,
+                        "completion_pct": 0, "open_high_risks": 0, "total_tasks": 0,
+                    },
+                    "projects": [],
+                    "overdue": [],
+                    "overdue_total": 0,
+                    "deliverables": [],
+                    "high_risks": [],
+                    "workload": [],
+                })
+            ph = ",".join("?" * len(project_ids))
+            tasks = conn.execute(f"""
                 SELECT t.id, t.project_id, t.title, t.status, t.priority, t.due_date, t.progress_pct,
                        m.name AS assignee_name
                 FROM tasks t LEFT JOIN members m ON t.assignee_id = m.id
-            """).fetchall()
-            risks = conn.execute("""
+                WHERE t.project_id IN ({ph})
+            """, project_ids).fetchall()
+            risks = conn.execute(f"""
                 SELECT r.*, p.name AS project_name, t.title AS task_title FROM project_risks r
                 JOIN projects p ON p.id = r.project_id
                 JOIN tasks t ON t.id = r.task_id
-                WHERE r.task_id IS NOT NULL AND r.status != 'done'
-            """).fetchall()
-            deliverables = conn.execute("""
+                WHERE r.task_id IS NOT NULL AND r.status != 'done' AND r.project_id IN ({ph})
+            """, project_ids).fetchall()
+            deliverables = conn.execute(f"""
                 SELECT d.*, p.name AS project_name FROM deliverables d
                 JOIN projects p ON p.id = d.project_id
-                WHERE d.status != 'done'
-            """).fetchall()
+                WHERE d.status != 'done' AND d.project_id IN ({ph})
+            """, project_ids).fetchall()
 
         by_project = {}
         for t in tasks:

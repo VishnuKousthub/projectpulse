@@ -183,29 +183,116 @@ def sanitize_projects_for_user(projects, user=None):
         return [dict(p) if not isinstance(p, dict) else p for p in projects]
     return dict(projects) if not isinstance(projects, dict) else projects
 
-def get_all_projects_aggregated(conn):
-    return conn.execute("""
-        SELECT
-            p.*,
-            COUNT(t.id) as total_tasks,
-            SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
-            SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
-            COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
-            COALESCE(SUM(t.estimated_hours), 0) as total_estimated_hours
-        FROM projects p
-        LEFT JOIN tasks t ON t.project_id = p.id
-        GROUP BY p.id
-        ORDER BY p.updated_at DESC
-    """).fetchall()
+def check_project_owner_match(owner_str, user):
+    """
+    Checks if owner_str (from project_owner or project_manager in Project Charter)
+    matches the given user's username (case-insensitive, ignoring leading/trailing whitespace).
+    """
+    if not owner_str or not user:
+        return False
+    u_name = (user.get("username") or "").strip().lower()
+    if not u_name:
+        return False
+    clean_owner = owner_str.strip().lower()
+    if clean_owner == u_name:
+        return True
+    parts = [p.strip().lower() for p in re.split(r'[,/;|]', owner_str) if p.strip()]
+    if u_name in parts:
+        return True
+    u_full = (user.get("full_name") or "").strip().lower()
+    if u_full and (clean_owner == u_full or u_full in parts):
+        return True
+    return False
+
+def user_can_access_project(user, project_id, conn=None):
+    """
+    Enforces project-level access control based on the Project Owner field in the Project Charter:
+    - Administrators (role='admin') retain unrestricted access to all projects.
+    - Unauthenticated internal requests (where role defaults to 'admin') retain access.
+    - Project owners only have access if their username matches the project's
+      Project Charter 'project_owner' (or 'project_manager').
+    """
+    if not user:
+        return True
+    role = get_user_role(user)
+    if role == "admin":
+        return True
+
+    def _eval(c):
+        p = c.execute("SELECT id, project_owner, project_manager FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not p:
+            return False
+        owner_val = p["project_owner"] or p["project_manager"] or ""
+        return check_project_owner_match(owner_val, user)
+
+    if conn:
+        return _eval(conn)
+    else:
+        with get_db() as c:
+            return _eval(c)
+
+def verify_project_access(project_id, user=None, conn=None):
+    if user is None:
+        user = get_current_user()
+    if not user_can_access_project(user, project_id, conn):
+        return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
+    return None
+
+def get_all_projects_aggregated(conn, user=None):
+    if user is None:
+        user = get_current_user()
+    role = get_user_role(user) if user else "admin"
+
+    if role == "admin":
+        return conn.execute("""
+            SELECT
+                p.*,
+                COUNT(t.id) as total_tasks,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
+                SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
+                COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
+                COALESCE(SUM(t.estimated_hours), 0) as total_estimated_hours
+            FROM projects p
+            LEFT JOIN tasks t ON t.project_id = p.id
+            GROUP BY p.id
+            ORDER BY p.updated_at DESC
+        """).fetchall()
+    else:
+        u_name = (user.get("username") or "").strip().lower()
+        u_full = (user.get("full_name") or "").strip().lower()
+        return conn.execute("""
+            SELECT
+                p.*,
+                COUNT(t.id) as total_tasks,
+                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
+                SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
+                COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
+                COALESCE(SUM(t.estimated_hours), 0) as total_estimated_hours
+            FROM projects p
+            LEFT JOIN tasks t ON t.project_id = p.id
+            WHERE LOWER(TRIM(COALESCE(p.project_owner, p.project_manager, ''))) = ?
+               OR (',' || REPLACE(REPLACE(LOWER(COALESCE(p.project_owner, p.project_manager, '')), ', ', ','), ' ,', ',') || ',') LIKE ('%,' || ? || ',%')
+               OR (? != '' AND LOWER(TRIM(COALESCE(p.project_owner, p.project_manager, ''))) = ?)
+               OR (? != '' AND (',' || REPLACE(REPLACE(LOWER(COALESCE(p.project_owner, p.project_manager, '')), ', ', ','), ' ,', ',') || ',') LIKE ('%,' || ? || ',%'))
+            GROUP BY p.id
+            ORDER BY p.updated_at DESC
+        """, (u_name, u_name, u_full, u_full, u_full, u_full)).fetchall()
 
 def get_bootstrap_payload(conn, user_id=None, active_project_id=None):
-    projects = get_all_projects_aggregated(conn)
+    req_user = None
+    if user_id:
+        req_user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not req_user:
+        req_user = get_current_user()
+
+    projects = get_all_projects_aggregated(conn, req_user)
 
     if not projects:
         return {
             "projects": [],
             "current_project": None,
-            "tasks": []
+            "tasks": [],
+            "charter": None
         }
 
     target_id = active_project_id
@@ -527,9 +614,10 @@ def auth_logout():
 
 @app.get("/api/projects")
 def get_projects():
+    user = get_current_user()
     with get_db() as conn:
-        projects = get_all_projects_aggregated(conn)
-        return json_response(sanitize_projects_for_user(projects))
+        projects = get_all_projects_aggregated(conn, user)
+        return json_response(sanitize_projects_for_user(projects, user))
 
 @app.post("/api/projects")
 def create_project():
@@ -546,12 +634,16 @@ def create_project():
     color = data.get("color", "#3B82F6")
     now_str = get_now_iso()
 
+    po_val = clean_text(data.get("project_owner") or data.get("project_manager"))
+    if not po_val and user:
+        po_val = user.get("username")
+
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO projects (name, description, color, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (name, desc, color, now_str, now_str))
+            INSERT INTO projects (name, description, color, project_owner, project_manager, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, desc, color, po_val, po_val, now_str, now_str))
         p_id = cursor.lastrowid
 
         cursor.execute("""
@@ -601,7 +693,11 @@ def deduplicate_project_members(conn, project_id):
 
 @app.get("/api/projects/<project_id:int>")
 def get_project(project_id):
+    user = get_current_user()
     with get_db() as conn:
+        err = verify_project_access(project_id, user, conn)
+        if err:
+            return err
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
             return json_response({"error": "Project not found"}, status=404)
@@ -611,7 +707,7 @@ def get_project(project_id):
         sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date DESC", (project_id,)).fetchall()
         milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
         
-        result = sanitize_project_for_user(project)
+        result = sanitize_project_for_user(project, user)
         result["members"] = members
         result["sprints"] = sprints
         result["milestones"] = milestones
@@ -625,6 +721,9 @@ def update_project(project_id):
 
     data = request.json or {}
     with get_db() as conn:
+        err = verify_project_access(project_id, user, conn)
+        if err:
+            return err
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
             return json_response({"error": "Project not found"}, status=404)
@@ -677,7 +776,11 @@ def update_project(project_id):
             conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (po_val, po_val, project_id))
         elif "project_manager" in data:
             pm_val = clean_text(data["project_manager"]) or None
-            conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (pm_val, pm_val, project_id))
+            curr_owner = project.get("project_owner") if project else None
+            if not curr_owner:
+                conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (pm_val, pm_val, project_id))
+            else:
+                conn.execute("UPDATE projects SET project_manager = ? WHERE id = ?", (pm_val, project_id))
 
         # Keep project_scope and description synchronized
         if "project_scope" in data:
@@ -698,6 +801,9 @@ def delete_project(project_id):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot delete projects. Only PM and Admin have full access control."}, status=403)
 
     with get_db() as conn:
+        err = verify_project_access(project_id, user, conn)
+        if err:
+            return err
         project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
             return json_response({"error": "Project not found"}, status=404)
@@ -966,6 +1072,9 @@ def clone_project_by_id(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot clone projects or templates. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     with get_db() as conn:
@@ -984,6 +1093,9 @@ def clone_project_generic():
     source_id = safe_int(data.get("source_project_id") or data.get("project_id"))
     if not source_id:
         return json_response({"error": "source_project_id is required"}, status=400)
+    denied = verify_project_access(source_id, user)
+    if denied:
+        return denied
 
     with get_db() as conn:
         result, err_msg, status_code = execute_clone_project(conn, source_id, data, user)
@@ -995,6 +1107,10 @@ def clone_project_generic():
 
 @app.get("/api/projects/<project_id:int>/members")
 def get_members(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     with get_db() as conn:
         deduplicate_project_members(conn, project_id)
         members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
@@ -1005,6 +1121,9 @@ def add_member(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot add members. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     name = " ".join(data.get("name", "").strip().split())
@@ -1038,6 +1157,9 @@ def delete_member(project_id, member_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot remove members. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     with get_db() as conn:
         member = conn.execute("SELECT name FROM members WHERE id = ? AND project_id = ?", (member_id, project_id)).fetchone()
@@ -1071,6 +1193,10 @@ def delete_member_direct(member_id):
         if not member:
             return json_response({"error": "Member not found"}, status=404)
         project_id = member["project_id"]
+        denied = verify_project_access(project_id, user, conn)
+        if denied:
+            return denied
+        project_id = member["project_id"]
         target_name = member["name"].strip()
         matched_members = conn.execute(
             "SELECT id FROM members WHERE project_id = ? AND (id = ? OR LOWER(TRIM(name)) = LOWER(TRIM(?)))",
@@ -1088,6 +1214,11 @@ def delete_member_direct(member_id):
 
 @app.get("/api/projects/<project_id:int>/sprints")
 def get_sprints(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
+
     with get_db() as conn:
         sprints = conn.execute("""
             SELECT s.*,
@@ -1106,6 +1237,9 @@ def create_sprint(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create sprints. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     name = data.get("name", "").strip()
@@ -1133,6 +1267,9 @@ def update_sprint(project_id, sprint_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot update sprints. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     with get_db() as conn:
@@ -1163,6 +1300,9 @@ def delete_sprint(project_id, sprint_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot delete sprints. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     with get_db() as conn:
         conn.execute("DELETE FROM sprints WHERE id = ? AND project_id = ?", (sprint_id, project_id))
@@ -1172,6 +1312,11 @@ def delete_sprint(project_id, sprint_id):
 
 @app.get("/api/projects/<project_id:int>/milestones")
 def get_milestones(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
+
     with get_db() as conn:
         milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
         return json_response(milestones)
@@ -1181,6 +1326,9 @@ def create_milestone(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot create milestones. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     title = data.get("title", "").strip()
@@ -1205,6 +1353,9 @@ def update_milestone(project_id, milestone_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot update milestones. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     with get_db() as conn:
@@ -1222,6 +1373,11 @@ def update_milestone(project_id, milestone_id):
 
 @app.delete("/api/projects/<project_id:int>/milestones/<milestone_id:int>")
 def delete_milestone(project_id, milestone_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
+
     with get_db() as conn:
         conn.execute("DELETE FROM milestones WHERE id = ? AND project_id = ?", (milestone_id, project_id))
         return json_response({"success": True})
@@ -1230,6 +1386,10 @@ def delete_milestone(project_id, milestone_id):
 
 @app.get("/api/projects/<project_id:int>/tasks")
 def get_tasks(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     sprint_id = request.query.get("sprint_id")
     status = request.query.get("status")
     priority = request.query.get("priority")
@@ -1373,6 +1533,9 @@ def create_task(project_id):
         return json_response({
             "error": f"Permission Denied: User role '{user.get('role')}' cannot create new activities. Only PM and Admin have full access control."
         }, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     try:
         data = request.json or {}
@@ -1620,10 +1783,14 @@ def get_task_dict(conn, task_id: int):
 
 @app.get("/api/tasks/<task_id:int>")
 def get_task(task_id):
+    user = get_current_user()
     with get_db() as conn:
         task_dict = get_task_dict(conn, task_id)
         if not task_dict:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task_dict["project_id"], user, conn)
+        if denied:
+            return denied
         return json_response(task_dict)
 
 @app.put("/api/tasks/<task_id:int>")
@@ -1640,6 +1807,9 @@ def update_task(task_id):
             return json_response({"error": "Task not found"}, status=404)
 
         project_id = task["project_id"]
+        denied = verify_project_access(project_id, user, conn)
+        if denied:
+            return denied
         cursor = conn.cursor()
         now_str = get_now_iso()
 
@@ -1982,12 +2152,14 @@ def reorder_tasks():
         affected_projects = set()
         for item in items:
             t_id = item.get("task_id")
-            status = item.get("status")
-            order_idx = safe_int(item.get("new_order_index", item.get("order_index", 0)))
             if t_id:
                 prev_task = conn.execute("SELECT status, project_id FROM tasks WHERE id = ?", (t_id,)).fetchone()
                 if prev_task:
+                    if not user_can_access_project(user, prev_task["project_id"], conn):
+                        return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
                     affected_projects.add(prev_task["project_id"])
+                    status = item.get("status")
+                    order_idx = safe_int(item.get("new_order_index", item.get("order_index", 0)))
                     if status:
                         conn.execute("""
                             UPDATE tasks SET status = ?, order_index = ?, updated_at = ?
@@ -2012,6 +2184,9 @@ def reorder_project_tasks(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot reorder activities. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     task_ids = data.get("task_ids")
@@ -2053,6 +2228,9 @@ def move_task(task_id):
             return json_response({"error": "Task not found"}, status=404)
         
         project_id = task["project_id"]
+        denied = verify_project_access(project_id, user, conn)
+        if denied:
+            return denied
         normalize_project_task_order(conn, project_id)
         tasks = conn.execute(
             "SELECT id, order_index FROM tasks WHERE project_id = ? ORDER BY order_index ASC, id ASC",
@@ -2090,6 +2268,9 @@ def delete_task(task_id):
         if not task:
             return json_response({"error": "Task not found"}, status=404)
         project_id = task["project_id"]
+        denied = verify_project_access(project_id, user, conn)
+        if denied:
+            return denied
         record_activity(conn, project_id, "User", "Task Deleted", f'Deleted task "{task["title"]}"')
         try:
             folder = get_attachments_dir()
@@ -2110,6 +2291,7 @@ def delete_task(task_id):
 
 @app.post("/api/tasks/<task_id:int>/subtasks")
 def add_subtask(task_id):
+    user = get_current_user()
     data = request.json or {}
     title = data.get("title", "").strip()
     if not title:
@@ -2120,6 +2302,9 @@ def add_subtask(task_id):
         task = conn.execute("SELECT project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task["project_id"], user, conn)
+        if denied:
+            return denied
         
         max_idx = conn.execute("SELECT COALESCE(MAX(order_index), -1) as m FROM subtasks WHERE task_id = ?", (task_id,)).fetchone()["m"]
         cursor = conn.cursor()
@@ -2133,11 +2318,19 @@ def add_subtask(task_id):
 
 @app.put("/api/subtasks/<subtask_id:int>")
 def update_subtask(subtask_id):
+    user = get_current_user()
     data = request.json or {}
     with get_db() as conn:
-        sub = conn.execute("SELECT * FROM subtasks WHERE id = ?", (subtask_id,)).fetchone()
+        sub = conn.execute("""
+            SELECT s.*, t.project_id FROM subtasks s
+            JOIN tasks t ON s.task_id = t.id
+            WHERE s.id = ?
+        """, (subtask_id,)).fetchone()
         if not sub:
             return json_response({"error": "Subtask not found"}, status=404)
+        denied = verify_project_access(sub["project_id"], user, conn)
+        if denied:
+            return denied
         
         title = data.get("title", sub["title"])
         completed = (1 if data.get("completed") else 0) if "completed" in data else sub["completed"]
@@ -2148,7 +2341,18 @@ def update_subtask(subtask_id):
 
 @app.delete("/api/subtasks/<subtask_id:int>")
 def delete_subtask(subtask_id):
+    user = get_current_user()
     with get_db() as conn:
+        sub = conn.execute("""
+            SELECT s.*, t.project_id FROM subtasks s
+            JOIN tasks t ON s.task_id = t.id
+            WHERE s.id = ?
+        """, (subtask_id,)).fetchone()
+        if not sub:
+            return json_response({"error": "Subtask not found"}, status=404)
+        denied = verify_project_access(sub["project_id"], user, conn)
+        if denied:
+            return denied
         conn.execute("DELETE FROM subtasks WHERE id = ?", (subtask_id,))
         return json_response({"success": True})
 
@@ -2156,6 +2360,7 @@ def delete_subtask(subtask_id):
 
 @app.post("/api/tasks/<task_id:int>/timelogs")
 def add_timelog(task_id):
+    user = get_current_user()
     data = request.json or {}
     hours = float(data.get("hours") or 0.0)
     if hours <= 0:
@@ -2170,6 +2375,9 @@ def add_timelog(task_id):
         task = conn.execute("SELECT project_id, title, assignee_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task["project_id"], user, conn)
+        if denied:
+            return denied
         
         if not member_id:
             if task["assignee_id"]:
@@ -2201,10 +2409,18 @@ def add_timelog(task_id):
 
 @app.delete("/api/timelogs/<log_id:int>")
 def delete_timelog(log_id):
+    user = get_current_user()
     with get_db() as conn:
-        log = conn.execute("SELECT * FROM timelogs WHERE id = ?", (log_id,)).fetchone()
+        log = conn.execute("""
+            SELECT tl.*, t.project_id FROM timelogs tl
+            JOIN tasks t ON tl.task_id = t.id
+            WHERE tl.id = ?
+        """, (log_id,)).fetchone()
         if not log:
             return json_response({"error": "Time log not found"}, status=404)
+        denied = verify_project_access(log["project_id"], user, conn)
+        if denied:
+            return denied
         
         task_id = log["task_id"]
         conn.execute("DELETE FROM timelogs WHERE id = ?", (log_id,))
@@ -2215,6 +2431,10 @@ def delete_timelog(log_id):
 
 @app.get("/api/projects/<project_id:int>/timelogs")
 def get_project_timelogs(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     with get_db() as conn:
         logs = conn.execute("""
             SELECT tl.*, t.title as task_title, t.priority as task_priority, m.name as member_name, m.avatar_color as member_avatar
@@ -2231,22 +2451,10 @@ def get_project_timelogs(project_id):
 @app.get("/api/portfolio/analytics")
 @app.get("/api/analytics/portfolio")
 def get_portfolio_analytics():
+    user = get_current_user()
+    role = get_user_role(user) if user else "admin"
     with get_db() as conn:
-        projects = conn.execute("""
-            SELECT
-                p.id, p.name, p.description, p.color, p.created_at, p.updated_at,
-                COUNT(t.id) as total_tasks,
-                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_tasks,
-                SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
-                SUM(CASE WHEN t.status = 'todo' THEN 1 ELSE 0 END) as todo_tasks,
-                SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
-                COALESCE(SUM(t.estimated_hours), 0) as total_est_hours,
-                COALESCE(SUM(t.actual_hours), 0) as total_act_hours
-            FROM projects p
-            LEFT JOIN tasks t ON t.project_id = p.id
-            GROUP BY p.id
-            ORDER BY p.updated_at DESC
-        """).fetchall()
+        projects = get_all_projects_aggregated(conn, user)
 
         projects_list = []
         tot_tasks = 0
@@ -2259,7 +2467,7 @@ def get_portfolio_analytics():
         for p in projects:
             p_dict = dict(p)
             p_tot = p_dict["total_tasks"] or 0
-            p_done = p_dict["done_tasks"] or 0
+            p_done = p_dict.get("completed_tasks", p_dict.get("done_tasks", 0)) or 0
             p_overdue = p_dict["overdue_tasks"] or 0
             p_rate = round((p_done / p_tot * 100), 1) if p_tot > 0 else 0.0
             p_dict["completion_rate"] = p_rate
@@ -2276,29 +2484,58 @@ def get_portfolio_analytics():
 
             tot_tasks += p_tot
             tot_done += p_done
-            tot_inprogress += (p_dict["in_progress_tasks"] or 0)
+            tot_inprogress += (p_dict.get("in_progress_tasks") or 0)
             tot_overdue += p_overdue
-            tot_est_hours += float(p_dict["total_est_hours"] or 0.0)
-            tot_act_hours += float(p_dict["total_act_hours"] or 0.0)
+            tot_est_hours += float(p_dict.get("total_actual_hours", p_dict.get("total_est_hours", 0.0)) or 0.0)
+            tot_act_hours += float(p_dict.get("total_estimated_hours", p_dict.get("total_act_hours", 0.0)) or 0.0)
 
         overall_completion_rate = round((tot_done / tot_tasks * 100), 1) if tot_tasks > 0 else 0.0
 
+        p_ids = [p["id"] for p in projects]
+        if role == "admin" or not user:
+            where_clause = ""
+            where_params = []
+            where_proj_clause = ""
+            where_proj_params = []
+        else:
+            if not p_ids:
+                return json_response({
+                    "kpis": {
+                        "total_projects": 0, "total_tasks": 0, "done_tasks": 0,
+                        "in_progress_tasks": 0, "overdue_tasks": 0, "completion_rate": 0.0,
+                        "total_est_hours": 0.0, "total_act_hours": 0.0
+                    },
+                    "projects": [],
+                    "status_distribution": [],
+                    "priority_distribution": [],
+                    "workload": [],
+                    "activities": []
+                })
+            ph = ",".join("?" * len(p_ids))
+            where_clause = f" WHERE project_id IN ({ph})"
+            where_params = list(p_ids)
+            where_proj_clause = f" WHERE a.project_id IN ({ph})"
+            where_proj_params = list(p_ids)
+
         # Global status distribution
-        status_counts = conn.execute("""
+        status_counts = conn.execute(f"""
             SELECT status, COUNT(*) as count, COALESCE(SUM(estimated_hours), 0) as est_hours, COALESCE(SUM(actual_hours), 0) as act_hours
             FROM tasks
+            {where_clause}
             GROUP BY status
-        """).fetchall()
+        """, where_params).fetchall()
 
         # Global priority distribution
-        priority_counts = conn.execute("""
+        priority_counts = conn.execute(f"""
             SELECT priority, COUNT(*) as count
             FROM tasks
+            {where_clause}
             GROUP BY priority
-        """).fetchall()
+        """, where_params).fetchall()
 
         # Cross-project team workload
-        workload_rows = conn.execute("""
+        w_where = f" WHERE t.project_id IN ({ph})" if (role != "admin" and user) else ""
+        workload_rows = conn.execute(f"""
             SELECT 
                 COALESCE(NULLIF(TRIM(m.name), ''), 'Unassigned') as name,
                 COALESCE(NULLIF(TRIM(m.role), ''), 'Team Member') as role,
@@ -2309,20 +2546,22 @@ def get_portfolio_analytics():
                 COALESCE(SUM(t.actual_hours), 0) as total_act_hours
             FROM tasks t
             LEFT JOIN members m ON t.assignee_id = m.id
+            {w_where}
             GROUP BY LOWER(TRIM(COALESCE(m.name, 'Unassigned')))
             ORDER BY assigned_tasks DESC
-        """).fetchall()
+        """, where_params).fetchall()
         workload = [dict(r) for r in workload_rows]
 
         # Recent activities across all projects
-        acts = conn.execute("""
+        acts = conn.execute(f"""
             SELECT a.*, p.name as project_name, t.title as task_title
             FROM activity_logs a
             LEFT JOIN projects p ON a.project_id = p.id
             LEFT JOIN tasks t ON a.task_id = t.id
+            {where_proj_clause}
             ORDER BY a.timestamp DESC
             LIMIT 25
-        """).fetchall()
+        """, where_proj_params).fetchall()
 
         result = {
             "kpis": {
@@ -2345,6 +2584,10 @@ def get_portfolio_analytics():
 
 @app.get("/api/projects/<project_id:int>/analytics")
 def get_analytics(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     sprint_id = request.query.get("sprint_id")
     with get_db() as conn:
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
@@ -2539,6 +2782,10 @@ def get_analytics(project_id):
 
 @app.get("/api/projects/<project_id:int>/activity")
 def get_activity(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     with get_db() as conn:
         acts = conn.execute("""
             SELECT a.*, t.title as task_title
@@ -3235,6 +3482,9 @@ def generate_cumulative_project_excel(report):
 @app.get("/api/projects/<project_id:int>/cumulative-report")
 def get_cumulative_report_endpoint(project_id):
     curr_user = get_current_user()
+    denied = verify_project_access(project_id, curr_user)
+    if denied:
+        return denied
     with get_db() as conn:
         report_data = build_cumulative_project_report(conn, project_id, current_user=curr_user)
         if not report_data:
@@ -3244,6 +3494,9 @@ def get_cumulative_report_endpoint(project_id):
 @app.get("/api/projects/<project_id:int>/cumulative-report/export")
 def export_cumulative_report_endpoint(project_id):
     curr_user = get_current_user()
+    denied = verify_project_access(project_id, curr_user)
+    if denied:
+        return denied
     with get_db() as conn:
         report_data = build_cumulative_project_report(conn, project_id, current_user=curr_user)
         if not report_data:
@@ -3269,6 +3522,8 @@ charter_module.register(
     get_current_user=get_current_user, is_full_access=is_full_access,
     get_now_iso=get_now_iso, record_activity=record_activity, clean_text=clean_text,
     sanitize_projects_for_user=sanitize_projects_for_user,
+    user_can_access_project=user_can_access_project,
+    check_project_owner_match=check_project_owner_match,
 )
 
 # ==================== USER MANAGEMENT (ADMIN ONLY) ====================
@@ -3283,6 +3538,10 @@ users_module.register(
 
 @app.get("/api/projects/<project_id:int>/export")
 def export_project(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     with get_db() as conn:
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
@@ -3323,15 +3582,20 @@ def import_project():
         return json_response({"error": "Invalid project import structure"}, status=400)
 
     now_str = get_now_iso()
+    owner_val = p_data.get("project_owner") or p_data.get("project_manager")
+    if not owner_val and user:
+        owner_val = user.get("username")
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO projects (name, description, color, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects (name, description, color, project_owner, project_manager, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             p_data.get("name") + " (Imported)",
             p_data.get("description", ""),
             p_data.get("color", "#3B82F6"),
+            owner_val,
+            owner_val,
             now_str,
             now_str
         ))
@@ -3420,6 +3684,9 @@ def upload_gantt_file(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot upload Gantt files. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     upload = request.files.get("file")
     if not upload:
         return json_response({"error": "No file uploaded"}, status=400)
@@ -4076,6 +4343,10 @@ def delete_resource(resource_id):
 
 @app.get("/api/projects/<project_id:int>/resources")
 def get_project_resources(project_id):
+    user = get_current_user()
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
     with get_db() as conn:
         mappings = conn.execute("""
             SELECT pr.id as mapping_id, r.id as id, pr.project_id, pr.resource_id, pr.role, pr.role as project_role,
@@ -4135,6 +4406,9 @@ def map_project_resource(project_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot map project resources. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     resource_id = safe_int(data.get("resource_id"))
@@ -4204,6 +4478,9 @@ def update_project_resource_mapping(project_id, mapping_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot edit project resource mappings. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     data = request.json or {}
     with get_db() as conn:
@@ -4247,6 +4524,9 @@ def unmap_project_resource(project_id, resource_or_mapping_id):
     user = get_current_user()
     if user and not is_full_access(user):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot unmap project resources. Only PM and Admin have full access control."}, status=403)
+    denied = verify_project_access(project_id, user)
+    if denied:
+        return denied
 
     with get_db() as conn:
         mapping = conn.execute(
@@ -4270,10 +4550,14 @@ def unmap_project_resource(project_id, resource_or_mapping_id):
 
 @app.get("/api/tasks/<task_id:int>/resources")
 def get_task_resources(task_id):
+    user = get_current_user()
     with get_db() as conn:
         task = conn.execute("SELECT project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task["project_id"], user, conn)
+        if denied:
+            return denied
 
         trs = conn.execute("""
             SELECT tr.*, r.id as resource_id, r.id, r.resource_code, r.name as resource_name, r.name,
@@ -4300,6 +4584,9 @@ def map_task_resource(task_id):
         task = conn.execute("SELECT project_id, title FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task["project_id"], user, conn)
+        if denied:
+            return denied
 
         role = clean_text(data.get("role") or "")
         responsibility = clean_text(data.get("responsibility") or "")
@@ -4320,6 +4607,11 @@ def unmap_task_resource(task_id, resource_id):
         return json_response({"error": f"Permission Denied: User role '{user.get('role')}' cannot unmap activity resources. Only PM and Admin have full access control."}, status=403)
 
     with get_db() as conn:
+        task = conn.execute("SELECT project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if task:
+            denied = verify_project_access(task["project_id"], user, conn)
+            if denied:
+                return denied
         conn.execute("DELETE FROM task_resources WHERE task_id = ? AND resource_id = ?", (task_id, resource_id))
         return json_response({"success": True})
 
@@ -4340,11 +4632,15 @@ def secure_filename(filename):
 
 @app.get("/api/tasks/<task_id:int>/attachments")
 def get_task_attachments(task_id):
+    user = get_current_user()
     risk_id_param = request.query.get("risk_id")
     with get_db() as conn:
-        task = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        task = conn.execute("SELECT id, project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task["project_id"], user, conn)
+        if denied:
+            return denied
 
         if risk_id_param is not None and risk_id_param != "":
             if risk_id_param.lower() in ("null", "none"):
@@ -4402,6 +4698,9 @@ def upload_task_attachment(task_id):
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
             return json_response({"error": "Task not found"}, status=404)
+        denied = verify_project_access(task["project_id"], user, conn)
+        if denied:
+            return denied
 
         risk = None
         if risk_id is not None:
@@ -4451,10 +4750,14 @@ def upload_task_attachment(task_id):
 
 @app.get("/api/attachments/<attachment_id:int>/download")
 def download_attachment(attachment_id):
+    user = get_current_user()
     with get_db() as conn:
         att = conn.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
         if not att:
             return json_response({"error": "Attachment not found"}, status=404)
+        denied = verify_project_access(att["project_id"], user, conn)
+        if denied:
+            return denied
 
         folder = get_attachments_dir()
         fpath = folder / att["stored_name"]
@@ -4472,6 +4775,9 @@ def delete_attachment(attachment_id):
         att = conn.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
         if not att:
             return json_response({"error": "Attachment not found"}, status=404)
+        denied = verify_project_access(att["project_id"], user, conn)
+        if denied:
+            return denied
 
         # Check permissions:
         # Full access (PM/Admin) can delete any attachment.

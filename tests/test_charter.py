@@ -315,7 +315,7 @@ class TestCharter(unittest.TestCase):
     def test_14_project_owner_task_owner_po_value_and_scope(self):
         # Update using project_owner, task_owner, po_value, and project_scope
         code, _ = call(f"/api/projects/{self.pid}", "PUT", {
-            "project_owner": "Dr. Sarah Connor",
+            "project_owner": "Dr. Sarah Connor, pm",
             "task_owner": "John Doe",
             "po_value": "5000000",
             "project_scope": "Full synthesis of AZADOL batch with strict purity >= 99.5% and 3 staged delivery milestones."
@@ -324,14 +324,16 @@ class TestCharter(unittest.TestCase):
 
         _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
         p = c["project"]
-        self.assertEqual(p["project_owner"], "Dr. Sarah Connor")
-        self.assertEqual(p["project_manager"], "Dr. Sarah Connor")  # synced
+        self.assertEqual(p["project_owner"], "Dr. Sarah Connor, pm")
+        self.assertEqual(p["project_manager"], "Dr. Sarah Connor, pm")  # synced
         self.assertEqual(p["task_owner"], "John Doe")
         self.assertEqual(p["po_value"], "5000000")
         self.assertEqual(p["project_scope"], "Full synthesis of AZADOL batch with strict purity >= 99.5% and 3 staged delivery milestones.")
         self.assertEqual(p["description"], "Full synthesis of AZADOL batch with strict purity >= 99.5% and 3 staged delivery milestones.")  # synced
 
         # Verify sensitive fields stripped for restricted role
+        with get_db() as conn:
+            conn.execute("UPDATE projects SET project_owner = 'Dr. Sarah Connor, pm, assignee' WHERE id = ?", (self.pid,))
         code, proj_assignee = call(f"/api/projects/{self.pid}", "GET", None, self.assignee)
         self.assertEqual(code, 200)
         self.assertNotIn("project_owner", proj_assignee)
