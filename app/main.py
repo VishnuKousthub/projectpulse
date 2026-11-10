@@ -155,7 +155,7 @@ def is_progress_only(user=None):
 CHARTER_STRIP_FIELDS = {
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
     "project_owner", "task_owner", "po_number", "po_value", "project_scope",
-    "received_date", "delivery_date", "total_deliverable_quantity", "tech_pack"
+    "received_date", "delivery_date", "total_deliverable_quantity", "actual_deliverable_quantity", "tech_pack"
 }
 
 def sanitize_project_for_user(proj, user=None):
@@ -3220,7 +3220,7 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
     if is_full:
         for k in ("project_code", "cas_no", "project_manager", "project_owner", "task_owner", "po_number", "po_value", "project_scope",
                   "received_date", "delivery_date", "tech_pack",
-                  "customer_name", "chemist_name", "total_deliverable_quantity", "project_budget"):
+                  "customer_name", "chemist_name", "total_deliverable_quantity", "actual_deliverable_quantity", "project_budget"):
             if k in project.keys():
                 proj_dict[k] = project[k]
 

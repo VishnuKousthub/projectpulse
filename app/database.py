@@ -353,6 +353,7 @@ def init_db():
             ("customer_name", "TEXT"),
             ("chemist_name", "TEXT"),
             ("total_deliverable_quantity", "TEXT"),
+            ("actual_deliverable_quantity", "TEXT"),
             ("project_budget", "REAL DEFAULT 0"),
         ):
             try:

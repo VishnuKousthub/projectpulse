@@ -277,40 +277,42 @@ class TestCharter(unittest.TestCase):
             remaining = conn.execute("SELECT COUNT(*) AS c FROM project_risks WHERE task_id = ?", (tid,)).fetchone()["c"]
         self.assertEqual(remaining, 0)
 
-    def test_13_quantity_validation_and_total_calculation(self):
-        # 1. Validation rejects missing unit
+    def test_13_independent_deliverable_quantities(self):
+        # 1. Validation rejects missing unit on individual deliverables
         code, err = call(f"/api/projects/{self.pid}/deliverables", "POST",
                          {"title": "No Unit Batch", "quantity": "100"}, self.pm)
         self.assertEqual(code, 400)
         self.assertIn("unit", err["error"].lower())
 
-        # Clean existing deliverables for this project
+        # 2. Set independent total_deliverable_quantity and actual_deliverable_quantity on Charter
+        code_put, _ = call(f"/api/projects/{self.pid}", "PUT", {
+            "total_deliverable_quantity": "250 kg",
+            "actual_deliverable_quantity": "242.5 kg",
+        }, self.pm)
+        self.assertEqual(code_put, 200)
+
+        # 3. Adding, updating, and deleting deliverables MUST NOT overwrite total_deliverable_quantity
         with get_db() as conn:
             conn.execute("DELETE FROM deliverables WHERE project_id = ?", (self.pid,))
 
-        # Test Check 1: 10g + 20g + 30g = 60 g
         _, d1 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch A", "quantity": "10g"}, self.pm)
         _, d2 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch B", "quantity": "20g"}, self.pm)
-        _, d3 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch C", "quantity": "30g"}, self.pm)
         _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
-        self.assertEqual(c["project"]["total_deliverable_quantity"], "60 g")
+        self.assertEqual(c["project"]["total_deliverable_quantity"], "250 kg")
+        self.assertEqual(c["project"]["actual_deliverable_quantity"], "242.5 kg")
 
-        # Clean again
-        with get_db() as conn:
-            conn.execute("DELETE FROM deliverables WHERE project_id = ?", (self.pid,))
-
-        # Test Check 2: 4kg + 100kg + 250gm + 10kg = 114.25 kg
-        call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 1", "quantity": "4kg"}, self.pm)
-        call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 2", "quantity": "100kg"}, self.pm)
-        call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 3", "quantity": "250gm"}, self.pm)
-        _, d4 = call(f"/api/projects/{self.pid}/deliverables", "POST", {"title": "Batch 4", "quantity": "10kg"}, self.pm)
-        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
-        self.assertEqual(c["project"]["total_deliverable_quantity"], "114.25 kg")
-
-        # Deleting deliverable updates total quantity immediately
-        call(f"/api/deliverables/{d4['id']}", "DELETE", None, self.pm)
+        call(f"/api/deliverables/{d1['id']}", "PUT", {"title": "Batch A", "quantity": "55kg"}, self.pm)
+        call(f"/api/deliverables/{d2['id']}", "DELETE", None, self.pm)
         _, c_after = call(f"/api/projects/{self.pid}/charter", token=self.pm)
-        self.assertEqual(c_after["project"]["total_deliverable_quantity"], "104.25 kg")
+        self.assertEqual(c_after["project"]["total_deliverable_quantity"], "250 kg")
+        self.assertEqual(c_after["project"]["actual_deliverable_quantity"], "242.5 kg")
+
+        # 4. Verify actual_deliverable_quantity is stripped for restricted roles
+        with get_db() as conn:
+            conn.execute("UPDATE projects SET project_owner = 'pm, assignee' WHERE id = ?", (self.pid,))
+        code_asg, proj_asg = call(f"/api/projects/{self.pid}", "GET", None, self.assignee)
+        self.assertEqual(code_asg, 200)
+        self.assertNotIn("actual_deliverable_quantity", proj_asg)
 
     def test_14_project_owner_task_owner_po_value_and_scope(self):
         # Update using project_owner, task_owner, po_value, and project_scope

@@ -680,7 +680,8 @@ Object.assign(app, {
           ${field('Chemist name', chemistViewHtml, chemistPickerHtml, 'violet', 'standard')}
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'), 'emerald', 'standard')}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'), 'emerald', 'standard')}
-          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold opacity-80"'), 'emerald', 'quantity')}
+          ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'placeholder="e.g. 50 kg"'), 'emerald', 'quantity')}
+          ${field('Actual deliverable quantity', esc(p.actual_deliverable_quantity), inp('cf-actual-quantity', p.actual_deliverable_quantity, 'text', 'placeholder="e.g. 48.5 kg"'), 'emerald', 'quantity')}
           ${field('PO Number', esc(p.po_number), inp('cf-po-number', p.po_number, 'text', 'placeholder="e.g. PO-2026-0042"'), 'amber', 'standard')}
           ${field('PO Value (₹)', poView, inp('cf-po-value', p.po_value != null ? p.po_value : '', 'text', 'placeholder="e.g. ₹1,50,00,000"'), 'amber', 'po-value')}
           ${field('Project budget', (p.project_budget != null && Number(p.project_budget) > 0) ? this.formatINR(p.project_budget) : '', inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'), 'amber', 'budget')}
@@ -1125,6 +1126,7 @@ Object.assign(app, {
           received_date: rec,
           delivery_date: del,
           total_deliverable_quantity: v('cf-quantity'),
+          actual_deliverable_quantity: v('cf-actual-quantity'),
           project_budget: budget,
         },
       });

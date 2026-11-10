@@ -12,7 +12,8 @@ from app.database import get_attachments_dir
 CHARTER_FIELDS = (
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
     "project_owner", "task_owner", "po_number", "po_value", "project_scope",
-    "received_date", "delivery_date", "total_deliverable_quantity", "project_budget", "tech_pack"
+    "received_date", "delivery_date", "total_deliverable_quantity", "actual_deliverable_quantity",
+    "project_budget", "tech_pack"
 )
 
 MAX_PROJECT_CHEMISTS = 5
@@ -345,7 +346,6 @@ def register(app, *, get_db, json_response, request, get_current_user,
             cur = conn.execute(
                 f"INSERT INTO deliverables ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
             record_activity(conn, project_id, "User", "Deliverable Added", f'Added deliverable "{title}"')
-            sync_project_total_quantity(conn, project_id)
             row = dict(conn.execute("SELECT * FROM deliverables WHERE id = ?", (cur.lastrowid,)).fetchone())
             if not row.get("dispatch_date"):
                 row["dispatch_date"] = row.get("due_date")
@@ -382,7 +382,6 @@ def register(app, *, get_db, json_response, request, get_current_user,
                   qty,
                   clean_text(data["quality"]) if "quality" in data else row["quality"],
                   disp_date, disp_date, deliverable_id))
-            sync_project_total_quantity(conn, row["project_id"])
             updated_row = dict(conn.execute(
                 "SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone())
             if not updated_row.get("dispatch_date"):
@@ -400,8 +399,6 @@ def register(app, *, get_db, json_response, request, get_current_user,
             if row and user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
                 return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             conn.execute("DELETE FROM deliverables WHERE id = ?", (deliverable_id,))
-            if row:
-                sync_project_total_quantity(conn, row["project_id"])
             return json_response({"success": True})
 
     # --------------------------------------------------------------------- risks
@@ -715,7 +712,8 @@ def register(app, *, get_db, json_response, request, get_current_user,
             for row in project_rows:
                 for k in ("project_code", "cas_no", "customer_name", "chemist_name",
                           "project_manager", "po_number", "received_date", "delivery_date",
-                          "total_deliverable_quantity", "project_budget", "tech_pack"):
+                          "total_deliverable_quantity", "actual_deliverable_quantity",
+                          "project_budget", "tech_pack"):
                     row.pop(k, None)
 
         return json_response({

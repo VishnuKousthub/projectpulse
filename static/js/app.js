@@ -7259,6 +7259,7 @@ const app = {
           <div><span class="text-slate-500">Project Received:</span> ${this.fmtDate(p.received_date)}</div>
           <div><span class="text-slate-500">Project Delivery:</span> ${this.fmtDate(p.delivery_date)}</div>
           <div><span class="text-slate-500">Total Deliverable Qty:</span> ${this.escapeHtml(p.total_deliverable_quantity || '—')}</div>
+          <div><span class="text-slate-500">Actual Deliverable Qty:</span> ${this.escapeHtml(p.actual_deliverable_quantity || '—')}</div>
           <div><span class="text-slate-500">Project Budget:</span> <strong class="text-slate-900 dark:text-white">${this.fmtRupee(p.project_budget)}</strong></div>
           ` : ''}
           <div><span class="text-slate-500">Total Activities in Scope:</span> <strong>${k.total_activities || 0} Activities</strong></div>
