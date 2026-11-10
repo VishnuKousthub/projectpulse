@@ -677,7 +677,7 @@ Object.assign(app, {
           ${field('Task owner', esc(p.task_owner),
               inp('cf-task-owner', p.task_owner, 'text', 'list="cf-members-to" placeholder="Select or enter task owner"') +
               `<datalist id="cf-members-to">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
-          ${field('Chemist name (max 5)', chemistViewHtml, chemistPickerHtml, 'violet', 'standard')}
+          ${field('Chemist name', chemistViewHtml, chemistPickerHtml, 'violet', 'standard')}
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'), 'emerald', 'standard')}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'), 'emerald', 'standard')}
           ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold opacity-80"'), 'emerald', 'quantity')}
@@ -930,7 +930,7 @@ Object.assign(app, {
     const list = selectedChemists || [];
     const atLimit = list.length >= 5;
     const optionsHtml = `
-      <option value="">${atLimit ? 'Max 5 chemists selected' : 'Add chemist (max 5)…'}</option>
+      <option value="">${atLimit ? 'Max 5 chemists selected' : 'Add chemist…'}</option>
       ${(chemistsList || []).map(ch => {
         const already = list.some(s => s.toLowerCase() === String(ch.name || '').toLowerCase());
         return `<option value="${esc(ch.name)}" ${already ? 'disabled' : ''}>${esc(ch.name)}${already ? ' ✓' : ''}</option>`;
@@ -964,7 +964,7 @@ Object.assign(app, {
     if (sel) {
       const chemistsList = this.state.chemists || [];
       sel.innerHTML = `
-        <option value="">${atLimit ? 'Max 5 chemists selected' : 'Add chemist (max 5)…'}</option>
+        <option value="">${atLimit ? 'Max 5 chemists selected' : 'Add chemist…'}</option>
         ${chemistsList.map(ch => {
           const already = list.some(s => s.toLowerCase() === String(ch.name || '').toLowerCase());
           return `<option value="${esc(ch.name)}" ${already ? 'disabled' : ''}>${esc(ch.name)}${already ? ' ✓' : ''}</option>`;
