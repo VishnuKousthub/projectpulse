@@ -154,7 +154,7 @@ def is_progress_only(user=None):
 
 CHARTER_STRIP_FIELDS = {
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
-    "project_owner", "task_owner", "po_value", "project_scope",
+    "project_owner", "task_owner", "po_number", "po_value", "project_scope",
     "received_date", "delivery_date", "total_deliverable_quantity", "tech_pack"
 }
 
@@ -776,6 +776,16 @@ def update_project(project_id):
             except Exception:
                 pass
 
+        # Validate chemist_name / chemist_names (max 5 chemists)
+        chemist_input_present = ("chemist_name" in data) or ("chemist_names" in data)
+        chemist_normalized = None
+        if chemist_input_present:
+            raw_chem = data["chemist_names"] if "chemist_names" in data else data["chemist_name"]
+            try:
+                chemist_normalized = charter_module.format_chemist_names(raw_chem)
+            except ValueError as ve:
+                return json_response({"error": str(ve)}, status=400)
+
         name = data.get("name", project["name"])
         desc = data.get("description", project["description"])
         color = data.get("color", project["color"])
@@ -793,17 +803,27 @@ def update_project(project_id):
                 if field == "project_budget":
                     b_num = float(val) if val is not None and val != "" else 0.0
                     conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?", (b_num, project_id))
+                elif field == "chemist_name":
+                    conn.execute("UPDATE projects SET chemist_name = ? WHERE id = ?", (chemist_normalized, project_id))
                 else:
                     conn.execute(f"UPDATE projects SET {field} = ? WHERE id = ?",
                                  (clean_text(val) or None, project_id))
 
-        # Keep project_owner and project_manager synchronized
-        if "project_owner" in data:
+        if "chemist_names" in data and "chemist_name" not in data:
+            conn.execute("UPDATE projects SET chemist_name = ? WHERE id = ?", (chemist_normalized, project_id))
+
+        # Keep project_owner and project_manager independent when both are provided,
+        # while maintaining backward-compatible sync when only one is sent.
+        if "project_owner" in data and "project_manager" in data:
+            po_val = clean_text(data["project_owner"]) or None
+            pm_val = clean_text(data["project_manager"]) or None
+            conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (po_val, pm_val, project_id))
+        elif "project_owner" in data:
             po_val = clean_text(data["project_owner"]) or None
             conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (po_val, po_val, project_id))
         elif "project_manager" in data:
             pm_val = clean_text(data["project_manager"]) or None
-            curr_owner = project.get("project_owner") if project else None
+            curr_owner = project["project_owner"] if project and "project_owner" in project.keys() else None
             if not curr_owner:
                 conn.execute("UPDATE projects SET project_owner = ?, project_manager = ? WHERE id = ?", (pm_val, pm_val, project_id))
             else:
@@ -3198,7 +3218,7 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
         "updated_at": project["updated_at"],
     }
     if is_full:
-        for k in ("project_code", "cas_no", "project_manager", "project_owner", "task_owner", "po_value", "project_scope",
+        for k in ("project_code", "cas_no", "project_manager", "project_owner", "task_owner", "po_number", "po_value", "project_scope",
                   "received_date", "delivery_date", "tech_pack",
                   "customer_name", "chemist_name", "total_deliverable_quantity", "project_budget"):
             if k in project.keys():

@@ -340,6 +340,48 @@ class TestCharter(unittest.TestCase):
         self.assertNotIn("task_owner", proj_assignee)
         self.assertNotIn("po_value", proj_assignee)
 
+    def test_15_project_manager_po_number_and_multiple_chemists(self):
+        # Update with distinct project_owner, project_manager, po_number, and 5 chemists
+        chemists_5 = "Dr. A. Curie, Dr. R. Franklin, Dr. A. Zewail, Dr. F. Sanger, Dr. L. Pauling"
+        code, _ = call(f"/api/projects/{self.pid}", "PUT", {
+            "project_owner": "pm, Owner Name",
+            "project_manager": "Rajesh Kumar",
+            "po_number": "PO-2026-9981",
+            "chemist_name": chemists_5,
+        }, self.pm)
+        self.assertEqual(code, 200)
+
+        _, c = call(f"/api/projects/{self.pid}/charter", token=self.pm)
+        p = c["project"]
+        self.assertEqual(p["project_owner"], "pm, Owner Name")
+        self.assertEqual(p["project_manager"], "Rajesh Kumar")
+        self.assertEqual(p["po_number"], "PO-2026-9981")
+        self.assertEqual(p["chemist_name"], chemists_5)
+        self.assertEqual(len(p["chemist_names"]), 5)
+
+        # Verify po_number is stripped for restricted assignee role
+        with get_db() as conn:
+            conn.execute("UPDATE projects SET project_owner = 'pm, assignee' WHERE id = ?", (self.pid,))
+        code_asg, proj_asg = call(f"/api/projects/{self.pid}", "GET", None, self.assignee)
+        self.assertEqual(code_asg, 200)
+        self.assertNotIn("po_number", proj_asg)
+
+        # Verify 6 chemists is rejected with 400 Bad Request
+        chemists_6 = "Chemist 1, Chemist 2, Chemist 3, Chemist 4, Chemist 5, Chemist 6"
+        code_6, err_6 = call(f"/api/projects/{self.pid}", "PUT", {
+            "chemist_name": chemists_6,
+        }, self.pm)
+        self.assertEqual(code_6, 400)
+        self.assertIn("maximum of 5", err_6.get("error", "").lower())
+
+        # Verify list input with duplicate names deduplicates cleanly (<= 5 passes)
+        code_dup, _ = call(f"/api/projects/{self.pid}", "PUT", {
+            "chemist_names": ["Dr. One", "dr. one", "Dr. Two", "Dr. Three", "Dr. Four", "Dr. Five"],
+        }, self.pm)
+        self.assertEqual(code_dup, 200)
+        _, c_dup = call(f"/api/projects/{self.pid}/charter", token=self.pm)
+        self.assertEqual(c_dup["project"]["chemist_names"], ["Dr. One", "Dr. Two", "Dr. Three", "Dr. Four", "Dr. Five"])
+
     @classmethod
     def tearDownClass(cls):
         p = os.environ.get("PROJECT_PULSE_DB", "")

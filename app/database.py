@@ -344,6 +344,7 @@ def init_db():
             ("project_manager", "TEXT"),
             ("project_owner", "TEXT"),
             ("task_owner", "TEXT"),
+            ("po_number", "TEXT"),
             ("po_value", "TEXT"),
             ("project_scope", "TEXT"),
             ("received_date", "TEXT"),

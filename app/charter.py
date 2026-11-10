@@ -11,9 +11,37 @@ from app.database import get_attachments_dir
 
 CHARTER_FIELDS = (
     "project_code", "cas_no", "customer_name", "chemist_name", "project_manager",
-    "project_owner", "task_owner", "po_value", "project_scope",
+    "project_owner", "task_owner", "po_number", "po_value", "project_scope",
     "received_date", "delivery_date", "total_deliverable_quantity", "project_budget", "tech_pack"
 )
+
+MAX_PROJECT_CHEMISTS = 5
+
+
+def parse_chemist_names(raw):
+    """Parse chemist names from a comma-separated string or list, deduplicated case-insensitively."""
+    if not raw:
+        return []
+    items = raw if isinstance(raw, (list, tuple)) else str(raw).split(",")
+    names = []
+    seen = set()
+    for item in items:
+        cleaned = " ".join(str(item or "").strip().split())
+        if not cleaned or cleaned == "__NEW__":
+            continue
+        key = cleaned.lower()
+        if key not in seen:
+            seen.add(key)
+            names.append(cleaned)
+    return names
+
+
+def format_chemist_names(raw):
+    """Validate max 5 chemists and normalize to a comma-separated string (or None)."""
+    names = parse_chemist_names(raw)
+    if len(names) > MAX_PROJECT_CHEMISTS:
+        raise ValueError(f"A maximum of {MAX_PROJECT_CHEMISTS} chemists can be assigned to a project.")
+    return ", ".join(names) if names else None
 
 IMPACTS = ("low", "medium", "high")
 DELIVERABLE_STATUSES = ("backlog", "todo", "in_progress", "in_review", "done")
@@ -185,16 +213,19 @@ def build_charter_dict(conn, project_id):
 
     p_dict = dict(p)
     owner_val = p_dict.get("project_owner") or p_dict.get("project_manager")
-    mgr_val = p_dict.get("project_manager") or p_dict.get("project_owner")
+    mgr_val = p_dict.get("project_manager")
     p_dict["project_owner"] = owner_val
     p_dict["project_manager"] = mgr_val
     scope_val = p_dict.get("project_scope") or p_dict.get("description")
     p_dict["project_scope"] = scope_val
     p_dict["description"] = scope_val
+    chemist_list = parse_chemist_names(p_dict.get("chemist_name"))
+    p_dict["chemist_name"] = ", ".join(chemist_list) if chemist_list else None
 
     return {
         "project": {k: p_dict[k] for k in ("id", "name", "description", "color") if k in p_dict} |
-                   {f: (p_dict.get(f)) for f in CHARTER_FIELDS},
+                   {f: (p_dict.get(f)) for f in CHARTER_FIELDS} |
+                   {"chemist_names": chemist_list},
         "deliverables": deliv_list,
         "risks": [dict(r) for r in risks],
         "milestones": milestones,
@@ -683,7 +714,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
         elif user and not is_full_access(user):
             for row in project_rows:
                 for k in ("project_code", "cas_no", "customer_name", "chemist_name",
-                          "project_manager", "received_date", "delivery_date",
+                          "project_manager", "po_number", "received_date", "delivery_date",
                           "total_deliverable_quantity", "project_budget", "tech_pack"):
                     row.pop(k, None)
 

@@ -7233,9 +7233,11 @@ const app = {
             ${this.escapeHtml(p.name || 'Project')}
           </div>
           <div><span class="text-slate-500">Project Owner:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.project_owner || p.project_manager || lead.name || '—')}</strong></div>
+          <div><span class="text-slate-500">Project Manager:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.project_manager || '—')}</strong></div>
           ${(p.task_owner) ? `<div><span class="text-slate-500">Task Owner:</span> <strong class="text-slate-900 dark:text-white">${this.escapeHtml(p.task_owner)}</strong></div>` : ''}
           ${(!p.project_owner && !p.project_manager && lead.email) ? `<div><span class="text-slate-500">Email:</span> <span class="font-mono">${this.escapeHtml(lead.email)}</span></div>` : ''}
           <div><span class="text-slate-500">CAS No.:</span> ${this.escapeHtml(p.cas_no || '—')}</div>
+          ${(p.po_number) ? `<div><span class="text-slate-500">PO Number:</span> <strong class="text-slate-900 dark:text-white font-mono">${this.escapeHtml(p.po_number)}</strong></div>` : ''}
           ${(p.po_value) ? (() => {
             const raw = String(p.po_value).trim();
             const cleanNum = Number(raw.replace(/[₹,\s]/g, ''));

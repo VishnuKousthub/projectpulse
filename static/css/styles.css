@@ -599,9 +599,13 @@ main.app-main {
 }
 
 #sidebar #projects-list-sidebar {
-  overflow: hidden;
-  max-height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 220px;
   opacity: 1;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
   transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
               opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -649,7 +653,9 @@ main.app-main {
 }
 
 #sidebar.sidebar-expanded #projects-list-sidebar {
-  max-height: 160px !important;
+  max-height: 220px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   opacity: 1 !important;
   pointer-events: auto !important;
 }
@@ -728,6 +734,7 @@ main.app-main {
 #sidebar.sidebar-collapsed #projects-list-sidebar,
 #sidebar.sidebar-hover-expand:not(:hover) #projects-list-sidebar {
   max-height: 0 !important;
+  overflow: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
 }
@@ -786,7 +793,9 @@ main.app-main {
 }
 
 #sidebar.sidebar-hover-expand:hover #projects-list-sidebar {
-  max-height: 160px !important;
+  max-height: 220px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   opacity: 1 !important;
   pointer-events: auto !important;
 }

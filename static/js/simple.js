@@ -623,15 +623,19 @@ Object.assign(app, {
       `<input id="${id}" type="${type}" value="${esc(type === 'date' ? String(val || '').slice(0, 10) : val)}" class="${charterInputClass}" ${extra}>`;
 
     const chemistsList = this.state.chemists || [];
-    const chemistSelect = `
-      <div class="flex items-center gap-1.5">
-        <select id="cf-chemist" class="${charterInputClass} flex-1" onchange="if(this.value==='__NEW__'){app.promptNewChemist();}">
-          <option value="">Select Chemist…</option>
-          ${chemistsList.map(ch => `<option value="${esc(ch.name)}" ${ch.name === p.chemist_name ? 'selected' : ''}>${esc(ch.name)}</option>`).join('')}
-          <option value="__NEW__" class="font-bold text-blue-600 dark:text-blue-400">+ Add new chemist…</option>
-        </select>
-        <button type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !h-6 !px-1.5 text-[11px] font-bold" title="Add new chemist">+</button>
-      </div>`;
+    const savedChemists = this.parseChemistNames(p.chemist_name);
+    const editChemists = Array.isArray(this.state.charterSelectedChemists)
+      ? this.state.charterSelectedChemists
+      : savedChemists.slice(0, 5);
+    if (editing && !Array.isArray(this.state.charterSelectedChemists)) {
+      this.state.charterSelectedChemists = [...editChemists];
+    }
+
+    const chemistViewHtml = savedChemists.length
+      ? `<div class="flex flex-wrap gap-1 py-0.5">${savedChemists.map(ch => `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200 border border-violet-200 dark:border-violet-700/60">${esc(ch)}</span>`).join('')}</div>`
+      : '';
+
+    const chemistPickerHtml = this.buildCharterChemistPickerHtml(editChemists, chemistsList, charterInputClass);
 
     let poView = '';
     if (p.po_value != null && p.po_value !== '') {
@@ -664,16 +668,20 @@ Object.assign(app, {
           ${field('Project code', esc(p.project_code), inp('cf-code', p.project_code), 'blue', 'standard')}
           ${field('CAS no.', esc(p.cas_no), inp('cf-cas', p.cas_no), 'blue', 'standard')}
           ${field('Customer name', esc(p.customer_name), inp('cf-customer', p.customer_name), 'blue', 'standard')}
-          ${field('Project owner', esc(p.project_owner || p.project_manager),
-              inp('cf-owner', p.project_owner || p.project_manager, 'text', 'list="cf-members" placeholder="Select or enter owner"') +
+          ${field('Project owner', esc(p.project_owner),
+              inp('cf-owner', p.project_owner, 'text', 'list="cf-members" placeholder="Select or enter owner"') +
               `<datalist id="cf-members">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
+          ${field('Project manager', esc(p.project_manager),
+              inp('cf-manager', p.project_manager, 'text', 'list="cf-members-pm" placeholder="Select or enter project manager"') +
+              `<datalist id="cf-members-pm">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
           ${field('Task owner', esc(p.task_owner),
               inp('cf-task-owner', p.task_owner, 'text', 'list="cf-members-to" placeholder="Select or enter task owner"') +
               `<datalist id="cf-members-to">${(c.members || []).map(m => `<option value="${esc(m)}">`).join('')}</datalist>`, 'violet', 'standard')}
-          ${field('Chemist name', esc(p.chemist_name), chemistSelect, 'violet', 'standard')}
+          ${field('Chemist name (max 5)', chemistViewHtml, chemistPickerHtml, 'violet', 'standard')}
           ${field('Project received date', this.fmtDate(p.received_date) === '—' ? '' : this.fmtDate(p.received_date), inp('cf-received', p.received_date, 'date'), 'emerald', 'standard')}
           ${field('Project delivery date', this.fmtDate(p.delivery_date) === '—' ? '' : this.fmtDate(p.delivery_date), inp('cf-delivery', p.delivery_date, 'date'), 'emerald', 'standard')}
           ${field('Total deliverable quantity', esc(p.total_deliverable_quantity), inp('cf-quantity', p.total_deliverable_quantity, 'text', 'readonly disabled title="Auto-calculated from deliverables" class="cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold opacity-80"'), 'emerald', 'quantity')}
+          ${field('PO Number', esc(p.po_number), inp('cf-po-number', p.po_number, 'text', 'placeholder="e.g. PO-2026-0042"'), 'amber', 'standard')}
           ${field('PO Value (₹)', poView, inp('cf-po-value', p.po_value != null ? p.po_value : '', 'text', 'placeholder="e.g. ₹1,50,00,000"'), 'amber', 'po-value')}
           ${field('Project budget', (p.project_budget != null && Number(p.project_budget) > 0) ? this.formatINR(p.project_budget) : '', inp('cf-budget', p.project_budget != null ? p.project_budget : 0, 'number', 'min="0" step="any" placeholder="0"'), 'amber', 'budget')}
         </div>
@@ -888,9 +896,130 @@ Object.assign(app, {
     this.initLucide();
   },
 
+  parseChemistNames(raw) {
+    if (!raw) return [];
+    const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+    const out = [];
+    const seen = new Set();
+    for (const item of arr) {
+      const trimmed = String(item || '').trim().replace(/\s+/g, ' ');
+      if (!trimmed || trimmed === '__NEW__') continue;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(trimmed);
+      }
+    }
+    return out;
+  },
+
+  renderCharterChemistChipsHtml(selectedChemists) {
+    const esc = (v) => this.escapeHtml(v == null ? '' : String(v));
+    if (!selectedChemists || !selectedChemists.length) return '';
+    return selectedChemists.map((ch, idx) => `
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200 border border-violet-200 dark:border-violet-700/60">
+        <span>${esc(ch)}</span>
+        <button type="button" onclick="app.removeCharterChemist(${idx})" title="Remove ${esc(ch)}"
+          class="text-violet-600 hover:text-rose-600 dark:text-violet-300 dark:hover:text-rose-400 font-bold leading-none focus:outline-none">×</button>
+      </span>
+    `).join('');
+  },
+
+  buildCharterChemistPickerHtml(selectedChemists, chemistsList, inputClass) {
+    const esc = (v) => this.escapeHtml(v == null ? '' : String(v));
+    const list = selectedChemists || [];
+    const atLimit = list.length >= 5;
+    const optionsHtml = `
+      <option value="">${atLimit ? 'Max 5 chemists selected' : 'Add chemist (max 5)…'}</option>
+      ${(chemistsList || []).map(ch => {
+        const already = list.some(s => s.toLowerCase() === String(ch.name || '').toLowerCase());
+        return `<option value="${esc(ch.name)}" ${already ? 'disabled' : ''}>${esc(ch.name)}${already ? ' ✓' : ''}</option>`;
+      }).join('')}
+      <option value="__NEW__" class="font-bold text-blue-600 dark:text-blue-400">+ Add new chemist…</option>
+    `;
+    return `
+      <div id="cf-chemists-picker" class="w-full space-y-1.5">
+        <div id="cf-chemists-chips" class="flex flex-wrap gap-1 empty:hidden">${this.renderCharterChemistChipsHtml(list)}</div>
+        <div class="flex items-center gap-1.5">
+          <select id="cf-chemist" class="${inputClass} flex-1" onchange="app.onCharterChemistSelect(this)" ${atLimit ? 'disabled' : ''}>
+            ${optionsHtml}
+          </select>
+          <span id="cf-chemists-count" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 whitespace-nowrap">${list.length}/5</span>
+          <button id="cf-add-chemist-btn" type="button" onclick="app.promptNewChemist()" class="${UI.btn} ${UI.btnGhost} !h-6 !px-1.5 text-[11px] font-bold" title="Create and add new chemist" ${atLimit ? 'disabled' : ''}>+</button>
+        </div>
+      </div>`;
+  },
+
+  refreshCharterChemistPicker() {
+    const esc = (v) => this.escapeHtml(v == null ? '' : String(v));
+    const list = Array.isArray(this.state.charterSelectedChemists) ? this.state.charterSelectedChemists : [];
+    const atLimit = list.length >= 5;
+    const chipsEl = document.getElementById('cf-chemists-chips');
+    if (chipsEl) chipsEl.innerHTML = this.renderCharterChemistChipsHtml(list);
+    const countEl = document.getElementById('cf-chemists-count');
+    if (countEl) countEl.textContent = `${list.length}/5`;
+    const addBtn = document.getElementById('cf-add-chemist-btn');
+    if (addBtn) addBtn.disabled = atLimit;
+    const sel = document.getElementById('cf-chemist');
+    if (sel) {
+      const chemistsList = this.state.chemists || [];
+      sel.innerHTML = `
+        <option value="">${atLimit ? 'Max 5 chemists selected' : 'Add chemist (max 5)…'}</option>
+        ${chemistsList.map(ch => {
+          const already = list.some(s => s.toLowerCase() === String(ch.name || '').toLowerCase());
+          return `<option value="${esc(ch.name)}" ${already ? 'disabled' : ''}>${esc(ch.name)}${already ? ' ✓' : ''}</option>`;
+        }).join('')}
+        <option value="__NEW__" class="font-bold text-blue-600 dark:text-blue-400">+ Add new chemist…</option>
+      `;
+      sel.value = '';
+      sel.disabled = atLimit;
+    }
+  },
+
+  onCharterChemistSelect(sel) {
+    if (!sel) return;
+    const val = sel.value;
+    if (val === '__NEW__') {
+      sel.value = '';
+      this.promptNewChemist();
+      return;
+    }
+    if (val) {
+      this.addCharterChemist(val);
+      sel.value = '';
+    }
+  },
+
+  addCharterChemist(name) {
+    const trimmed = String(name || '').trim().replace(/\s+/g, ' ');
+    if (!trimmed || trimmed === '__NEW__') return;
+    const list = Array.isArray(this.state.charterSelectedChemists) ? [...this.state.charterSelectedChemists] : [];
+    if (list.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+      this.showToast(`Chemist '${trimmed}' is already selected`, 'info');
+      return;
+    }
+    if (list.length >= 5) {
+      this.showToast('Maximum of 5 chemists can be assigned per project', 'warning');
+      return;
+    }
+    list.push(trimmed);
+    this.state.charterSelectedChemists = list;
+    this.refreshCharterChemistPicker();
+  },
+
+  removeCharterChemist(idx) {
+    const list = Array.isArray(this.state.charterSelectedChemists) ? [...this.state.charterSelectedChemists] : [];
+    if (idx >= 0 && idx < list.length) {
+      list.splice(idx, 1);
+      this.state.charterSelectedChemists = list;
+      this.refreshCharterChemistPicker();
+    }
+  },
+
   // -- header edit
   async editCharterHeader() {
     this.state.charterEditHeader = true;
+    this.state.charterSelectedChemists = this.parseChemistNames(this.state.charter?.project?.chemist_name).slice(0, 5);
     if (!this.state.chemists || !this.state.chemists.length) {
       try {
         const chemists = await this.api('/api/chemists');
@@ -899,8 +1028,17 @@ Object.assign(app, {
     }
     this.paintCharter();
   },
-  cancelCharterHeader() { this.state.charterEditHeader = false; this.paintCharter(); },
+  cancelCharterHeader() {
+    this.state.charterEditHeader = false;
+    this.state.charterSelectedChemists = null;
+    this.paintCharter();
+  },
   async promptNewChemist() {
+    const currentList = Array.isArray(this.state.charterSelectedChemists) ? this.state.charterSelectedChemists : [];
+    if (currentList.length >= 5) {
+      this.showToast('Maximum of 5 chemists can be assigned per project', 'warning');
+      return;
+    }
     const sel = document.getElementById('cf-chemist');
     const name = (prompt('Enter new chemist name:') || '').trim();
     if (!name) {
@@ -925,15 +1063,8 @@ Object.assign(app, {
       }
       const chemists = await this.api('/api/chemists').catch(() => []);
       this.state.chemists = chemists;
-      if (sel) {
-        sel.innerHTML = `
-          <option value="">Select Chemist…</option>
-          ${chemists.map(ch => `<option value="${this.escapeHtml(ch.name)}">${this.escapeHtml(ch.name)}</option>`).join('')}
-          <option value="__NEW__" class="font-bold text-blue-600">+ Add new chemist…</option>
-        `;
-        const matched = chemists.find(c => c.name.toLowerCase() === savedName.toLowerCase());
-        sel.value = matched ? matched.name : '';
-      }
+      const matched = chemists.find(c => c.name.toLowerCase() === savedName.toLowerCase());
+      this.addCharterChemist(matched ? matched.name : savedName);
     } catch (e) {
       this.showToast(e.message || 'Failed to add chemist', 'error');
       if (sel && sel.value === '__NEW__') sel.value = '';
@@ -958,11 +1089,19 @@ Object.assign(app, {
       return;
     }
 
-    let chemistVal = v('cf-chemist');
-    if (chemistVal === '__NEW__') chemistVal = '';
+    const selectedChemists = Array.isArray(this.state.charterSelectedChemists)
+      ? this.state.charterSelectedChemists
+      : this.parseChemistNames(v('cf-chemist'));
+    if (selectedChemists.length > 5) {
+      this.showToast('Maximum of 5 chemists can be assigned per project', 'error');
+      return;
+    }
+    const chemistVal = selectedChemists.join(', ');
 
-    const ownerVal = v('cf-owner') || v('cf-pm');
+    const ownerVal = v('cf-owner');
+    const managerVal = v('cf-manager');
     const taskOwnerVal = v('cf-task-owner');
+    const poNumberVal = v('cf-po-number');
     const poVal = v('cf-po-value');
     const scopeVal = v('cf-scope');
 
@@ -976,8 +1115,9 @@ Object.assign(app, {
           cas_no: v('cf-cas'),
           customer_name: v('cf-customer'),
           project_owner: ownerVal,
-          project_manager: ownerVal,
+          project_manager: managerVal,
           task_owner: taskOwnerVal,
+          po_number: poNumberVal,
           po_value: poVal,
           project_scope: scopeVal,
           description: scopeVal,
@@ -989,6 +1129,7 @@ Object.assign(app, {
         },
       });
       this.state.charterEditHeader = false;
+      this.state.charterSelectedChemists = null;
       this.showToast('Charter saved', 'success');
       // refresh project list (name may have changed) and this page
       const list = await this.api('/api/projects');
