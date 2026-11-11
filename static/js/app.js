@@ -1757,18 +1757,28 @@ const app = {
 
               <!-- Column 3: End Date Picker (110px) -->
               <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex items-center justify-center">
-                ${t.due_date ? `
+                ${t.due_date ? (this.isFullAccess() ? `
+                  <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
+                    <input type="date" value="${t.due_date}"
+                      onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
+                      title="Edit End / Due Date"
+                      class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
+                    <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
+                      <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                  </div>
+                ` : `
                   <div class="w-[105px] h-7 bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300 cursor-not-allowed select-none" title="Due date is locked once set">
                     <span class="truncate">${this.escapeHtml(t.due_date)}</span>
                     <i data-lucide="lock" class="w-3 h-3 text-slate-400 flex-shrink-0 ml-1"></i>
                   </div>
-                ` : `
+                `) : `
                   <div class="relative w-[105px] h-7 group/gdue">
                     <div class="w-full h-full text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/90 dark:bg-amber-950/40 px-1.5 rounded-md border border-dashed border-amber-300 dark:border-amber-700/80 flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
                       <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
                       <span class="truncate">Not Declared</span>
                     </div>
-                    <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date (locks once set)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                    <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                   </div>
                 `}
               </div>
@@ -2290,18 +2300,27 @@ const app = {
 
           <!-- 7. Due Date -->
           <td class="px-3.5 py-2.5">
-            ${t.due_date ? `
+            ${t.due_date ? (this.isFullAccess() ? `
+              <div class="inline-flex items-center space-x-1 max-w-[130px]">
+                <input type="date" value="${t.due_date}"
+                  onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)"
+                  class="w-full text-xs rounded-lg px-2 py-1 border focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'}">
+                <button onclick="app.inlineUpdateTask(${t.id}, 'due_date', '')" class="p-1 rounded text-slate-400 hover:text-rose-500 transition" title="Clear / Mark as Not Declared">
+                  <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+              </div>
+            ` : `
               <div class="inline-flex items-center space-x-1.5 max-w-[130px] text-xs rounded-lg px-2 py-1 border font-mono cursor-not-allowed select-none ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-100/80 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}" title="Due date is locked once set">
                 <span class="truncate">${this.escapeHtml(t.due_date)}</span>
                 <i data-lucide="lock" class="w-3 h-3 text-slate-400 flex-shrink-0"></i>
               </div>
-            ` : `
+            `) : `
               <div class="relative group/date inline-flex items-center">
                 <div class="inline-flex items-center space-x-1.5 px-2 py-1 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[11px] font-semibold cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 transition">
                   <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
                   <span>Not Declared</span>
                 </div>
-                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date (locks once set)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
               </div>
             `}
           </td>
@@ -4106,7 +4125,8 @@ const app = {
     this.initLucide();
   },
 
-  applyDueDateLockState(isLocked) {
+  applyDueDateLockState(hasDueDate) {
+    const isLocked = Boolean(hasDueDate) && !this.isFullAccess();
     const dueInput = document.getElementById('task-input-duedate');
     const clearBtn = document.getElementById('task-duedate-clear-btn');
     const lockedBadge = document.getElementById('task-duedate-locked-badge');
@@ -4121,7 +4141,7 @@ const app = {
         dueInput.title = '';
       }
     }
-    if (clearBtn) clearBtn.classList.toggle('hidden', Boolean(isLocked));
+    if (clearBtn) clearBtn.classList.toggle('hidden', isLocked);
     if (lockedBadge) lockedBadge.classList.toggle('hidden', !isLocked);
   },
 

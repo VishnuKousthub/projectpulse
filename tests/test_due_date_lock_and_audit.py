@@ -118,10 +118,8 @@ class TestDueDateLockAndAuditDashboard(unittest.TestCase):
         self.assertEqual(updated2["progress_pct"], 50)
         self.assertEqual(updated2["due_date"], "2026-11-20")
 
-        # 4. Changing or clearing due_date is blocked (403 Forbidden) for ALL roles including Admin
+        # 4. Changing or clearing due_date is blocked (403 Forbidden) for Lead and Assignee
         for tok, rname in [
-            (self.admin_token, "Admin"),
-            (self.pm_token, "PM"),
             (self.lead_token, "Lead"),
             (self.assignee_token, "Assignee"),
         ]:
@@ -131,6 +129,19 @@ class TestDueDateLockAndAuditDashboard(unittest.TestCase):
             self.assertEqual(c2, 403, f"{rname} should not be able to change end_date: {r2}")
             c3, r3 = wsgi_call(f"/api/tasks/{tid}", "PUT", {"due_date": ""}, token=tok)
             self.assertEqual(c3, 403, f"{rname} should not be able to clear due_date: {r3}")
+
+        # 5. PM and Admin CAN still edit and clear due_date freely (200 OK)
+        c_pm, r_pm = wsgi_call(f"/api/tasks/{tid}", "PUT", {"due_date": "2026-11-26"}, token=self.pm_token)
+        self.assertEqual(c_pm, 200, f"PM should be allowed to edit due_date: {r_pm}")
+        self.assertEqual(r_pm["due_date"], "2026-11-26")
+
+        c_adm, r_adm = wsgi_call(f"/api/tasks/{tid}", "PUT", {"due_date": "2026-11-30"}, token=self.admin_token)
+        self.assertEqual(c_adm, 200, f"Admin should be allowed to edit due_date: {r_adm}")
+        self.assertEqual(r_adm["due_date"], "2026-11-30")
+
+        c_clr, r_clr = wsgi_call(f"/api/tasks/{tid}", "PUT", {"due_date": ""}, token=self.pm_token)
+        self.assertEqual(c_clr, 200, f"PM should be allowed to clear due_date: {r_clr}")
+        self.assertIsNone(r_clr["due_date"])
 
     def test_02_audit_endpoint_admin_only(self):
         # Unauthenticated -> 401

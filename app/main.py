@@ -2016,15 +2016,16 @@ def update_task(task_id):
         if denied:
             return denied
 
-        # Enforce due_date immutability: once set, it cannot be changed or cleared
-        existing_due_raw = str(task["due_date"] or "").strip()
-        existing_due = existing_due_raw[:10] if existing_due_raw not in ("", "null", "undefined", "None") else None
-        if existing_due and ("due_date" in data or "end_date" in data):
-            incoming_raw = data.get("due_date") if "due_date" in data else data.get("end_date")
-            incoming_str = str(incoming_raw).strip() if incoming_raw is not None else ""
-            incoming_due = incoming_str[:10] if incoming_str not in ("", "null", "undefined", "None") else None
-            if incoming_due != existing_due:
-                return json_response({"error": "Due date is locked once set and cannot be modified again."}, status=403)
+        # Enforce due_date immutability for Lead / Assignee (PM & Admin can always edit due_date)
+        if user and not is_full_access(user):
+            existing_due_raw = str(task["due_date"] or "").strip()
+            existing_due = existing_due_raw[:10] if existing_due_raw not in ("", "null", "undefined", "None") else None
+            if existing_due and ("due_date" in data or "end_date" in data):
+                incoming_raw = data.get("due_date") if "due_date" in data else data.get("end_date")
+                incoming_str = str(incoming_raw).strip() if incoming_raw is not None else ""
+                incoming_due = incoming_str[:10] if incoming_str not in ("", "null", "undefined", "None") else None
+                if incoming_due != existing_due:
+                    return json_response({"error": "Due date is locked once set for Lead/Assignee. Only PM and Admin can modify it."}, status=403)
 
         cursor = conn.cursor()
         now_str = get_now_iso()
