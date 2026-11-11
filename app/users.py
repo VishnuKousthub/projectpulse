@@ -9,7 +9,11 @@ ALLOWED_ROLES = ("admin", "pm", "lead", "assignee")
 
 
 def register(app, *, get_db, json_response, request, get_current_user,
-             clean_text, get_now_iso):
+             clean_text, get_now_iso, record_audit_log=None):
+
+    def _audit(conn, action_type, summary, **kwargs):
+        if record_audit_log:
+            record_audit_log(conn, action_type, "user", summary, **kwargs)
 
     def require_admin():
         user = get_current_user()
@@ -99,6 +103,13 @@ def register(app, *, get_db, json_response, request, get_current_user,
             """, (new_id,)).fetchone()
             res_dict = dict(created)
             res_dict["password_preview"] = password
+            _audit(conn, "CREATE", f'Created user @{username} ({role})',
+                   user=user, entity_id=new_id, entity_name=username,
+                   changes=[
+                       {"field": "Username", "old": None, "new": username},
+                       {"field": "Full Name", "old": None, "new": full_name},
+                       {"field": "Role", "old": None, "new": role},
+                   ])
             return json_response(res_dict, status=201)
 
     @app.put("/api/users/<user_id:int>")
@@ -180,6 +191,18 @@ def register(app, *, get_db, json_response, request, get_current_user,
                        last_login, created_at
                 FROM users WHERE id = ?
             """, (user_id,)).fetchone()
+            u_changes = []
+            if new_role != current_target_role:
+                u_changes.append({"field": "Role", "old": current_target_role, "new": new_role})
+            if new_full_name != (target["full_name"] or ""):
+                u_changes.append({"field": "Full Name", "old": target["full_name"], "new": new_full_name})
+            if new_email != (target["email"] or ""):
+                u_changes.append({"field": "Email", "old": target["email"], "new": new_email})
+            if new_active != current_target_active:
+                u_changes.append({"field": "Active", "old": bool(current_target_active), "new": bool(new_active)})
+            if u_changes:
+                _audit(conn, "UPDATE", f'Updated user @{target["username"]}',
+                       user=current_admin, entity_id=user_id, entity_name=target["username"], changes=u_changes)
             return json_response(dict(updated))
 
     @app.post("/api/users/<user_id:int>/reset_password")
@@ -208,6 +231,10 @@ def register(app, *, get_db, json_response, request, get_current_user,
 
             # Invalidate sessions immediately
             conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+            _audit(conn, "UPDATE", f'Reset password for user @{target["username"]}',
+                   user=current_admin, entity_id=user_id, entity_name=target["username"],
+                   changes=[{"field": "Password", "old": "••••••••", "new": "Reset (must change on login)"}])
 
             return json_response({
                 "success": True,
@@ -248,6 +275,9 @@ def register(app, *, get_db, json_response, request, get_current_user,
             conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             # Delete user account permanently
             conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            _audit(conn, "DELETE", f'Deleted user @{target["username"]}',
+                   user=current_admin, entity_id=user_id, entity_name=target["username"],
+                   changes=[{"field": "Username", "old": target["username"], "new": None}])
 
             return json_response({
                 "success": True,

@@ -46,7 +46,14 @@ Object.assign(app, {
 
     const navUsers = document.getElementById('nav-users');
     if (navUsers) {
-      navUsers.style.display = isAdmin ? '' : 'none';
+      navUsers.classList.toggle('hidden', !isAdmin);
+      navUsers.style.display = isAdmin ? 'flex' : 'none';
+    }
+
+    const navAudit = document.getElementById('nav-audit');
+    if (navAudit) {
+      navAudit.classList.toggle('hidden', !isAdmin);
+      navAudit.style.display = isAdmin ? 'flex' : 'none';
     }
 
     const navCharter = document.getElementById('nav-charter');
@@ -1593,5 +1600,320 @@ Object.assign(app, {
     } catch (e) {
       this.showToast(e.message || 'Failed to delete user', 'error');
     }
+  },
+
+  // ------------------------------------------------------------------ Admin Audit Log Dashboard
+  getAuditFilters() {
+    if (!this.state.auditFilters) {
+      this.state.auditFilters = {
+        search: '',
+        username: '',
+        action_type: '',
+        entity_type: '',
+        project_id: '',
+        date_from: '',
+        date_to: '',
+        limit: 50,
+        offset: 0,
+      };
+    }
+    return this.state.auditFilters;
+  },
+
+  buildAuditQueryString(includePaging = true) {
+    const f = this.getAuditFilters();
+    const qs = new URLSearchParams();
+    if (f.search) qs.set('search', f.search);
+    if (f.username) qs.set('username', f.username);
+    if (f.action_type) qs.set('action_type', f.action_type);
+    if (f.entity_type) qs.set('entity_type', f.entity_type);
+    if (f.project_id) qs.set('project_id', f.project_id);
+    if (f.date_from) qs.set('date_from', f.date_from);
+    if (f.date_to) qs.set('date_to', f.date_to);
+    if (includePaging) {
+      qs.set('limit', String(f.limit || 50));
+      qs.set('offset', String(f.offset || 0));
+    }
+    return qs.toString();
+  },
+
+  async renderAuditDashboard() {
+    const root = document.getElementById('view-audit-container');
+    if (!root) return;
+
+    if (this.getUserRole() !== 'admin') {
+      this.switchView(this.getLandingView());
+      return;
+    }
+
+    root.innerHTML = `<div class="${UI.card} p-8 text-center text-xs text-slate-400">Loading audit logs…</div>`;
+    try {
+      const qs = this.buildAuditQueryString(true);
+      const data = await this.api(`/api/admin/audit-logs?${qs}`);
+      this.state.auditData = data;
+      this.paintAuditDashboard();
+    } catch (e) {
+      root.innerHTML = `<div class="${UI.card} p-6 text-xs text-rose-600">Failed to load audit logs: ${this.escapeHtml(e.message)}</div>`;
+    }
+  },
+
+  applyAuditFilter(key, value) {
+    const f = this.getAuditFilters();
+    f[key] = value;
+    f.offset = 0;
+    this.renderAuditDashboard();
+  },
+
+  clearAuditFilters() {
+    this.state.auditFilters = {
+      search: '',
+      username: '',
+      action_type: '',
+      entity_type: '',
+      project_id: '',
+      date_from: '',
+      date_to: '',
+      limit: 50,
+      offset: 0,
+    };
+    this.renderAuditDashboard();
+  },
+
+  setAuditPage(newOffset) {
+    const f = this.getAuditFilters();
+    f.offset = Math.max(0, newOffset);
+    this.renderAuditDashboard();
+  },
+
+  async exportAuditCsv() {
+    try {
+      const qs = this.buildAuditQueryString(false);
+      const token = this.state.authToken || localStorage.getItem('projectpulse_token') || '';
+      const res = await fetch(`/api/admin/audit-logs/export?${qs}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `projectpulse_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      this.showToast(e.message || 'Failed to export audit logs', 'error');
+    }
+  },
+
+  paintAuditDashboard() {
+    const root = document.getElementById('view-audit-container');
+    const data = this.state.auditData;
+    if (!root || !data) return;
+
+    const esc = (v) => this.escapeHtml(v == null ? '' : String(v));
+    const f = this.getAuditFilters();
+    const kpis = data.kpis || {};
+    const logs = data.logs || [];
+    const filters = data.filters || {};
+    const total = Number(data.total || 0);
+    const limit = Number(data.limit || 50);
+    const offset = Number(data.offset || 0);
+
+    const actionBadge = (act) => {
+      const a = String(act || '').toUpperCase();
+      if (a === 'CREATE' || a === 'UPLOAD' || a === 'IMPORT') {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/60">${esc(a)}</span>`;
+      }
+      if (a === 'DELETE') {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200 dark:border-rose-700/60">${esc(a)}</span>`;
+      }
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-700/60">${esc(a)}</span>`;
+    };
+
+    const rolePill = (r) => {
+      const rl = String(r || '').toLowerCase();
+      if (rl === 'admin') return 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300';
+      if (rl === 'pm' || rl === 'manager') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300';
+      if (rl === 'lead' || rl === 'team lead') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+      return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+    };
+
+    const fmtTs = (iso) => {
+      if (!iso) return '—';
+      try {
+        const d = new Date(iso);
+        if (isNaN(d)) return esc(iso);
+        return `<div class="font-mono text-[11px] text-slate-800 dark:text-slate-200 whitespace-nowrap">${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                <div class="font-mono text-[10px] text-slate-400">${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>`;
+      } catch (e) {
+        return esc(iso);
+      }
+    };
+
+    const kpiCard = (label, value, sub, tone) => `
+      <div class="${UI.card} p-4">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${label}</div>
+        <div class="mt-1 text-2xl font-extrabold ${tone}">${value}</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">${sub}</div>
+      </div>`;
+
+    const rowsHtml = logs.length ? logs.map(log => {
+      const changes = Array.isArray(log.changes) ? log.changes : [];
+      const diffHtml = changes.length ? `
+        <div class="flex flex-wrap gap-1.5 mt-1.5">
+          ${changes.map(ch => `
+            <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-[10.5px] max-w-full">
+              <span class="font-bold text-slate-700 dark:text-slate-200">${esc(ch.field)}:</span>
+              ${ch.old && ch.old !== '—' ? `<span class="text-rose-600 dark:text-rose-400 line-through truncate max-w-[140px]" title="${esc(ch.old)}">${esc(ch.old)}</span><span class="text-slate-400">→</span>` : ''}
+              <span class="text-emerald-700 dark:text-emerald-400 font-semibold truncate max-w-[160px]" title="${esc(ch.new)}">${esc(ch.new)}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const initial = (log.full_name || log.username || 'S').charAt(0).toUpperCase();
+
+      return `
+        <tr class="border-t border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
+          <td class="${UI.td} whitespace-nowrap">${fmtTs(log.timestamp)}</td>
+          <td class="${UI.td}">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">${esc(initial)}</span>
+              <div class="min-w-0">
+                <div class="font-bold text-slate-900 dark:text-white truncate max-w-[150px]">${esc(log.full_name || log.username)}</div>
+                <div class="flex items-center gap-1 mt-0.5">
+                  <span class="text-[10px] font-mono text-slate-400">@${esc(log.username)}</span>
+                  <span class="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded ${rolePill(log.user_role)}">${esc(log.user_role || 'system')}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="${UI.td} whitespace-nowrap">${actionBadge(log.action_type)}</td>
+          <td class="${UI.td}">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase">${esc(log.entity_type)}</span>
+              ${log.entity_name ? `<span class="font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[180px]" title="${esc(log.entity_name)}">${esc(log.entity_name)}</span>` : ''}
+            </div>
+            ${log.project_name ? `<div class="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[210px]">Project: <span class="font-semibold">${esc(log.project_name)}</span></div>` : ''}
+          </td>
+          <td class="${UI.td}">
+            <div class="text-xs font-medium text-slate-800 dark:text-slate-200">${esc(log.summary)}</div>
+            ${diffHtml}
+          </td>
+        </tr>
+      `;
+    }).join('') : `
+      <tr>
+        <td colspan="5" class="py-12 text-center text-xs text-slate-400">
+          No audit events match the current filters. Perform any task/field addition, update, or deletion and click Refresh.
+        </td>
+      </tr>
+    `;
+
+    const fromIdx = total === 0 ? 0 : offset + 1;
+    const toIdx = Math.min(total, offset + logs.length);
+
+    root.innerHTML = `
+      <div class="space-y-4">
+        <!-- Header -->
+        <div class="${UI.card} p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="shield-check" class="w-5 h-5 text-violet-500"></i>
+              <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Admin Audit Log Dashboard</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300">Admin Only</span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Complete field-level audit trail of every user action — additions, updates (old → new values), and deletions.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="app.exportAuditCsv()" class="${UI.btn} ${UI.btnGhost}">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Export CSV</span>
+            </button>
+            <button type="button" onclick="app.renderAuditDashboard()" class="${UI.btn} ${UI.btnPrimary}">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          ${kpiCard('Total Audit Events', kpis.total_events || 0, `${kpis.today_events || 0} recorded today`, 'text-slate-800 dark:text-white')}
+          ${kpiCard('Additions (Creates)', kpis.creates || 0, 'Tasks, projects, files, risks added', 'text-emerald-600 dark:text-emerald-400')}
+          ${kpiCard('Field Updates', kpis.updates || 0, 'Tracked with old → new diffs', 'text-blue-600 dark:text-blue-400')}
+          ${kpiCard('Deletions', kpis.deletes || 0, `${kpis.active_users || 0} tracked user(s)`, 'text-rose-600 dark:text-rose-400')}
+        </div>
+
+        <!-- Filters Toolbar -->
+        <div class="${UI.card} p-3.5 space-y-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
+            <div class="lg:col-span-2 relative">
+              <input id="audit-filter-search" type="text" value="${esc(f.search)}"
+                onkeydown="if(event.key==='Enter'){app.applyAuditFilter('search', this.value);}"
+                placeholder="Search task, field, value, or user… (Enter)"
+                class="${UI.input} pr-16">
+              <button type="button" onclick="app.applyAuditFilter('search', document.getElementById('audit-filter-search').value)"
+                class="absolute right-1 top-1 h-6 px-2 rounded text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition">Go</button>
+            </div>
+            <select onchange="app.applyAuditFilter('username', this.value)" class="${UI.input}">
+              <option value="">All Users</option>
+              ${(filters.users || []).map(u => `<option value="${esc(u.username)}" ${f.username === u.username ? 'selected' : ''}>${esc(u.full_name)} (@${esc(u.username)})</option>`).join('')}
+            </select>
+            <select onchange="app.applyAuditFilter('action_type', this.value)" class="${UI.input}">
+              <option value="">All Actions</option>
+              ${(filters.action_types || []).map(a => `<option value="${esc(a)}" ${f.action_type === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}
+            </select>
+            <select onchange="app.applyAuditFilter('entity_type', this.value)" class="${UI.input}">
+              <option value="">All Entities</option>
+              ${(filters.entity_types || []).map(et => `<option value="${esc(et)}" ${f.entity_type === et ? 'selected' : ''}>${esc(et.toUpperCase())}</option>`).join('')}
+            </select>
+            <select onchange="app.applyAuditFilter('project_id', this.value)" class="${UI.input}">
+              <option value="">All Projects</option>
+              ${(filters.projects || []).map(pr => `<option value="${pr.id}" ${String(f.project_id) === String(pr.id) ? 'selected' : ''}>${esc(pr.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <label class="text-[11px] font-semibold text-slate-500">From:</label>
+              <input type="date" value="${esc(f.date_from)}" onchange="app.applyAuditFilter('date_from', this.value)" class="h-7 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+              <label class="text-[11px] font-semibold text-slate-500">To:</label>
+              <input type="date" value="${esc(f.date_to)}" onchange="app.applyAuditFilter('date_to', this.value)" class="h-7 px-2 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+            </div>
+            <button type="button" onclick="app.clearAuditFilters()" class="${UI.btn} ${UI.btnGhost} !h-7 text-[11px]">Clear Filters</button>
+          </div>
+        </div>
+
+        <!-- Audit Log Table -->
+        <div class="${UI.card} overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th class="${UI.th}">Timestamp</th>
+                  <th class="${UI.th}">User &amp; Role</th>
+                  <th class="${UI.th}">Action</th>
+                  <th class="${UI.th}">Target &amp; Project</th>
+                  <th class="${UI.th}">Details &amp; Field Changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+          <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <span>Showing <strong>${fromIdx}</strong>–<strong>${toIdx}</strong> of <strong>${total}</strong> events</span>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="app.setAuditPage(${offset - limit})" ${offset <= 0 ? 'disabled' : ''} class="${UI.btn} ${UI.btnGhost} !h-7 disabled:opacity-40">Previous</button>
+              <button type="button" onclick="app.setAuditPage(${offset + limit})" ${offset + limit >= total ? 'disabled' : ''} class="${UI.btn} ${UI.btnGhost} !h-7 disabled:opacity-40">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    this.initLucide();
   },
 });

@@ -156,14 +156,18 @@ class TestRolePermissions(unittest.TestCase):
             self.assertEqual(res["estimated_hours"], 16.0)
 
             # start_date
-            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"start_date": "2026-05-01", "due_date": "2026-05-15"})
+            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"start_date": "2026-05-01"})
             self.assertEqual(st_code, 200, f"{role_name} should be allowed to update start_date: {res}")
             self.assertEqual(res["start_date"], "2026-05-01")
 
-            # due_date
-            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"due_date": "2026-05-20"})
-            self.assertEqual(st_code, 200, f"{role_name} should be allowed to update due_date: {res}")
+            # due_date: allowed to set once if currently undeclared, then locked against further modification
+            st_new, new_t = self._request("/api/projects/1/tasks", method="POST", token=self.pm_token, body={"title": f"DueLock Check {role_name}"})
+            self.assertEqual(st_new, 200)
+            st_code, res = self._request(f"/api/tasks/{new_t['id']}", method="PUT", token=token, body={"due_date": "2026-05-20"})
+            self.assertEqual(st_code, 200, f"{role_name} should be allowed to set initial due_date: {res}")
             self.assertEqual(res["due_date"], "2026-05-20")
+            st_lock, _ = self._request(f"/api/tasks/{new_t['id']}", method="PUT", token=token, body={"due_date": "2026-05-25"})
+            self.assertEqual(st_lock, 403, f"{role_name} should be blocked from changing already-set due_date")
 
             # assignee_id (existing project member)
             st_code, members = self._request("/api/projects/1/members", token=self.pm_token)
@@ -231,8 +235,9 @@ class TestRolePermissions(unittest.TestCase):
             st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"assignee_name": "Nonexistent Person 12345"})
             self.assertEqual(st_code, 400, f"{role_name} should get 400 for assignee name outside project")
 
-            # End date before start date
-            st_code, res = self._request(f"/api/tasks/{task_id}", method="PUT", token=token, body={"start_date": "2026-06-15", "due_date": "2026-06-01"})
+            # End date before start date (test on a task without an existing locked due_date)
+            _, nodue_t = self._request("/api/projects/1/tasks", method="POST", token=self.pm_token, body={"title": f"DateOrder Check {role_name}"})
+            st_code, res = self._request(f"/api/tasks/{nodue_t['id']}", method="PUT", token=token, body={"start_date": "2026-06-15", "due_date": "2026-06-01"})
             self.assertEqual(st_code, 400, f"{role_name} should get 400 for end date before start date")
 
     # 3d. Test project risk permissions: lead/assignee can create/edit (200), cannot delete (403), pm/admin can do all (200)

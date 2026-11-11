@@ -237,7 +237,11 @@ def build_charter_dict(conn, project_id):
 def register(app, *, get_db, json_response, request, get_current_user,
              is_full_access, get_now_iso, record_activity, clean_text,
              sanitize_projects_for_user=None, user_can_access_project=None,
-             check_project_owner_match=None):
+             check_project_owner_match=None, record_audit_log=None):
+
+    def _audit(conn, action_type, entity_type, summary, **kwargs):
+        if record_audit_log:
+            record_audit_log(conn, action_type, entity_type, summary, **kwargs)
 
     def deny_if_not_pm():
         user = get_current_user()
@@ -347,6 +351,11 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 f"INSERT INTO deliverables ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
             record_activity(conn, project_id, "User", "Deliverable Added", f'Added deliverable "{title}"')
             row = dict(conn.execute("SELECT * FROM deliverables WHERE id = ?", (cur.lastrowid,)).fetchone())
+            _audit(conn, "CREATE", "deliverable", f'Added deliverable "{title}"',
+                   user=user, entity_id=row["id"], entity_name=title, project_id=project_id,
+                   changes=[{"field": "Deliverable", "old": None, "new": title},
+                            {"field": "Quantity", "old": None, "new": qty},
+                            {"field": "Dispatch Date", "old": None, "new": disp_date}])
             if not row.get("dispatch_date"):
                 row["dispatch_date"] = row.get("due_date")
             return json_response(row, status=201)
@@ -375,13 +384,24 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 disp_date = clean_text(data["dispatch_date"]) or None
             elif "due_date" in data:
                 disp_date = clean_text(data["due_date"]) or None
+            new_quality = clean_text(data["quality"]) if "quality" in data else row["quality"]
             conn.execute("""
                 UPDATE deliverables SET title = ?, quantity = ?, quality = ?, dispatch_date = ?, due_date = ?
                 WHERE id = ?
-            """, (title,
-                  qty,
-                  clean_text(data["quality"]) if "quality" in data else row["quality"],
-                  disp_date, disp_date, deliverable_id))
+            """, (title, qty, new_quality, disp_date, disp_date, deliverable_id))
+            d_changes = []
+            for lbl, ov, nv in [
+                ("Title", row["title"], title),
+                ("Quantity", row["quantity"], qty),
+                ("Quality", row["quality"], new_quality),
+                ("Dispatch Date", row["dispatch_date"] if "dispatch_date" in row.keys() else row["due_date"], disp_date),
+            ]:
+                if (ov or "") != (nv or ""):
+                    d_changes.append({"field": lbl, "old": ov, "new": nv})
+            if d_changes:
+                _audit(conn, "UPDATE", "deliverable", f'Updated deliverable "{title}"',
+                       user=user, entity_id=deliverable_id, entity_name=title, project_id=row["project_id"],
+                       changes=d_changes)
             updated_row = dict(conn.execute(
                 "SELECT * FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone())
             if not updated_row.get("dispatch_date"):
@@ -395,10 +415,14 @@ def register(app, *, get_db, json_response, request, get_current_user,
             return denied
         user = get_current_user()
         with get_db() as conn:
-            row = conn.execute("SELECT project_id FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
+            row = conn.execute("SELECT project_id, title FROM deliverables WHERE id = ?", (deliverable_id,)).fetchone()
             if row and user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
                 return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             conn.execute("DELETE FROM deliverables WHERE id = ?", (deliverable_id,))
+            if row:
+                _audit(conn, "DELETE", "deliverable", f'Deleted deliverable "{row["title"]}"',
+                       user=user, entity_id=deliverable_id, entity_name=row["title"], project_id=row["project_id"],
+                       changes=[{"field": "Deliverable", "old": row["title"], "new": None}])
             return json_response({"success": True})
 
     # --------------------------------------------------------------------- risks
@@ -446,6 +470,11 @@ def register(app, *, get_db, json_response, request, get_current_user,
             """, (project_id, task_id, code, desc, impact, clean_text(data.get("mitigation")),
                   clean_text(data.get("owner")), status, get_now_iso()))
             record_activity(conn, project_id, user.get("username", "User"), "Risk Added", f'Added risk {code} for activity #{task_id}')
+            _audit(conn, "CREATE", "risk", f'Added risk {code} for task #{task_id}',
+                   user=user, entity_id=cur.lastrowid, entity_name=code, project_id=project_id, task_id=task_id,
+                   changes=[{"field": "Risk Code", "old": None, "new": code},
+                            {"field": "Description", "old": None, "new": desc},
+                            {"field": "Impact", "old": None, "new": impact}])
             return json_response(dict(conn.execute(
                 "SELECT * FROM project_risks WHERE id = ?", (cur.lastrowid,)).fetchone()), status=201)
 
@@ -492,6 +521,11 @@ def register(app, *, get_db, json_response, request, get_current_user,
             """, (project_id, code, desc, impact, clean_text(data.get("mitigation")),
                   clean_text(data.get("owner")), status, get_now_iso()))
             record_activity(conn, project_id, "User", "Risk Added", f'Added risk {code}')
+            _audit(conn, "CREATE", "risk", f'Added project risk {code}',
+                   user=user, entity_id=cur.lastrowid, entity_name=code, project_id=project_id,
+                   changes=[{"field": "Risk Code", "old": None, "new": code},
+                            {"field": "Description", "old": None, "new": desc},
+                            {"field": "Impact", "old": None, "new": impact}])
             return json_response(dict(conn.execute(
                 "SELECT * FROM project_risks WHERE id = ?", (cur.lastrowid,)).fetchone()), status=201)
 
@@ -514,14 +548,28 @@ def register(app, *, get_db, json_response, request, get_current_user,
             impact = impact if impact in IMPACTS else row["impact"]
             status = data.get("status", row["status"])
             status = status if status in RISK_STATUSES else row["status"]
+            new_code = clean_text(data["risk_code"]) if "risk_code" in data else row["risk_code"]
+            new_mit = clean_text(data["mitigation"]) if "mitigation" in data else row["mitigation"]
+            new_owner = clean_text(data["owner"]) if "owner" in data else row["owner"]
             conn.execute("""
                 UPDATE project_risks SET risk_code = ?, description = ?, impact = ?, mitigation = ?, owner = ?, status = ?
                 WHERE id = ?
-            """, (clean_text(data["risk_code"]) if "risk_code" in data else row["risk_code"],
-                  desc, impact,
-                  clean_text(data["mitigation"]) if "mitigation" in data else row["mitigation"],
-                  clean_text(data["owner"]) if "owner" in data else row["owner"],
-                  status, risk_id))
+            """, (new_code, desc, impact, new_mit, new_owner, status, risk_id))
+            r_changes = []
+            for lbl, ov, nv in [
+                ("Risk Code", row["risk_code"], new_code),
+                ("Description", row["description"], desc),
+                ("Impact", row["impact"], impact),
+                ("Mitigation", row["mitigation"], new_mit),
+                ("Owner", row["owner"], new_owner),
+                ("Status", row["status"], status),
+            ]:
+                if (ov or "") != (nv or ""):
+                    r_changes.append({"field": lbl, "old": ov, "new": nv})
+            if r_changes:
+                _audit(conn, "UPDATE", "risk", f'Updated risk {new_code}',
+                       user=user, entity_id=risk_id, entity_name=new_code,
+                       project_id=row["project_id"], task_id=row["task_id"], changes=r_changes)
             return json_response(dict(conn.execute(
                 "SELECT * FROM project_risks WHERE id = ?", (risk_id,)).fetchone()))
 
@@ -532,7 +580,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
             return denied
         user = get_current_user()
         with get_db() as conn:
-            row = conn.execute("SELECT project_id FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
+            row = conn.execute("SELECT project_id, task_id, risk_code, description FROM project_risks WHERE id = ?", (risk_id,)).fetchone()
             if row and user_can_access_project and not user_can_access_project(user, row["project_id"], conn):
                 return json_response({"error": "Forbidden: Access denied to this project. You are not the assigned Project Owner."}, status=403)
             # Delete attachments belonging to this risk and their files on disk
@@ -547,6 +595,11 @@ def register(app, *, get_db, json_response, request, get_current_user,
             except Exception as e:
                 print(f"[Attachment] Error cleaning risk attachments: {e}")
             conn.execute("DELETE FROM project_risks WHERE id = ?", (risk_id,))
+            if row:
+                _audit(conn, "DELETE", "risk", f'Deleted risk {row["risk_code"]}',
+                       user=user, entity_id=risk_id, entity_name=row["risk_code"],
+                       project_id=row["project_id"], task_id=row["task_id"],
+                       changes=[{"field": "Risk", "old": f'{row["risk_code"]}: {row["description"]}', "new": None}])
             return json_response({"success": True})
 
     # ----------------------------------------------------------------- dashboard

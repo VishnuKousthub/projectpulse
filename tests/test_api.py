@@ -233,13 +233,12 @@ class TestProjectPulseAPI(unittest.TestCase):
             "status": "todo",
             "priority": "low",
             "start_date": "2026-08-10",
-            "due_date": "2026-08-15",
             "estimated_hours": 4.0
         })
         self.assertEqual(status, 200)
         t_id = task["id"]
 
-        # 1. Update Start and End / Due Dates
+        # 1. Set Start Date and initial End / Due Date (allowed when due_date was not yet set)
         status, updated = self.request(f"/api/tasks/{t_id}", method="PUT", body={
             "start_date": "2026-08-12",
             "due_date": "2026-08-20"
@@ -247,6 +246,12 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(updated["start_date"], "2026-08-12")
         self.assertEqual(updated["due_date"], "2026-08-20")
+
+        # 1b. Attempting to change or clear due_date once set must be rejected (403)
+        st_lock1, _ = self.request(f"/api/tasks/{t_id}", method="PUT", body={"due_date": "2026-08-25"})
+        self.assertEqual(st_lock1, 403)
+        st_lock2, _ = self.request(f"/api/tasks/{t_id}", method="PUT", body={"due_date": None})
+        self.assertEqual(st_lock2, 403)
 
         # 2. Inline update title, priority, status, hours
         status, updated = self.request(f"/api/tasks/{t_id}", method="PUT", body={
@@ -263,14 +268,13 @@ class TestProjectPulseAPI(unittest.TestCase):
         self.assertEqual(updated["estimated_hours"], 12.5)
         self.assertEqual(updated["actual_hours"], 8.0)
 
-        # 3. Test clearing dates (setting to empty string or None)
+        # 3. Test clearing start_date (allowed; due_date remains locked at 2026-08-20)
         status, cleared = self.request(f"/api/tasks/{t_id}", method="PUT", body={
-            "start_date": "",
-            "due_date": None
+            "start_date": ""
         })
         self.assertEqual(status, 200)
         self.assertIsNone(cleared["start_date"])
-        self.assertIsNone(cleared["due_date"])
+        self.assertEqual(cleared["due_date"], "2026-08-20")
 
         # Clean up
         self.request(f"/api/tasks/{t_id}", method="DELETE")

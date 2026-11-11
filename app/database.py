@@ -514,6 +514,26 @@ def init_db():
         """)
 
         cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT NOT NULL DEFAULT 'System',
+            full_name TEXT,
+            user_role TEXT,
+            action_type TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER,
+            entity_name TEXT,
+            project_id INTEGER,
+            project_name TEXT,
+            task_id INTEGER,
+            summary TEXT NOT NULL,
+            changes_json TEXT DEFAULT '[]',
+            timestamp TEXT NOT NULL
+        )
+        """)
+
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL,
@@ -702,6 +722,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timelogs_task ON timelogs(task_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timelogs_task_hours ON timelogs(task_id, hours)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_project ON activity_logs(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_username ON audit_logs(username)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, action_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_project ON audit_logs(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_project ON email_logs(project_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_task ON email_logs(task_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_sent ON email_logs(sent_at)")

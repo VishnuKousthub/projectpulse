@@ -70,12 +70,89 @@ def clean_text(val):
         return ""
     return " ".join(str(val).strip().split())
 
+def _fmt_audit_val(val):
+    if val is None or val == "":
+        return "—"
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    if isinstance(val, (list, tuple)):
+        return ", ".join(str(x) for x in val) if val else "—"
+    s = str(val).strip()
+    return s if s else "—"
+
 def record_activity(conn, project_id, user_name, action, details, task_id=None):
+    if user_name in ("User", "System", "Admin", "Manager", "Lead", None, ""):
+        u = get_current_user()
+        if u:
+            user_name = u.get("full_name") or u.get("username") or user_name
     now_str = get_now_iso()
     conn.execute("""
         INSERT INTO activity_logs (project_id, task_id, user_name, action, details, timestamp)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (project_id, task_id, user_name, action, details, now_str))
+    """, (project_id, task_id, user_name or "User", action, details, now_str))
+
+def record_audit_log(
+    conn,
+    action_type,
+    entity_type,
+    summary,
+    *,
+    user=None,
+    entity_id=None,
+    entity_name=None,
+    project_id=None,
+    project_name=None,
+    task_id=None,
+    changes=None,
+):
+    """
+    Record an immutable audit entry in `audit_logs` capturing actor, action,
+    entity metadata, and structured field-level old -> new diffs.
+    """
+    try:
+        if user is None:
+            user = get_current_user()
+        user_id = user.get("user_id") if user else None
+        username = (user.get("username") if user else None) or "System"
+        full_name = (user.get("full_name") if user else None) or username
+        user_role = (user.get("role") if user else None) or "system"
+
+        if project_id and not project_name:
+            try:
+                p_row = conn.execute("SELECT name FROM projects WHERE id = ?", (project_id,)).fetchone()
+                if p_row:
+                    project_name = p_row["name"]
+            except Exception:
+                pass
+
+        clean_changes = []
+        if changes:
+            for ch in changes:
+                if isinstance(ch, dict):
+                    clean_changes.append({
+                        "field": str(ch.get("field") or ""),
+                        "old": _fmt_audit_val(ch.get("old")),
+                        "new": _fmt_audit_val(ch.get("new")),
+                    })
+
+        now_str = get_now_iso()
+        conn.execute("""
+            INSERT INTO audit_logs (
+                user_id, username, full_name, user_role,
+                action_type, entity_type, entity_id, entity_name,
+                project_id, project_name, task_id,
+                summary, changes_json, timestamp
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id, username, full_name, user_role,
+            str(action_type or "UPDATE").upper(), str(entity_type or "system").lower(),
+            entity_id, entity_name,
+            project_id, project_name, task_id,
+            summary, json.dumps(clean_changes), now_str
+        ))
+    except Exception as e:
+        print(f"[AuditLog] Warning: failed to record audit log: {e}")
 
 @app.hook("after_request")
 def enable_cors():
@@ -679,6 +756,21 @@ def create_project():
         """, (p_id, "Project Lead", "lead@company.internal", "Owner", color))
 
         record_activity(conn, p_id, "System", "Project Created", f'Created project "{name}"')
+        record_audit_log(
+            conn,
+            "CREATE",
+            "project",
+            f'Created project "{name}"',
+            user=user,
+            entity_id=p_id,
+            entity_name=name,
+            project_id=p_id,
+            project_name=name,
+            changes=[
+                {"field": "Project Name", "old": None, "new": name},
+                {"field": "Project Owner", "old": None, "new": po_val},
+            ],
+        )
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (p_id,)).fetchone()
         members = conn.execute("SELECT * FROM members WHERE project_id = ?", (p_id,)).fetchall()
         
@@ -837,8 +929,33 @@ def update_project(project_id):
             ds_val = clean_text(data["description"]) or None
             conn.execute("UPDATE projects SET project_scope = ?, description = ? WHERE id = ?", (ds_val, ds_val, project_id))
 
-        record_activity(conn, project_id, "User", "Project Updated", "Updated project settings")
         updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        old_p = dict(project)
+        new_p = dict(updated)
+        proj_track_fields = ("name", "color") + tuple(charter_module.CHARTER_FIELDS)
+        proj_changes = []
+        for pf in proj_track_fields:
+            ov = old_p.get(pf)
+            nv = new_p.get(pf)
+            if (ov or "") != (nv or ""):
+                label = pf.replace("_", " ").title()
+                proj_changes.append({"field": label, "old": ov, "new": nv})
+        if proj_changes:
+            record_activity(conn, project_id, "User", "Project Updated", f"Updated {', '.join(c['field'] for c in proj_changes)}")
+            record_audit_log(
+                conn,
+                "UPDATE",
+                "project",
+                f'Updated project/charter "{new_p.get("name")}" ({len(proj_changes)} field{"s" if len(proj_changes) != 1 else ""})',
+                user=user,
+                entity_id=project_id,
+                entity_name=new_p.get("name"),
+                project_id=project_id,
+                project_name=new_p.get("name"),
+                changes=proj_changes,
+            )
+        else:
+            record_activity(conn, project_id, "User", "Project Updated", "Updated project settings")
         return json_response(updated)
 
 @app.delete("/api/projects/<project_id:int>")
@@ -851,9 +968,10 @@ def delete_project(project_id):
         err = verify_project_access(project_id, user, conn)
         if err:
             return err
-        project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        project = conn.execute("SELECT id, name FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not project:
             return json_response({"error": "Project not found"}, status=404)
+        proj_name = project["name"]
         # Cleanup project attachments and files on disk
         folder = get_attachments_dir()
         att_rows = conn.execute("SELECT stored_name FROM attachments WHERE project_id = ?", (project_id,)).fetchall()
@@ -867,6 +985,18 @@ def delete_project(project_id):
         conn.execute("DELETE FROM attachments WHERE project_id = ?", (project_id,))
 
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        record_audit_log(
+            conn,
+            "DELETE",
+            "project",
+            f'Deleted project "{proj_name}" (#{project_id})',
+            user=user,
+            entity_id=project_id,
+            entity_name=proj_name,
+            project_id=project_id,
+            project_name=proj_name,
+            changes=[{"field": "Project Name", "old": proj_name, "new": None}],
+        )
         return json_response({
             "success": True,
             "message": "Project deleted",
@@ -1748,6 +1878,33 @@ def create_task(project_id):
                     pass
 
         record_activity(conn, project_id, "User", "Task Created", f'Created task "{title}"', task_id=t_id)
+        create_changes = [
+            {"field": "Title", "old": None, "new": title},
+            {"field": "Status", "old": None, "new": status},
+            {"field": "Priority", "old": None, "new": priority},
+        ]
+        if start_date:
+            create_changes.append({"field": "Start Date", "old": None, "new": start_date})
+        if due_date:
+            create_changes.append({"field": "Due Date", "old": None, "new": due_date})
+        if est_hours:
+            create_changes.append({"field": "Est. Hours", "old": None, "new": est_hours})
+        if assignee_id:
+            m_row = conn.execute("SELECT name FROM members WHERE id = ?", (assignee_id,)).fetchone()
+            if m_row:
+                create_changes.append({"field": "Assignee", "old": None, "new": m_row["name"]})
+        record_audit_log(
+            conn,
+            "CREATE",
+            "task",
+            f'Created task "{title}"',
+            user=user,
+            entity_id=t_id,
+            entity_name=title,
+            project_id=project_id,
+            task_id=t_id,
+            changes=create_changes,
+        )
 
         if assignee_id:
             try:
@@ -1858,6 +2015,17 @@ def update_task(task_id):
         denied = verify_project_access(project_id, user, conn)
         if denied:
             return denied
+
+        # Enforce due_date immutability: once set, it cannot be changed or cleared
+        existing_due_raw = str(task["due_date"] or "").strip()
+        existing_due = existing_due_raw[:10] if existing_due_raw not in ("", "null", "undefined", "None") else None
+        if existing_due and ("due_date" in data or "end_date" in data):
+            incoming_raw = data.get("due_date") if "due_date" in data else data.get("end_date")
+            incoming_str = str(incoming_raw).strip() if incoming_raw is not None else ""
+            incoming_due = incoming_str[:10] if incoming_str not in ("", "null", "undefined", "None") else None
+            if incoming_due != existing_due:
+                return json_response({"error": "Due date is locked once set and cannot be modified again."}, status=403)
+
         cursor = conn.cursor()
         now_str = get_now_iso()
 
@@ -2118,6 +2286,7 @@ def update_task(task_id):
         ))
 
         # 7. Subtasks if provided
+        added_subtasks = []
         if isinstance(data.get("subtasks"), list):
             sub_row = conn.execute("SELECT COUNT(*) as cnt FROM subtasks WHERE task_id = ?", (task_id,)).fetchone()
             sub_count = sub_row["cnt"] if sub_row else 0
@@ -2127,10 +2296,22 @@ def update_task(task_id):
                         INSERT INTO subtasks (task_id, title, completed, order_index)
                         VALUES (?, ?, 0, ?)
                     """, (task_id, sub_title.strip(), sub_count + idx))
+                    added_subtasks.append(sub_title.strip())
 
         # 8. Mapped Resources if provided
+        old_res_names = []
+        new_res_names = []
+        res_changed = False
         if "resource_ids" in data and isinstance(data["resource_ids"], list):
+            old_res_rows = conn.execute("""
+                SELECT r.id, r.name FROM task_resources tr
+                JOIN resources r ON tr.resource_id = r.id
+                WHERE tr.task_id = ? ORDER BY r.name ASC
+            """, (task_id,)).fetchall()
+            old_res_ids = sorted([r["id"] for r in old_res_rows])
+            old_res_names = [r["name"] for r in old_res_rows]
             conn.execute("DELETE FROM task_resources WHERE task_id = ?", (task_id,))
+            new_res_ids = []
             for r_id in data["resource_ids"]:
                 try:
                     r_int = int(r_id)
@@ -2138,24 +2319,104 @@ def update_task(task_id):
                         INSERT OR IGNORE INTO task_resources (task_id, resource_id, project_id, created_at)
                         VALUES (?, ?, ?, ?)
                     """, (task_id, r_int, project_id, now_str))
+                    new_res_ids.append(r_int)
                 except Exception:
                     pass
+            if sorted(new_res_ids) != old_res_ids:
+                res_changed = True
+                if new_res_ids:
+                    ph = ",".join("?" * len(new_res_ids))
+                    new_res_rows = conn.execute(f"SELECT name FROM resources WHERE id IN ({ph}) ORDER BY name ASC", new_res_ids).fetchall()
+                    new_res_names = [r["name"] for r in new_res_rows]
 
+        # Build comprehensive field-level diffs
+        audit_changes = []
         changes = []
+
+        if title != (task["title"] or ""):
+            audit_changes.append({"field": "Title", "old": task["title"], "new": title})
+            changes.append(f'title: "{task["title"]}" -> "{title}"')
+        if (desc or "") != (task["description"] or ""):
+            audit_changes.append({"field": "Description", "old": task["description"] or "", "new": desc or ""})
+            changes.append("description updated")
         if status != task["status"]:
+            audit_changes.append({"field": "Status", "old": task["status"], "new": status})
             changes.append(f'status: {task["status"]} -> {status}')
         if priority != task["priority"]:
+            audit_changes.append({"field": "Priority", "old": task["priority"], "new": priority})
             changes.append(f'priority: {task["priority"]} -> {priority}')
         if start_date != task["start_date"]:
+            audit_changes.append({"field": "Start Date", "old": task["start_date"], "new": start_date})
             changes.append(f'start_date: {task["start_date"]} -> {start_date}')
         if due_date != task["due_date"]:
+            audit_changes.append({"field": "Due Date", "old": task["due_date"], "new": due_date})
             changes.append(f'due_date: {task["due_date"]} -> {due_date}')
+
+        old_prog = task["progress_pct"] if "progress_pct" in task.keys() and task["progress_pct"] is not None else 0
+        if progress_pct != old_prog:
+            audit_changes.append({"field": "Progress %", "old": f"{old_prog}%", "new": f"{progress_pct}%"})
+            changes.append(f'progress: {old_prog}% -> {progress_pct}%')
+
+        old_est = safe_float(task["estimated_hours"], 0.0)
+        if est_hours != old_est:
+            audit_changes.append({"field": "Est. Hours", "old": old_est, "new": est_hours})
+            changes.append(f'est_hours: {old_est} -> {est_hours}')
+
+        old_act = safe_float(task["actual_hours"], 0.0)
+        if act_hours != old_act:
+            audit_changes.append({"field": "Act. Hours", "old": old_act, "new": act_hours})
+            changes.append(f'actual_hours: {old_act} -> {act_hours}')
+
         if assignee_id != task["assignee_id"]:
-            changes.append(f'assignee_id: {task["assignee_id"]} -> {assignee_id}')
-        
+            old_m = conn.execute("SELECT name FROM members WHERE id = ?", (task["assignee_id"],)).fetchone() if task["assignee_id"] else None
+            new_m = conn.execute("SELECT name FROM members WHERE id = ?", (assignee_id,)).fetchone() if assignee_id else None
+            old_aname = old_m["name"] if old_m else "Unassigned"
+            new_aname = new_m["name"] if new_m else "Unassigned"
+            audit_changes.append({"field": "Assignee", "old": old_aname, "new": new_aname})
+            changes.append(f'assignee: {old_aname} -> {new_aname}')
+
+        if sprint_id != task["sprint_id"]:
+            old_sp = conn.execute("SELECT name FROM sprints WHERE id = ?", (task["sprint_id"],)).fetchone() if task["sprint_id"] else None
+            new_sp = conn.execute("SELECT name FROM sprints WHERE id = ?", (sprint_id,)).fetchone() if sprint_id else None
+            audit_changes.append({"field": "Sprint", "old": old_sp["name"] if old_sp else "None", "new": new_sp["name"] if new_sp else "None"})
+            changes.append("sprint updated")
+
+        try:
+            old_tags = json.loads(task["tags"]) if task["tags"] else []
+        except Exception:
+            old_tags = []
+        try:
+            new_tags = json.loads(tags_json) if tags_json else []
+        except Exception:
+            new_tags = []
+        if old_tags != new_tags:
+            audit_changes.append({"field": "Tags", "old": ", ".join(old_tags) or "None", "new": ", ".join(new_tags) or "None"})
+            changes.append("tags updated")
+
+        if added_subtasks:
+            audit_changes.append({"field": "Subtasks Added", "old": "—", "new": ", ".join(added_subtasks)})
+            changes.append(f"added {len(added_subtasks)} subtask(s)")
+
+        if res_changed:
+            audit_changes.append({"field": "Resources", "old": ", ".join(old_res_names) or "None", "new": ", ".join(new_res_names) or "None"})
+            changes.append("resources updated")
+
         details = ", ".join(changes) if changes else "Updated task fields"
         actor_name = user.get("full_name") or user.get("username") or user.get("role", "User") if user else "User"
         record_activity(conn, project_id, actor_name, "Task Updated", f'Task "{title}": {details}', task_id=task_id)
+        if audit_changes:
+            record_audit_log(
+                conn,
+                "UPDATE",
+                "task",
+                f'Updated task "{title}" ({len(audit_changes)} field{"s" if len(audit_changes) != 1 else ""})',
+                user=user,
+                entity_id=task_id,
+                entity_name=title,
+                project_id=project_id,
+                task_id=task_id,
+                changes=audit_changes,
+            )
 
         # Trigger Action 4 (Task Assignment) if assignee changed
         if assignee_id and assignee_id != task["assignee_id"]:
@@ -2316,6 +2577,22 @@ def delete_task(task_id):
         if denied:
             return denied
         record_activity(conn, project_id, "User", "Task Deleted", f'Deleted task "{task["title"]}"')
+        record_audit_log(
+            conn,
+            "DELETE",
+            "task",
+            f'Deleted task "{task["title"]}" (#{task_id})',
+            user=user,
+            entity_id=task_id,
+            entity_name=task["title"],
+            project_id=project_id,
+            task_id=task_id,
+            changes=[
+                {"field": "Title", "old": task["title"], "new": None},
+                {"field": "Status", "old": task["status"], "new": None},
+                {"field": "Due Date", "old": task["due_date"], "new": None},
+            ],
+        )
         try:
             folder = get_attachments_dir()
             att_rows = conn.execute("SELECT stored_name FROM attachments WHERE task_id = ?", (task_id,)).fetchall()
@@ -2358,6 +2635,20 @@ def add_subtask(task_id):
         """, (task_id, title, completed, max_idx + 1))
         s_id = cursor.lastrowid
         subtask = conn.execute("SELECT * FROM subtasks WHERE id = ?", (s_id,)).fetchone()
+        t_row = conn.execute("SELECT title FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        t_title = t_row["title"] if t_row else f"Task #{task_id}"
+        record_audit_log(
+            conn,
+            "CREATE",
+            "subtask",
+            f'Added subtask "{title}" to task "{t_title}"',
+            user=user,
+            entity_id=s_id,
+            entity_name=title,
+            project_id=task["project_id"],
+            task_id=task_id,
+            changes=[{"field": "Subtask Title", "old": None, "new": title}],
+        )
         return json_response(subtask, status=201)
 
 @app.put("/api/subtasks/<subtask_id:int>")
@@ -2366,7 +2657,7 @@ def update_subtask(subtask_id):
     data = request.json or {}
     with get_db() as conn:
         sub = conn.execute("""
-            SELECT s.*, t.project_id FROM subtasks s
+            SELECT s.*, t.project_id, t.title as task_title FROM subtasks s
             JOIN tasks t ON s.task_id = t.id
             WHERE s.id = ?
         """, (subtask_id,)).fetchone()
@@ -2381,6 +2672,24 @@ def update_subtask(subtask_id):
 
         conn.execute("UPDATE subtasks SET title = ?, completed = ? WHERE id = ?", (title, completed, subtask_id))
         updated = conn.execute("SELECT * FROM subtasks WHERE id = ?", (subtask_id,)).fetchone()
+        sub_changes = []
+        if title != sub["title"]:
+            sub_changes.append({"field": "Subtask Title", "old": sub["title"], "new": title})
+        if completed != sub["completed"]:
+            sub_changes.append({"field": "Completed", "old": bool(sub["completed"]), "new": bool(completed)})
+        if sub_changes:
+            record_audit_log(
+                conn,
+                "UPDATE",
+                "subtask",
+                f'Updated subtask "{title}" on task "{sub["task_title"]}"',
+                user=user,
+                entity_id=subtask_id,
+                entity_name=title,
+                project_id=sub["project_id"],
+                task_id=sub["task_id"],
+                changes=sub_changes,
+            )
         return json_response(updated)
 
 @app.delete("/api/subtasks/<subtask_id:int>")
@@ -2388,7 +2697,7 @@ def delete_subtask(subtask_id):
     user = get_current_user()
     with get_db() as conn:
         sub = conn.execute("""
-            SELECT s.*, t.project_id FROM subtasks s
+            SELECT s.*, t.project_id, t.title as task_title FROM subtasks s
             JOIN tasks t ON s.task_id = t.id
             WHERE s.id = ?
         """, (subtask_id,)).fetchone()
@@ -2398,6 +2707,18 @@ def delete_subtask(subtask_id):
         if denied:
             return denied
         conn.execute("DELETE FROM subtasks WHERE id = ?", (subtask_id,))
+        record_audit_log(
+            conn,
+            "DELETE",
+            "subtask",
+            f'Deleted subtask "{sub["title"]}" from task "{sub["task_title"]}"',
+            user=user,
+            entity_id=subtask_id,
+            entity_name=sub["title"],
+            project_id=sub["project_id"],
+            task_id=sub["task_id"],
+            changes=[{"field": "Subtask Title", "old": sub["title"], "new": None}],
+        )
         return json_response({"success": True})
 
 # ==================== TIME LOGS ====================
@@ -2442,6 +2763,21 @@ def add_timelog(task_id):
         conn.execute("UPDATE tasks SET actual_hours = ?, updated_at = ? WHERE id = ?", (total_hours, now_str, task_id))
 
         record_activity(conn, task["project_id"], "User", "Time Logged", f'Logged {hours}h on "{task["title"]}"', task_id=task_id)
+        record_audit_log(
+            conn,
+            "CREATE",
+            "timelog",
+            f'Logged {hours}h on task "{task["title"]}"',
+            user=user,
+            entity_id=log_id,
+            entity_name=task["title"],
+            project_id=task["project_id"],
+            task_id=task_id,
+            changes=[
+                {"field": "Logged Hours", "old": None, "new": hours},
+                {"field": "Total Actual Hours", "old": None, "new": total_hours},
+            ],
+        )
 
         log_row = conn.execute("""
             SELECT tl.*, m.name as member_name, m.avatar_color as member_avatar
@@ -2456,7 +2792,7 @@ def delete_timelog(log_id):
     user = get_current_user()
     with get_db() as conn:
         log = conn.execute("""
-            SELECT tl.*, t.project_id FROM timelogs tl
+            SELECT tl.*, t.project_id, t.title as task_title FROM timelogs tl
             JOIN tasks t ON tl.task_id = t.id
             WHERE tl.id = ?
         """, (log_id,)).fetchone()
@@ -2471,6 +2807,18 @@ def delete_timelog(log_id):
         
         total_hours = conn.execute("SELECT COALESCE(SUM(hours), 0) as s FROM timelogs WHERE task_id = ?", (task_id,)).fetchone()["s"]
         conn.execute("UPDATE tasks SET actual_hours = ?, updated_at = ? WHERE id = ?", (total_hours, get_now_iso(), task_id))
+        record_audit_log(
+            conn,
+            "DELETE",
+            "timelog",
+            f'Deleted time log ({log["hours"]}h) from task "{log["task_title"]}"',
+            user=user,
+            entity_id=log_id,
+            entity_name=log["task_title"],
+            project_id=log["project_id"],
+            task_id=task_id,
+            changes=[{"field": "Logged Hours", "old": log["hours"], "new": None}],
+        )
         return json_response({"success": True})
 
 @app.get("/api/projects/<project_id:int>/timelogs")
@@ -3568,6 +3916,7 @@ charter_module.register(
     sanitize_projects_for_user=sanitize_projects_for_user,
     user_can_access_project=user_can_access_project,
     check_project_owner_match=check_project_owner_match,
+    record_audit_log=record_audit_log,
 )
 
 # ==================== USER MANAGEMENT (ADMIN ONLY) ====================
@@ -3576,7 +3925,173 @@ users_module.register(
     app,
     get_db=get_db, json_response=json_response, request=request,
     get_current_user=get_current_user, clean_text=clean_text, get_now_iso=get_now_iso,
+    record_audit_log=record_audit_log,
 )
+
+# ==================== AUDIT LOG TRACKER (ADMIN ONLY) ====================
+
+def _require_admin_audit():
+    user = get_current_user()
+    if not user:
+        return None, json_response({"error": "Authentication required"}, status=401)
+    if get_user_role(user) != "admin":
+        return None, json_response({"error": "Forbidden: Administrator access required for Audit Log."}, status=403)
+    return user, None
+
+def _build_audit_where():
+    clauses = []
+    params = []
+
+    search = (request.query.get("search") or "").strip()
+    if search:
+        like = f"%{search}%"
+        clauses.append("(LOWER(summary) LIKE LOWER(?) OR LOWER(username) LIKE LOWER(?) OR LOWER(COALESCE(full_name,'')) LIKE LOWER(?) OR LOWER(COALESCE(entity_name,'')) LIKE LOWER(?) OR LOWER(COALESCE(project_name,'')) LIKE LOWER(?) OR LOWER(COALESCE(changes_json,'')) LIKE LOWER(?))")
+        params.extend([like, like, like, like, like, like])
+
+    uname = (request.query.get("username") or "").strip().lower()
+    if uname:
+        clauses.append("LOWER(username) = ?")
+        params.append(uname)
+
+    action_type = (request.query.get("action_type") or "").strip().upper()
+    if action_type:
+        clauses.append("UPPER(action_type) = ?")
+        params.append(action_type)
+
+    entity_type = (request.query.get("entity_type") or "").strip().lower()
+    if entity_type:
+        clauses.append("LOWER(entity_type) = ?")
+        params.append(entity_type)
+
+    proj_id = safe_int(request.query.get("project_id"))
+    if proj_id and proj_id > 0:
+        clauses.append("project_id = ?")
+        params.append(proj_id)
+
+    date_from = (request.query.get("date_from") or "").strip()[:10]
+    if date_from:
+        clauses.append("SUBSTR(timestamp, 1, 10) >= ?")
+        params.append(date_from)
+
+    date_to = (request.query.get("date_to") or "").strip()[:10]
+    if date_to:
+        clauses.append("SUBSTR(timestamp, 1, 10) <= ?")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where_sql, params
+
+@app.get("/api/admin/audit-logs")
+def get_admin_audit_logs():
+    _, err = _require_admin_audit()
+    if err:
+        return err
+
+    limit = max(1, min(500, safe_int(request.query.get("limit"), 100)))
+    offset = max(0, safe_int(request.query.get("offset"), 0))
+    where_sql, params = _build_audit_where()
+
+    with get_db() as conn:
+        total = conn.execute(f"SELECT COUNT(*) as c FROM audit_logs {where_sql}", params).fetchone()["c"]
+        rows = conn.execute(
+            f"SELECT * FROM audit_logs {where_sql} ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?",
+            params + [limit, offset]
+        ).fetchall()
+
+        logs = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["changes"] = json.loads(d.get("changes_json") or "[]")
+            except Exception:
+                d["changes"] = []
+            logs.append(d)
+
+        today_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        kpi_row = conn.execute("""
+            SELECT
+                COUNT(*) AS total_events,
+                SUM(CASE WHEN UPPER(action_type) IN ('CREATE', 'UPLOAD', 'IMPORT') THEN 1 ELSE 0 END) AS creates,
+                SUM(CASE WHEN UPPER(action_type) = 'UPDATE' THEN 1 ELSE 0 END) AS updates,
+                SUM(CASE WHEN UPPER(action_type) = 'DELETE' THEN 1 ELSE 0 END) AS deletes,
+                COUNT(DISTINCT LOWER(username)) AS active_users,
+                SUM(CASE WHEN SUBSTR(timestamp, 1, 10) = ? THEN 1 ELSE 0 END) AS today_events
+            FROM audit_logs
+        """, (today_prefix,)).fetchone()
+
+        users_filter = conn.execute("""
+            SELECT LOWER(username) as username,
+                   MAX(COALESCE(full_name, username)) as full_name,
+                   MAX(COALESCE(user_role, '')) as role
+            FROM audit_logs
+            GROUP BY LOWER(username)
+            ORDER BY full_name ASC
+        """).fetchall()
+
+        projects_filter = conn.execute("""
+            SELECT DISTINCT project_id as id, project_name as name
+            FROM audit_logs
+            WHERE project_id IS NOT NULL AND project_name IS NOT NULL AND project_name != ''
+            ORDER BY project_name ASC
+        """).fetchall()
+
+        entity_types = [r["entity_type"] for r in conn.execute("SELECT DISTINCT LOWER(entity_type) as entity_type FROM audit_logs ORDER BY entity_type ASC").fetchall()]
+        action_types = [r["action_type"] for r in conn.execute("SELECT DISTINCT UPPER(action_type) as action_type FROM audit_logs ORDER BY action_type ASC").fetchall()]
+
+        return json_response({
+            "logs": logs,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "kpis": {
+                "total_events": kpi_row["total_events"] or 0,
+                "creates": kpi_row["creates"] or 0,
+                "updates": kpi_row["updates"] or 0,
+                "deletes": kpi_row["deletes"] or 0,
+                "active_users": kpi_row["active_users"] or 0,
+                "today_events": kpi_row["today_events"] or 0,
+            },
+            "filters": {
+                "users": [dict(u) for u in users_filter],
+                "projects": [dict(p) for p in projects_filter],
+                "entity_types": entity_types,
+                "action_types": action_types,
+            }
+        })
+
+@app.get("/api/admin/audit-logs/export")
+def export_admin_audit_logs():
+    _, err = _require_admin_audit()
+    if err:
+        return err
+
+    where_sql, params = _build_audit_where()
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM audit_logs {where_sql} ORDER BY timestamp DESC, id DESC LIMIT 2000",
+            params
+        ).fetchall()
+
+    import io
+    import csv
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Timestamp", "Username", "Full Name", "Role", "Action", "Entity Type", "Entity Name", "Project", "Summary", "Field Changes"])
+    for r in rows:
+        try:
+            changes = json.loads(r["changes_json"] or "[]")
+            changes_str = "; ".join(f'{c.get("field")}: {c.get("old")} -> {c.get("new")}' for c in changes)
+        except Exception:
+            changes_str = ""
+        writer.writerow([
+            r["timestamp"], r["username"], r["full_name"] or "", r["user_role"] or "",
+            r["action_type"], r["entity_type"], r["entity_name"] or "",
+            r["project_name"] or "", r["summary"], changes_str
+        ])
+
+    response.content_type = "text/csv; charset=utf-8"
+    response.set_header("Content-Disposition", 'attachment; filename="projectpulse_audit_logs.csv"')
+    return buf.getvalue()
 
 # ==================== EXPORT & IMPORT ====================
 
@@ -4789,6 +5304,18 @@ def upload_task_attachment(task_id):
 
         target_desc = f'risk "{risk["description"][:30]}"' if risk else f'task "{task["title"]}"'
         record_activity(conn, task["project_id"], user_name, "Document Uploaded", f'Uploaded attachment "{orig_filename}" to {target_desc}', task_id=task_id)
+        record_audit_log(
+            conn,
+            "UPLOAD",
+            "attachment",
+            f'Uploaded attachment "{orig_filename}" to {target_desc}',
+            user=user,
+            entity_id=att_id,
+            entity_name=orig_filename,
+            project_id=task["project_id"],
+            task_id=task_id,
+            changes=[{"field": "Attachment", "old": None, "new": orig_filename}],
+        )
 
         return json_response(dict(new_att), status=201)
 
@@ -4865,6 +5392,18 @@ def delete_attachment(attachment_id):
         if task:
             user_name = (user.get("full_name") or user.get("username") or "User") if user else "User"
             record_activity(conn, task["project_id"], user_name, "Document Deleted", f'Deleted attachment "{att["original_name"]}"', task_id=att["task_id"])
+            record_audit_log(
+                conn,
+                "DELETE",
+                "attachment",
+                f'Deleted attachment "{att["original_name"]}" from task "{task["title"]}"',
+                user=user,
+                entity_id=attachment_id,
+                entity_name=att["original_name"],
+                project_id=task["project_id"],
+                task_id=att["task_id"],
+                changes=[{"field": "Attachment", "old": att["original_name"], "new": None}],
+            )
 
         return json_response({"success": True})
 
