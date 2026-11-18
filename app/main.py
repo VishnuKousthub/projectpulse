@@ -70,6 +70,29 @@ def clean_text(val):
         return ""
     return " ".join(str(val).strip().split())
 
+def clean_assignee_name(name):
+    if not name:
+        return name
+    return re.sub(r'\s*\((member|Member)\)', '', str(name), flags=re.I).strip()
+
+def compute_task_status_flag(t_dict, today_str=None):
+    if not today_str:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+    status = str(t_dict.get("status") or "").lower()
+    if status == "done":
+        return "On Track"
+    new_due = str(t_dict.get("new_due_date") or "").strip()[:10]
+    actual_due = str(t_dict.get("due_date") or "").strip()[:10]
+    if new_due and new_due not in ("", "none", "null", "undefined", "None"):
+        if new_due < today_str:
+            return "Overdue"
+        return "On Track"
+    if actual_due and actual_due not in ("", "none", "null", "undefined", "None"):
+        if actual_due < today_str:
+            return "Overdue"
+        return "On Track"
+    return "On Track"
+
 def _fmt_audit_val(val):
     if val is None or val == "":
         return "—"
@@ -822,7 +845,12 @@ def get_project(project_id):
             return json_response({"error": "Project not found"}, status=404)
         
         deduplicate_project_members(conn, project_id)
-        members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
+        members_raw = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
+        members = []
+        for m in members_raw:
+            md = dict(m)
+            md["name"] = clean_assignee_name(md.get("name"))
+            members.append(md)
         sprints = conn.execute("SELECT * FROM sprints WHERE project_id = ? ORDER BY start_date DESC", (project_id,)).fetchall()
         milestones = conn.execute("SELECT * FROM milestones WHERE project_id = ? ORDER BY due_date ASC", (project_id,)).fetchall()
         
@@ -1290,7 +1318,12 @@ def get_members(project_id):
         return denied
     with get_db() as conn:
         deduplicate_project_members(conn, project_id)
-        members = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
+        members_raw = conn.execute("SELECT * FROM members WHERE project_id = ? ORDER BY name", (project_id,)).fetchall()
+        members = []
+        for m in members_raw:
+            md = dict(m)
+            md["name"] = clean_assignee_name(md.get("name"))
+            members.append(md)
         return json_response(members)
 
 @app.post("/api/projects/<project_id:int>/members")
@@ -1303,7 +1336,7 @@ def add_member(project_id):
         return denied
 
     data = request.json or {}
-    name = " ".join(data.get("name", "").strip().split())
+    name = clean_assignee_name(" ".join(data.get("name", "").strip().split()))
     if not name:
         return json_response({"error": "Name is required"}, status=400)
     
@@ -1699,6 +1732,10 @@ def get_tasks(project_id):
                 else:
                     t_dict["progress_pct"] = 0
 
+            t_dict["status_flag"] = compute_task_status_flag(t_dict)
+            if t_dict.get("assignee_name"):
+                t_dict["assignee_name"] = clean_assignee_name(t_dict["assignee_name"])
+
             result.append(t_dict)
 
         return json_response(result)
@@ -1738,6 +1775,17 @@ def create_task(project_id):
     
     due_date = data.get("due_date")
     due_date = str(due_date).strip() if due_date and str(due_date).strip() not in ("", "null", "undefined", "None") else None
+
+    new_due_raw = data.get("new_due_date")
+    new_due_date = str(new_due_raw).strip() if new_due_raw and str(new_due_raw).strip() not in ("", "null", "undefined", "None") else None
+    new_due_reason = clean_text(data.get("new_due_date_reason")) or None
+    if new_due_date:
+        try:
+            datetime.strptime(new_due_date[:10], "%Y-%m-%d")
+        except ValueError:
+            return json_response({"error": "Invalid New Due Date format. Must be YYYY-MM-DD."}, status=400)
+        if not new_due_reason:
+            return json_response({"error": "Reason for New Due Date is required when setting a New Due Date."}, status=400)
     
     est_hours = safe_float(data.get("estimated_hours"), 0.0)
     act_hours = safe_float(data.get("actual_hours"), 0.0)
@@ -1776,7 +1824,7 @@ def create_task(project_id):
 
         # Handle assignee resolution with high reliability
         assignee_id = None
-        assignee_name_input = clean_text(data.get("assignee_name") or data.get("new_assignee_name"))
+        assignee_name_input = clean_assignee_name(clean_text(data.get("assignee_name") or data.get("new_assignee_name")))
         raw_assignee_id = data.get("assignee_id")
         
         if assignee_name_input:
@@ -1845,13 +1893,15 @@ def create_task(project_id):
         cursor.execute("""
             INSERT INTO tasks (
                 project_id, sprint_id, title, description, status, priority,
-                order_index, start_date, due_date, estimated_hours, actual_hours,
+                order_index, start_date, due_date, new_due_date, new_due_date_reason,
+                estimated_hours, actual_hours,
                 progress_pct, assignee_id, tags, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id, sprint_id, title, desc, status, priority,
-            target_order, start_date, due_date, est_hours, act_hours,
+            target_order, start_date, due_date, new_due_date, new_due_reason,
+            est_hours, act_hours,
             progress_pct, assignee_id, tags_json, now_str, now_str
         ))
         t_id = cursor.lastrowid
@@ -1984,6 +2034,12 @@ def get_task_dict(conn, task_id: int):
         else:
             t_dict["progress_pct"] = 0
 
+    t_dict["new_due_date"] = task["new_due_date"] if "new_due_date" in task.keys() else None
+    t_dict["new_due_date_reason"] = task["new_due_date_reason"] if "new_due_date_reason" in task.keys() else None
+    t_dict["status_flag"] = compute_task_status_flag(t_dict)
+    if t_dict.get("assignee_name"):
+        t_dict["assignee_name"] = clean_assignee_name(t_dict["assignee_name"])
+
     return t_dict
 
 @app.get("/api/tasks/<task_id:int>")
@@ -2025,7 +2081,7 @@ def update_task(task_id):
                 incoming_str = str(incoming_raw).strip() if incoming_raw is not None else ""
                 incoming_due = incoming_str[:10] if incoming_str not in ("", "null", "undefined", "None") else None
                 if incoming_due != existing_due:
-                    return json_response({"error": "Due date is locked once set for Lead/Assignee. Only PM and Admin can modify it."}, status=403)
+                    return json_response({"error": "Actual Due Date is locked once set for Lead/Assignee. Only PM and Admin can modify it."}, status=403)
 
         cursor = conn.cursor()
         now_str = get_now_iso()
@@ -2043,6 +2099,7 @@ def update_task(task_id):
                     "status",
                     "assignee_id", "assignee_name", "new_assignee_name",
                     "start_date", "end_date", "due_date",
+                    "new_due_date", "new_due_date_reason",
                     "estimated_hours",
                     "actual_hours",
                     "id", "task_id",
@@ -2189,7 +2246,7 @@ def update_task(task_id):
 
         # 3. Assignee resolution (handles custom name input, dropdown id, and unassignment)
         assignee_id = task["assignee_id"]
-        assignee_name_input = clean_text(data.get("assignee_name") or data.get("new_assignee_name"))
+        assignee_name_input = clean_assignee_name(clean_text(data.get("assignee_name") or data.get("new_assignee_name")))
         
         if assignee_name_input:
             existing_m = conn.execute(
@@ -2232,6 +2289,25 @@ def update_task(task_id):
             due_date = str(dd).strip() if dd and str(dd).strip() not in ("", "null", "undefined", "None") else None
         else:
             due_date = task["due_date"]
+
+        if "new_due_date" in data:
+            nd_raw = data["new_due_date"]
+            new_due_date = str(nd_raw).strip() if nd_raw and str(nd_raw).strip() not in ("", "null", "undefined", "None") else None
+        else:
+            new_due_date = task["new_due_date"] if "new_due_date" in task.keys() else None
+
+        if "new_due_date_reason" in data:
+            new_due_date_reason = clean_text(data["new_due_date_reason"]) or None
+        else:
+            new_due_date_reason = task["new_due_date_reason"] if "new_due_date_reason" in task.keys() else None
+
+        if new_due_date:
+            try:
+                datetime.strptime(new_due_date[:10], "%Y-%m-%d")
+            except ValueError:
+                return json_response({"error": "Invalid New Due Date format. Must be YYYY-MM-DD."}, status=400)
+            if not new_due_date_reason:
+                return json_response({"error": "Reason for New Due Date is required when setting a New Due Date."}, status=400)
 
         # 5. Hours & Order Index
         if "order_index" in data:
@@ -2278,11 +2354,13 @@ def update_task(task_id):
             UPDATE tasks SET
                 title = ?, description = ?, status = ?, priority = ?, sprint_id = ?,
                 assignee_id = ?, order_index = ?, start_date = ?, due_date = ?,
+                new_due_date = ?, new_due_date_reason = ?,
                 estimated_hours = ?, actual_hours = ?, progress_pct = ?, tags = ?, updated_at = ?
             WHERE id = ?
         """, (
             title, desc, status, priority, sprint_id,
             assignee_id, order_index, start_date, due_date,
+            new_due_date, new_due_date_reason,
             est_hours, act_hours, progress_pct, tags_json, now_str, task_id
         ))
 
@@ -2350,8 +2428,16 @@ def update_task(task_id):
             audit_changes.append({"field": "Start Date", "old": task["start_date"], "new": start_date})
             changes.append(f'start_date: {task["start_date"]} -> {start_date}')
         if due_date != task["due_date"]:
-            audit_changes.append({"field": "Due Date", "old": task["due_date"], "new": due_date})
+            audit_changes.append({"field": "Actual Due Date", "old": task["due_date"], "new": due_date})
             changes.append(f'due_date: {task["due_date"]} -> {due_date}')
+        old_new_due = task["new_due_date"] if "new_due_date" in task.keys() else None
+        if new_due_date != old_new_due:
+            audit_changes.append({"field": "New Due Date", "old": old_new_due, "new": new_due_date})
+            changes.append(f'new_due_date: {old_new_due} -> {new_due_date}')
+        old_reason = task["new_due_date_reason"] if "new_due_date_reason" in task.keys() else None
+        if new_due_date_reason != old_reason:
+            audit_changes.append({"field": "Reason for New Due Date", "old": old_reason, "new": new_due_date_reason})
+            changes.append(f'new_due_date_reason: "{old_reason}" -> "{new_due_date_reason}"')
 
         old_prog = task["progress_pct"] if "progress_pct" in task.keys() and task["progress_pct"] is not None else 0
         if progress_pct != old_prog:

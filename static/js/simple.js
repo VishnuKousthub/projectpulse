@@ -855,19 +855,12 @@ Object.assign(app, {
         `}
       </div>`;
 
-    // ---------- milestones (existing tasks, grouped by Technical / Both / Non-technical tag)
-    const typeSel = (t) => `
-      <select onchange="app.setTaskType(${t.id}, this.value)" class="${UI.input} !w-auto" ${canEdit ? '' : 'disabled'}>
-        <option value="" ${!t.type ? 'selected' : ''}>Not set</option>
-        <option value="technical" ${t.type === 'technical' ? 'selected' : ''}>Technical</option>
-        <option value="both" ${t.type === 'both' ? 'selected' : ''}>Both</option>
-        <option value="nontechnical" ${t.type === 'nontechnical' ? 'selected' : ''}>Non-technical</option>
-      </select>`;
-    const msTable = (title, items, emptyText, bare) => `
-      <div class="${bare ? '' : UI.card + ' overflow-hidden'}">
-        ${bare ? '' : `<div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-700/60">
+    // ---------- milestones (existing tasks, unified table without Technical/Both/Non-technical classification)
+    const msTable = (title, items, emptyText) => `
+      <div class="${UI.card} overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-700/60">
           <h3 class="text-sm font-bold text-slate-800 dark:text-white">${title} <span class="text-slate-400 font-medium">· ${items.length}</span></h3>
-        </div>`}
+        </div>
         <div class="overflow-x-auto"><table class="w-full">
           <thead class="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700"><tr>
             <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 w-10">#</th>
@@ -875,31 +868,18 @@ Object.assign(app, {
             <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Timeline</th>
             <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Task owner</th>
             <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Status</th>
-            <th class="py-2.5 px-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Type</th>
           </tr></thead>
           <tbody>${items.length ? items.map((t, i) => `
             <tr class="border-t border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
               <td class="${UI.td} text-slate-400 font-bold">${i + 1}</td>
               <td class="${UI.td} font-bold text-slate-900 dark:text-white">${esc(t.title)}</td>
               <td class="${UI.td} whitespace-nowrap">${t.start_date || t.due_date ? `${this.fmtDate(t.start_date)} → ${this.fmtDate(t.due_date)}` : '<span class="text-slate-400 font-medium">Not declared</span>'}</td>
-              <td class="${UI.td}">${esc(t.assignee_name) || '<span class="text-slate-400">Unassigned</span>'}</td>
+              <td class="${UI.td}">${esc(this.cleanAssigneeName ? this.cleanAssigneeName(t.assignee_name) : t.assignee_name) || '<span class="text-slate-400">Unassigned</span>'}</td>
               <td class="${UI.td}">${esc(String(t.status || '').replace('_', ' '))}</td>
-              <td class="${UI.td}">${typeSel(t)}</td>
-            </tr>`).join('') : `<tr><td colspan="6" class="py-5 text-center text-xs font-semibold text-slate-400">${emptyText}</td></tr>`}
+            </tr>`).join('') : `<tr><td colspan="5" class="py-5 text-center text-xs font-semibold text-slate-400">${emptyText}</td></tr>`}
           </tbody></table></div>
       </div>`;
-    const tech2 = c.milestones.filter(t => t.type === 'technical');
-    const both = c.milestones.filter(t => t.type === 'both');
-    const nonTech = c.milestones.filter(t => t.type === 'nontechnical');
-    const untyped = c.milestones.filter(t => !t.type);
-    const milestones = `
-      ${msTable('Project objectives / milestones — Technical', tech2, 'Pick “Technical” in the Type column of an activity below to list it here.')}
-      ${msTable('Project objectives / milestones — Both', both, 'Pick “Both” in the Type column of an activity below to list it here.')}
-      ${msTable('Project objectives / milestones — Non-technical', nonTech, 'Pick “Non-technical” in the Type column of an activity below to list it here.')}
-      ${untyped.length ? `<details class="${UI.card} overflow-hidden" ${(!tech2.length && !both.length && !nonTech.length) ? 'open' : ''}>
-          <summary class="px-5 py-3 cursor-pointer text-sm font-bold text-slate-800 dark:text-white">Activities not classified yet <span class="text-slate-400 font-medium">· ${untyped.length}</span></summary>
-          ${msTable('Not classified', untyped, '', true)}
-        </details>` : ''}`;
+    const milestones = msTable('Project objectives / milestones', c.milestones || [], 'No objectives or milestones added yet.');
     root.innerHTML = header + deliverables + milestones;
     this.initLucide();
   },

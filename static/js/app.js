@@ -595,14 +595,46 @@ const app = {
     return unique;
   },
 
+  cleanAssigneeName(name) {
+    if (!name) return '';
+    return String(name).replace(/\s*\((member|Member)\)/i, '').trim();
+  },
+
+  getTaskStatusFlag(t) {
+    if (!t) return { label: 'On Track', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60', icon: 'check-circle' };
+    if (t.status === 'done') {
+      return { label: 'On Track', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60', icon: 'check-circle' };
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const newDue = (t.new_due_date || '').trim().slice(0, 10);
+    const actualDue = (t.due_date || '').trim().slice(0, 10);
+
+    if (newDue && newDue !== 'null' && newDue !== 'undefined' && newDue !== 'None') {
+      if (newDue < todayStr) {
+        return { label: 'Overdue', color: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60', icon: 'alert-circle' };
+      }
+      return { label: 'On Track', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60', icon: 'check-circle' };
+    }
+
+    if (actualDue && actualDue !== 'null' && actualDue !== 'undefined' && actualDue !== 'None') {
+      if (actualDue < todayStr) {
+        return { label: 'Overdue', color: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60', icon: 'alert-circle' };
+      }
+      return { label: 'On Track', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60', icon: 'check-circle' };
+    }
+
+    return { label: 'On Track', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60', icon: 'check-circle' };
+  },
+
   getTaskAssigneeName(t) {
     if (!t) return '';
-    if (t.assignee_name && String(t.assignee_name).trim()) return String(t.assignee_name).trim();
-    if (t.assignee_id) {
+    let name = '';
+    if (t.assignee_name && String(t.assignee_name).trim()) name = String(t.assignee_name).trim();
+    else if (t.assignee_id) {
       const member = this.state.currentProject?.members?.find(m => m && Number(m.id) === Number(t.assignee_id));
-      if (member && member.name) return member.name;
+      if (member && member.name) name = member.name;
     }
-    return '';
+    return this.cleanAssigneeName(name);
   },
 
   getTaskAssigneeAvatar(t) {
@@ -626,7 +658,7 @@ const app = {
       }
       memberSelect.innerHTML = `
         <option value="">All Assignees</option>
-        ${members.map(m => `<option value="${m.id}" ${String(m.id) === String(this.state.filterAssignee) ? 'selected' : ''}>${this.escapeHtml(m.name)}</option>`).join('')}
+        ${members.map(m => `<option value="${m.id}" ${String(m.id) === String(this.state.filterAssignee) ? 'selected' : ''}>${this.escapeHtml(this.cleanAssigneeName(m.name))}</option>`).join('')}
       `;
       memberSelect.value = this.state.filterAssignee || '';
     }
@@ -1046,20 +1078,9 @@ const app = {
     const isOverdue = !isDone && task.due_date && task.due_date < todayStr;
     const assigned = members.find(m => m.id === task.assignee_id);
 
-    // Left Border Strip Accent Color
-    const borderLeftColor = {
-      urgent: 'border-l-4 border-l-rose-500',
-      high: 'border-l-4 border-l-orange-500',
-      medium: 'border-l-4 border-l-amber-500',
-      low: 'border-l-4 border-l-emerald-500'
-    }[task.priority] || 'border-l-4 border-l-amber-500';
-
-    const priorityBadge = {
-      urgent: '<span class="px-1.5 py-0.2 rounded text-[10px] font-extrabold uppercase bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 flex items-center gap-0.5"><i data-lucide="flame" class="w-3 h-3"></i> Urgent</span>',
-      high: '<span class="px-1.5 py-0.2 rounded text-[10px] font-extrabold uppercase bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 flex items-center gap-0.5"><i data-lucide="alert-circle" class="w-3 h-3"></i> High</span>',
-      medium: '<span class="px-1.5 py-0.2 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Medium</span>',
-      low: '<span class="px-1.5 py-0.2 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">Low</span>'
-    }[task.priority] || '<span class="px-1.5 py-0.2 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600">Medium</span>';
+    const flag = this.getTaskStatusFlag(task);
+    const borderLeftColor = (flag.label === 'Overdue') ? 'border-l-4 border-l-rose-500' : 'border-l-4 border-l-emerald-500';
+    const statusFlagBadge = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${flag.color}"><i data-lucide="${flag.icon}" class="w-2.5 h-2.5"></i><span>${flag.label}</span></span>`;
 
     const subtaskTotal = task.subtask_count || 0;
     const subtaskDone = task.subtask_completed_count || 0;
@@ -1087,7 +1108,7 @@ const app = {
           </div>
 
           <div class="flex-shrink-0">
-            ${priorityBadge}
+            ${statusFlagBadge}
           </div>
         </div>
 
@@ -1654,6 +1675,7 @@ const app = {
       const progressWidth = Math.min(100, Math.max(0, pct));
       const assigneeName = this.getTaskAssigneeName(t);
       const assigneeAvatar = this.getTaskAssigneeAvatar(t);
+      const flag = this.getTaskStatusFlag(t);
 
       return `
         <div data-task-id="${t.id}" class="gantt-task-row flex items-center border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition py-1.5 group min-h-[48px]"
@@ -1725,7 +1747,9 @@ const app = {
                 <div class="flex items-center gap-1.5 mt-0.5 text-[10px] ${!isProgress ? 'pl-5' : 'pl-0'}">
                   <span class="capitalize px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 ${statusBadge}">${statusStyle.name}</span>
                   <span class="text-slate-300 dark:text-slate-600">•</span>
-                  <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[120px]">${assigneeName ? this.escapeHtml(assigneeName) : 'Unassigned'}</span>
+                  <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border flex-shrink-0 ${flag.color}">${flag.label}</span>
+                  <span class="text-slate-300 dark:text-slate-600">•</span>
+                  <span class="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[100px]">${assigneeName ? this.escapeHtml(assigneeName) : 'Unassigned'}</span>
                 </div>
               </div>
 
@@ -1755,20 +1779,20 @@ const app = {
               <!-- Date Arrow Separator (25px) -->
               <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center text-[11px] text-slate-400 dark:text-slate-500 font-bold select-none flex items-center justify-center">→</div>
 
-              <!-- Column 3: End Date Picker (110px) -->
-              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex items-center justify-center">
+              <!-- Column 3: Actual Due Date Picker (110px) -->
+              <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 flex flex-col items-center justify-center">
                 ${t.due_date ? (this.isFullAccess() ? `
                   <div class="w-[105px] h-7 bg-slate-100 dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-md px-1 flex items-center justify-between text-[11px] font-mono text-slate-800 dark:text-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition">
                     <input type="date" value="${t.due_date}"
                       onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)"
-                      title="Edit End / Due Date"
+                      title="Edit Actual Due Date"
                       class="w-full bg-transparent border-none p-0 text-[11px] font-mono text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer">
-                    <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear End Date">
+                    <button onclick="event.stopPropagation(); app.inlineUpdateGanttTask(${t.id}, 'due_date', '')" class="p-0.5 text-slate-400 hover:text-rose-500 rounded flex-shrink-0 transition ml-0.5" title="Clear Actual Due Date">
                       <i data-lucide="x" class="w-3 h-3"></i>
                     </button>
                   </div>
                 ` : `
-                  <div class="w-[105px] h-7 bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300 cursor-not-allowed select-none" title="Due date is locked once set">
+                  <div class="w-[105px] h-7 bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-md px-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300 cursor-not-allowed select-none" title="Actual Due Date is locked once set">
                     <span class="truncate">${this.escapeHtml(t.due_date)}</span>
                     <i data-lucide="lock" class="w-3 h-3 text-slate-400 flex-shrink-0 ml-1"></i>
                   </div>
@@ -1778,9 +1802,10 @@ const app = {
                       <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500 flex-shrink-0"></i>
                       <span class="truncate">Not Declared</span>
                     </div>
-                    <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set end date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                    <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set actual due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                   </div>
                 `}
+                ${t.new_due_date ? `<div class="text-[9px] font-mono font-bold text-blue-600 dark:text-blue-400 truncate max-w-[105px] mt-0.5" title="New Due Date (Reason: ${this.escapeHtml(t.new_due_date_reason || '')})">New: ${this.escapeHtml(t.new_due_date)}</div>` : ''}
               </div>
 
               <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
@@ -1920,7 +1945,7 @@ const app = {
                 <div class="w-[260px] min-w-[260px] max-w-[260px] flex-shrink-0 pl-3 pr-2.5">Activity / Owner</div>
                 <div class="w-[115px] min-w-[115px] max-w-[115px] flex-shrink-0 text-center">Start Date</div>
                 <div class="w-[25px] min-w-[25px] max-w-[25px] flex-shrink-0 text-center"></div>
-                <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center">End Date</div>
+                <div class="w-[110px] min-w-[110px] max-w-[110px] flex-shrink-0 text-center">Actual Due Date</div>
                 <div class="w-[30px] min-w-[30px] max-w-[30px] flex-shrink-0 text-center"></div>
               </div>
             `)}
@@ -2108,7 +2133,11 @@ const app = {
         case 'due_asc':
           return (a.due_date || '9999').localeCompare(b.due_date || '9999');
         case 'priority':
-          return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+        case 'status_flag':
+          const flagA = this.getTaskStatusFlag(a).label;
+          const flagB = this.getTaskStatusFlag(b).label;
+          if (flagA !== flagB) return flagA === 'Overdue' ? -1 : 1;
+          return (a.due_date || '9999').localeCompare(b.due_date || '9999');
         case 'hours_desc':
           return (b.estimated_hours || 0) - (a.estimated_hours || 0);
         case 'title_asc':
@@ -2142,7 +2171,8 @@ const app = {
     const isProgress = this.isProgressOnly();
     filtered.forEach((t, idx) => {
       const isDone = t.status === 'done';
-      const isOverdue = !isDone && t.due_date && t.due_date < todayStr;
+      const flag = this.getTaskStatusFlag(t);
+      const isOverdue = flag.label === 'Overdue';
       const assignedMember = members.find(m => m.id === t.assignee_id);
       const estH = parseFloat(t.estimated_hours) || 0;
       const actH = parseFloat(t.actual_hours) || 0;
@@ -2235,27 +2265,22 @@ const app = {
             </div>
           </td>
 
-          <!-- 3. Priority Dropdown -->
+          <!-- 3. Status Flag Badge -->
           <td class="px-3.5 py-2.5">
-            <div class="relative inline-block w-full max-w-[100px]">
-              <select ${isProgress ? 'disabled' : `onchange="app.inlineUpdateTask(${t.id}, 'priority', this.value)"`}
-                class="w-full text-xs font-semibold px-2 py-1 rounded-lg border appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${priorityConfig.color} ${isProgress ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}">
-                <option value="low" ${t.priority === 'low' ? 'selected' : ''}>Low</option>
-                <option value="medium" ${t.priority === 'medium' ? 'selected' : ''}>Medium</option>
-                <option value="high" ${t.priority === 'high' ? 'selected' : ''}>High</option>
-                <option value="urgent" ${t.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
-              </select>
-            </div>
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${flag.color}">
+              <i data-lucide="${flag.icon}" class="w-3 h-3"></i>
+              <span>${flag.label}</span>
+            </span>
           </td>
 
-          <!-- 4. Assignee / Role -->
+          <!-- 4. Assignee -->
           <td class="px-3.5 py-2.5">
             <div class="relative inline-block w-full max-w-[170px]">
               <select onchange="app.handleTableAssigneeChange(${t.id}, this.value)"
                 class="w-full text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium truncate cursor-pointer">
                 <option value="">Unassigned</option>
-                ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('')}
-                ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(t.assignee_name)} (Custom)</option>` : ''}
+                ${members.map(m => `<option value="${m.id}" ${t.assignee_id === m.id ? 'selected' : ''}>${this.escapeHtml(this.cleanAssigneeName(m.name))}</option>`).join('')}
+                ${(t.assignee_name && !t.assignee_id) ? `<option value="__current__" selected>${this.escapeHtml(this.cleanAssigneeName(t.assignee_name))}</option>` : ''}
                 ${!isProgress ? `
                 <option value="__add_new__" class="font-bold text-blue-600 dark:text-blue-400">+ Type Custom Assignee...</option>
                 <option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>
@@ -2298,7 +2323,7 @@ const app = {
             `}
           </td>
 
-          <!-- 7. Due Date -->
+          <!-- 7. Actual Due Date -->
           <td class="px-3.5 py-2.5">
             ${t.due_date ? (this.isFullAccess() ? `
               <div class="inline-flex items-center space-x-1 max-w-[130px]">
@@ -2310,7 +2335,7 @@ const app = {
                 </button>
               </div>
             ` : `
-              <div class="inline-flex items-center space-x-1.5 max-w-[130px] text-xs rounded-lg px-2 py-1 border font-mono cursor-not-allowed select-none ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-100/80 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}" title="Due date is locked once set">
+              <div class="inline-flex items-center space-x-1.5 max-w-[130px] text-xs rounded-lg px-2 py-1 border font-mono cursor-not-allowed select-none ${isOverdue ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold' : 'bg-slate-100/80 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}" title="Actual Due Date is locked once set for Lead/Assignee">
                 <span class="truncate">${this.escapeHtml(t.due_date)}</span>
                 <i data-lucide="lock" class="w-3 h-3 text-slate-400 flex-shrink-0"></i>
               </div>
@@ -2320,9 +2345,15 @@ const app = {
                   <i data-lucide="calendar-off" class="w-3 h-3 text-amber-500"></i>
                   <span>Not Declared</span>
                 </div>
-                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                <input type="date" value="" onchange="app.inlineUpdateTask(${t.id}, 'due_date', this.value)" title="Click to declare actual due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
               </div>
             `}
+            ${t.new_due_date ? `
+              <div class="mt-1 text-[11px] font-mono text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1" title="Reason for New Due Date: ${this.escapeHtml(t.new_due_date_reason || '')}">
+                <i data-lucide="calendar-clock" class="w-3 h-3 text-blue-500"></i>
+                <span>New: ${this.escapeHtml(t.new_due_date)}</span>
+              </div>
+            ` : ''}
           </td>
 
           <!-- 8. Hours (Est & Act) -->
@@ -3887,6 +3918,8 @@ const app = {
     const manualAssigneeInput = document.getElementById('task-input-assignee-manual');
     const startInput = document.getElementById('task-input-startdate');
     const dueInput = document.getElementById('task-input-duedate');
+    const newDueInput = document.getElementById('task-input-new-duedate');
+    const newDueReasonInput = document.getElementById('task-input-new-duedate-reason');
     const estInput = document.getElementById('task-input-esthours');
     const actInput = document.getElementById('task-input-acthours');
     const tagsInput = document.getElementById('task-input-tags');
@@ -3940,7 +3973,7 @@ const app = {
         }
       });
 
-      const enabledFields = [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, progressNum, progressSlider];
+      const enabledFields = [statusSelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, newDueInput, newDueReasonInput, estInput, actInput, progressNum, progressSlider];
 
       enabledFields.forEach(el => {
         if (el) {
@@ -3953,7 +3986,7 @@ const app = {
       if (saveBtn) saveBtn.textContent = 'Save Changes';
     } else {
       if (roleBanner) roleBanner.classList.add('hidden');
-      [titleInput, descInput, statusSelect, prioritySelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, estInput, actInput, tagsInput, posSelect, progressNum, progressSlider].forEach(el => {
+      [titleInput, descInput, statusSelect, prioritySelect, assigneeSelect, manualAssigneeInput, startInput, dueInput, newDueInput, newDueReasonInput, estInput, actInput, tagsInput, posSelect, progressNum, progressSlider].forEach(el => {
         if (el) {
           el.disabled = false;
           el.classList.remove('bg-slate-100', 'dark:bg-slate-800/60', 'cursor-not-allowed', 'opacity-80');
@@ -3980,7 +4013,7 @@ const app = {
         titleInput.value = localTask.title || '';
         descInput.value = localTask.description || '';
         statusSelect.value = localTask.status || 'todo';
-        prioritySelect.value = localTask.priority || 'medium';
+        if (prioritySelect) prioritySelect.value = localTask.priority || 'medium';
         
         const progressVal = (localTask.progress_pct !== undefined && localTask.progress_pct !== null) ? Number(localTask.progress_pct) : 0;
         if (progressNum) progressNum.value = progressVal;
@@ -4004,7 +4037,10 @@ const app = {
 
         startInput.value = localTask.start_date || '';
         dueInput.value = localTask.due_date || '';
+        if (newDueInput) newDueInput.value = localTask.new_due_date || '';
+        if (newDueReasonInput) newDueReasonInput.value = localTask.new_due_date_reason || '';
         this.applyDueDateLockState(Boolean(localTask.due_date));
+        this.updateTaskModalStatusFlag(localTask);
         estInput.value = localTask.estimated_hours || 0;
         if (actInput) actInput.value = localTask.actual_hours || 0;
         tagsInput.value = (localTask.tags || []).join(', ');
@@ -4032,7 +4068,7 @@ const app = {
           titleInput.value = task.title || '';
           descInput.value = task.description || '';
           statusSelect.value = task.status || 'todo';
-          prioritySelect.value = task.priority || 'medium';
+          if (prioritySelect) prioritySelect.value = task.priority || 'medium';
           
           const fetchedProgress = (task.progress_pct !== undefined && task.progress_pct !== null) ? Number(task.progress_pct) : 0;
           if (progressNum) progressNum.value = fetchedProgress;
@@ -4055,7 +4091,10 @@ const app = {
 
           startInput.value = task.start_date || '';
           dueInput.value = task.due_date || '';
+          if (newDueInput) newDueInput.value = task.new_due_date || '';
+          if (newDueReasonInput) newDueReasonInput.value = task.new_due_date_reason || '';
           this.applyDueDateLockState(Boolean(task.due_date));
+          this.updateTaskModalStatusFlag(task);
           estInput.value = task.estimated_hours || 0;
           if (actInput) actInput.value = task.actual_hours || 0;
           tagsInput.value = (task.tags || []).join(', ');
@@ -4081,7 +4120,7 @@ const app = {
       titleInput.value = '';
       descInput.value = '';
       statusSelect.value = params.status || 'todo';
-      prioritySelect.value = 'medium';
+      if (prioritySelect) prioritySelect.value = 'medium';
       
       if (progressNum) progressNum.value = 0;
       if (progressSlider) progressSlider.value = 0;
@@ -4097,7 +4136,10 @@ const app = {
       
       startInput.value = params.start_date || '';
       dueInput.value = params.due_date || '';
+      if (newDueInput) newDueInput.value = '';
+      if (newDueReasonInput) newDueReasonInput.value = '';
       this.applyDueDateLockState(false);
+      this.updateTaskModalStatusFlag({ status: params.status || 'todo', due_date: params.due_date || null });
       estInput.value = '4.0';
       if (actInput) actInput.value = '0.0';
       tagsInput.value = '';
@@ -4160,6 +4202,36 @@ const app = {
     this.updateTaskModalDateBadges();
   },
 
+  clearTaskModalNewDueDate() {
+    const newDueInput = document.getElementById('task-input-new-duedate');
+    const newDueReasonInput = document.getElementById('task-input-new-duedate-reason');
+    if (newDueInput) newDueInput.value = '';
+    if (newDueReasonInput) newDueReasonInput.value = '';
+    this.updateTaskModalDateBadges();
+  },
+
+  updateTaskModalStatusFlag(taskOrData = null) {
+    const flagEl = document.getElementById('task-modal-status-flag');
+    const textEl = document.getElementById('task-modal-status-flag-text');
+    if (!flagEl || !textEl) return;
+
+    let t = taskOrData;
+    if (!t) {
+      const status = document.getElementById('task-input-status')?.value || 'todo';
+      const dueDate = document.getElementById('task-input-duedate')?.value || null;
+      const newDueDate = document.getElementById('task-input-new-duedate')?.value || null;
+      t = { status, due_date: dueDate, new_due_date: newDueDate };
+    }
+    const flag = this.getTaskStatusFlag(t);
+    textEl.textContent = flag.label;
+    flagEl.className = `w-full h-[42px] px-3 border rounded-lg flex items-center gap-1.5 text-xs font-bold select-none ${flag.color}`;
+    const iconEl = flagEl.querySelector('i');
+    if (iconEl) {
+      iconEl.setAttribute('data-lucide', flag.icon);
+    }
+    this.initLucide();
+  },
+
   updateTaskModalDateBadges() {
     const sInput = document.getElementById('task-input-startdate');
     const sBadge = document.getElementById('task-startdate-undeclared-badge');
@@ -4180,6 +4252,7 @@ const app = {
         dBadge.classList.add('hidden');
       }
     }
+    this.updateTaskModalStatusFlag();
     this.initLucide();
   },
 
@@ -4204,7 +4277,7 @@ const app = {
       const curVal = assigneeSelect.value;
       const isProgress = this.isProgressOnly();
       assigneeSelect.innerHTML = `<option value="">Unassigned</option>` +
-        uniqueMembers.map(m => `<option value="${m.id}">${this.escapeHtml(m.name)} (${this.escapeHtml(m.role || 'Member')})</option>`).join('') +
+        uniqueMembers.map(m => `<option value="${m.id}">${this.escapeHtml(this.cleanAssigneeName(m.name))}</option>`).join('') +
         (!isProgress ? (
           `<option value="__manual__" class="font-bold text-blue-600 dark:text-blue-400">+ Type New / Custom Assignee Name...</option>` +
           `<option value="__manage__" class="font-bold text-slate-600 dark:text-slate-400">⚙️ Manage / Delete Assignees...</option>`
@@ -4215,7 +4288,7 @@ const app = {
     }
 
     if (membersDatalist && p) {
-      membersDatalist.innerHTML = uniqueMembers.map(m => `<option value="${this.escapeHtml(m.name)}">`).join('');
+      membersDatalist.innerHTML = uniqueMembers.map(m => `<option value="${this.escapeHtml(this.cleanAssigneeName(m.name))}">`).join('');
     }
   },
 
@@ -4403,7 +4476,7 @@ const app = {
               ${m.name.charAt(0).toUpperCase()}
             </div>
             <div class="min-w-0">
-              <div class="font-bold text-xs text-slate-800 dark:text-white truncate">${this.escapeHtml(m.name)}</div>
+              <div class="font-bold text-xs text-slate-800 dark:text-white truncate">${this.escapeHtml(this.cleanAssigneeName(m.name))}</div>
               <div class="text-[11px] text-slate-400 flex items-center space-x-1.5">
                 <span>${this.escapeHtml(m.role || 'Member')}</span>
                 <span>•</span>
@@ -4411,7 +4484,7 @@ const app = {
               </div>
             </div>
           </div>
-          <button type="button" onclick="app.deleteProjectMember(${m.id}, '${this.escapeHtml(m.name)}')"
+          <button type="button" onclick="app.deleteProjectMember(${m.id}, '${this.escapeHtml(this.cleanAssigneeName(m.name))}')"
             class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition flex items-center space-x-1"
             title="Delete this assignee from project dropdowns">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -5080,6 +5153,14 @@ const app = {
     const numTaskId = taskId ? Number(taskId) : null;
     const isExistingTask = numTaskId && numTaskId > 0;
 
+    const newDueDate = document.getElementById('task-input-new-duedate')?.value || null;
+    const newDueDateReason = document.getElementById('task-input-new-duedate-reason')?.value.trim() || null;
+
+    if (newDueDate && !newDueDateReason) {
+      this.showToast('Please provide a Reason for the New Due Date.', 'error');
+      return;
+    }
+
     const progressPct = Math.min(100, Math.max(0, parseInt(document.getElementById('task-input-progress')?.value || 0, 10)));
     const actHours = parseFloat(document.getElementById('task-input-acthours')?.value || 0);
 
@@ -5139,6 +5220,8 @@ const app = {
           assignee_avatar: assigneeAvatar,
           start_date: startDate,
           due_date: dueDate,
+          new_due_date: newDueDate,
+          new_due_date_reason: newDueDate ? newDueDateReason : null,
           estimated_hours: isNaN(estHours) ? 0.0 : estHours,
           actual_hours: isNaN(actHours) ? 0.0 : actHours,
           ...(isLead ? { description: desc, tags: tags || [] } : {})
@@ -5154,6 +5237,8 @@ const app = {
         assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : (assigneeName || undefined),
         start_date: startDate,
         due_date: dueDate,
+        new_due_date: newDueDate,
+        new_due_date_reason: newDueDate ? newDueDateReason : null,
         estimated_hours: isNaN(estHours) ? 0.0 : estHours,
         actual_hours: isNaN(actHours) ? 0.0 : actHours,
         ...(isLead ? { description: desc, tags: tags, subtasks: tempSubtasks } : {})
@@ -5274,6 +5359,8 @@ const app = {
       assignee_name: (isManualAssignee && manualAssigneeName) ? manualAssigneeName : (assigneeName || undefined),
       start_date: startDate,
       due_date: dueDate,
+      new_due_date: newDueDate,
+      new_due_date_reason: newDueDate ? newDueDateReason : null,
       estimated_hours: isNaN(estHours) ? 0.0 : estHours,
       actual_hours: isNaN(actHours) ? 0.0 : actHours,
       tags,
@@ -5300,6 +5387,8 @@ const app = {
           assignee_avatar: assigneeAvatar,
           start_date: startDate,
           due_date: dueDate,
+          new_due_date: newDueDate,
+          new_due_date_reason: newDueDate ? newDueDateReason : null,
           estimated_hours: isNaN(estHours) ? 0.0 : estHours,
           actual_hours: isNaN(actHours) ? 0.0 : actHours,
           tags,
@@ -5378,6 +5467,8 @@ const app = {
         assignee_avatar: assigneeAvatar,
         start_date: startDate,
         due_date: dueDate,
+        new_due_date: newDueDate,
+        new_due_date_reason: newDueDate ? newDueDateReason : null,
         estimated_hours: estHours,
         actual_hours: actHours,
         tags,

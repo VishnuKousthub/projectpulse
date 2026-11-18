@@ -83,12 +83,15 @@ def _d(value):
         return None
 
 
+import re
+
 def clean_assignee(name):
     """Imported sheets sometimes leave a date in the owner column; treat that as unassigned."""
     name = (name or "").strip()
-    if not name or name[:4].isdigit() and name[4:5] == "-":
+    if not name or (len(name) >= 5 and name[:4].isdigit() and name[4:5] == "-"):
         return "Unassigned"
-    return name
+    cleaned = re.sub(r"\s*\((?:member|Member)\)", "", name, flags=re.IGNORECASE).strip()
+    return cleaned or "Unassigned"
 
 
 def task_type(tags_json):
@@ -203,6 +206,7 @@ def build_charter_dict(conn, project_id):
     for t in tasks:
         td = dict(t)
         td["type"] = task_type(td.pop("tags", None))
+        td["assignee_name"] = clean_assignee(td.get("assignee_name"))
         milestones.append(td)
 
     deliv_list = []
@@ -230,7 +234,7 @@ def build_charter_dict(conn, project_id):
         "deliverables": deliv_list,
         "risks": [dict(r) for r in risks],
         "milestones": milestones,
-        "members": [r["name"] for r in members],
+        "members": [re.sub(r"\s*\((?:member|Member)\)", "", r["name"], flags=re.IGNORECASE).strip() for r in members if r["name"]],
     }
 
 

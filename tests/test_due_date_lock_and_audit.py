@@ -252,6 +252,77 @@ class TestDueDateLockAndAuditDashboard(unittest.TestCase):
         self.assertIn("Timestamp,Username,Full Name", csv_body)
         self.assertIn("Audit Tracked Synthesis Task v2", csv_body)
 
+    def test_04_new_due_date_and_status_flags(self):
+        # 1. Create a task with an expired due date in the past
+        code, t = wsgi_call("/api/projects/1/tasks", "POST", {
+            "title": "Status Flag Verification Task",
+            "status": "in_progress",
+            "start_date": "2020-01-01",
+            "due_date": "2020-01-10",
+        }, token=self.pm_token)
+        self.assertEqual(code, 200)
+        tid = t["id"]
+        self.assertEqual(t["status_flag"], "Overdue")
+
+        # 2. Lead/Assignee tries setting new_due_date WITHOUT a reason -> 400 Bad Request
+        code_no_reason, err = wsgi_call(f"/api/tasks/{tid}", "PUT", {
+            "new_due_date": "2099-12-31",
+            "new_due_date_reason": "",
+        }, token=self.lead_token)
+        self.assertEqual(code_no_reason, 400)
+        self.assertIn("Reason for New Due Date is required", str(err))
+
+        # 3. Lead sets new_due_date WITH a reason -> 200 OK
+        code_ok, upd = wsgi_call(f"/api/tasks/{tid}", "PUT", {
+            "new_due_date": "2099-12-31",
+            "new_due_date_reason": "Customer approved extension due to reagent delay",
+        }, token=self.lead_token)
+        self.assertEqual(code_ok, 200)
+        self.assertEqual(upd["new_due_date"], "2099-12-31")
+        self.assertEqual(upd["new_due_date_reason"], "Customer approved extension due to reagent delay")
+        # Task returns back to On Track!
+        self.assertEqual(upd["status_flag"], "On Track")
+
+        # 4. Assignee sets a new_due_date that has expired in the past -> returns Overdue
+        code_past, upd_past = wsgi_call(f"/api/tasks/{tid}", "PUT", {
+            "new_due_date": "2021-01-01",
+            "new_due_date_reason": "Historical milestone recalculation",
+        }, token=self.assignee_token)
+        self.assertEqual(code_past, 200)
+        self.assertEqual(upd_past["status_flag"], "Overdue")
+
+        # 5. When task status is marked 'done', it is always On Track
+        code_done, upd_done = wsgi_call(f"/api/tasks/{tid}", "PUT", {
+            "status": "done",
+        }, token=self.assignee_token)
+        self.assertEqual(code_done, 200)
+        self.assertEqual(upd_done["status_flag"], "On Track")
+
+    def test_05_clean_assignee_name_formatting(self):
+        # Add a project member with a '(member)' suffix in the name
+        code, member = wsgi_call("/api/projects/1/members", "POST", {
+            "name": "Gowri (member)",
+            "role": "Member",
+        }, token=self.pm_token)
+        self.assertIn(code, (200, 201))
+        # Verify returned member name has '(member)' stripped
+        self.assertEqual(member["name"], "Gowri")
+
+        # Verify listing members returns 'Gowri' without '(member)'
+        c_list, members = wsgi_call("/api/projects/1/members", "GET", token=self.lead_token)
+        self.assertEqual(c_list, 200)
+        gowri = next((m for m in members if m["id"] == member["id"]), None)
+        self.assertIsNotNone(gowri)
+        self.assertEqual(gowri["name"], "Gowri")
+
+        # Assign task to Gowri and check clean assignee_name on task
+        code_t, task = wsgi_call("/api/projects/1/tasks", "POST", {
+            "title": "Task Assigned to Gowri",
+            "assignee_id": member["id"],
+        }, token=self.lead_token)
+        self.assertEqual(code_t, 200)
+        self.assertEqual(task["assignee_name"], "Gowri")
+
 
 if __name__ == "__main__":
     unittest.main()

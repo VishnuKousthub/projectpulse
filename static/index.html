@@ -725,8 +725,8 @@
                 <select id="table-sort-by" onchange="app.setTableSortBy(this.value)" class="bg-transparent font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
                   <option value="order">Process Sequence (#01 → #N)</option>
                   <option value="date_asc">Start Date (Earliest First)</option>
-                  <option value="due_asc">Due Date (Earliest First)</option>
-                  <option value="priority">Priority (High to Low)</option>
+                  <option value="due_asc">Actual Due Date (Earliest First)</option>
+                  <option value="status_flag">Status Flag (Overdue First)</option>
                   <option value="hours_desc">Est. Hours (High to Low)</option>
                   <option value="title_asc">Title (A-Z)</option>
                 </select>
@@ -765,12 +765,12 @@
                     </div>
                   </th>
                   <th class="px-3.5 py-3 min-w-[110px]">
-                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('priority')">
-                      <span>Priority</span>
+                    <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('status_flag')">
+                      <span>Status Flag</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
-                  <th class="px-3.5 py-3 min-w-[180px]">Assignee / Role</th>
+                  <th class="px-3.5 py-3 min-w-[180px]">Assignee</th>
                   <th class="px-3.5 py-3 min-w-[140px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('progress')">
                       <span>Progress (%)</span>
@@ -785,7 +785,7 @@
                   </th>
                   <th class="px-3.5 py-3 min-w-[130px]">
                     <div class="flex items-center space-x-1.5 cursor-pointer hover:text-blue-600" onclick="app.setTableSortBy('due_asc')">
-                      <span>Due Date</span>
+                      <span>Actual Due Date</span>
                       <i data-lucide="chevrons-up-down" class="w-3 h-3 text-slate-400"></i>
                     </div>
                   </th>
@@ -1534,7 +1534,7 @@
               <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200">Limited edit</span>
             </div>
             <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
-              Logged in as <span id="task-modal-user-role" class="font-bold uppercase text-amber-600 dark:text-amber-400">Assignee</span>. You have permission to edit status, assignee, start/end dates, progress, hours, and project risks. Title, description, priority, tags, and task creation/deletion are locked.
+              Logged in as <span id="task-modal-user-role" class="font-bold uppercase text-amber-600 dark:text-amber-400">Assignee</span>. You have permission to edit status, assignee, start/end dates, new due date, progress, hours, and project risks. Title, description, tags, and task creation/deletion are locked.
             </p>
           </div>
         </div>
@@ -1609,13 +1609,11 @@
           </div>
 
           <div>
-            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority</label>
-            <select id="task-input-priority" class="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-white">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Status Flag</label>
+            <div id="task-modal-status-flag" class="w-full h-[42px] px-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 select-none">
+              <i data-lucide="check-circle" class="w-4 h-4 text-emerald-500 flex-shrink-0"></i>
+              <span id="task-modal-status-flag-text">On Track</span>
+            </div>
           </div>
 
           <div>
@@ -1678,9 +1676,9 @@
 
           <div class="relative">
             <div class="flex items-center justify-between mb-1">
-              <label class="block font-semibold text-slate-700 dark:text-slate-300">Due Date</label>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300">Actual Due Date</label>
               <div class="flex items-center gap-1.5">
-                <span id="task-duedate-locked-badge" class="hidden inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700" title="Due date is locked once set">
+                <span id="task-duedate-locked-badge" class="hidden inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700" title="Actual Due Date is locked once set for Lead/Assignee">
                   <i data-lucide="lock" class="w-2.5 h-2.5"></i>
                   <span>Locked</span>
                 </span>
@@ -1709,6 +1707,21 @@
           <div>
             <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tags</label>
             <input type="text" id="task-input-tags" placeholder="qc, batch, 1kg" class="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white">
+          </div>
+        </div>
+
+        <!-- New Due Date & Reason Section (Editable by Lead & Assignee) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 text-xs">New Due Date</label>
+              <button type="button" onclick="app.clearTaskModalNewDueDate()" class="text-[10px] text-slate-400 hover:text-rose-600 font-semibold transition" title="Clear New Due Date">Clear</button>
+            </div>
+            <input type="date" id="task-input-new-duedate" oninput="app.updateTaskModalDateBadges()" class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white text-xs font-mono">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 text-xs mb-1">Reason for New Due Date <span class="text-rose-500 font-bold">*</span></label>
+            <input type="text" id="task-input-new-duedate-reason" placeholder="Required when New Due Date is set..." class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white text-xs">
           </div>
         </div>
 

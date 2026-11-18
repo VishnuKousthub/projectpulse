@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import re
 import hashlib
 import secrets
 import base64
@@ -318,6 +319,8 @@ def init_db():
             order_index INTEGER DEFAULT 0,
             start_date TEXT,
             due_date TEXT,
+            new_due_date TEXT,
+            new_due_date_reason TEXT,
             estimated_hours REAL DEFAULT 0,
             actual_hours REAL DEFAULT 0,
             progress_pct INTEGER DEFAULT 0,
@@ -331,9 +334,27 @@ def init_db():
         )
         """)
 
-        # Migration: ensure progress_pct exists on existing tasks table
+        # Migration: ensure progress_pct, new_due_date, new_due_date_reason exist on existing tasks table
         try:
             cursor.execute("ALTER TABLE tasks ADD COLUMN progress_pct INTEGER DEFAULT 0")
+        except Exception:
+            pass
+
+        for col, col_type in (
+            ("new_due_date", "TEXT"),
+            ("new_due_date_reason", "TEXT"),
+        ):
+            try:
+                cursor.execute(f"ALTER TABLE tasks ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+
+        # Cleanup any "(member)" suffix that might have been stored in members table
+        try:
+            m_rows = cursor.execute("SELECT id, name FROM members WHERE name LIKE '%(member)%' OR name LIKE '%(Member)%'").fetchall()
+            for m in m_rows:
+                cleaned = re.sub(r'\s*\((member|Member)\)', '', m['name'], flags=re.I).strip()
+                cursor.execute("UPDATE members SET name = ? WHERE id = ?", (cleaned, m['id']))
         except Exception:
             pass
 
