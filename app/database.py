@@ -349,12 +349,28 @@ def init_db():
             except Exception:
                 pass
 
-        # Cleanup any "(member)" suffix that might have been stored in members table
+        # Cleanup any "(member)" suffix that might have been stored in members, tasks, or users tables
         try:
             m_rows = cursor.execute("SELECT id, name FROM members WHERE name LIKE '%(member)%' OR name LIKE '%(Member)%'").fetchall()
             for m in m_rows:
                 cleaned = re.sub(r'\s*\((member|Member)\)', '', m['name'], flags=re.I).strip()
                 cursor.execute("UPDATE members SET name = ? WHERE id = ?", (cleaned, m['id']))
+        except Exception:
+            pass
+
+        try:
+            t_rows = cursor.execute("SELECT id, assignee_name FROM tasks WHERE assignee_name LIKE '%(member)%' OR assignee_name LIKE '%(Member)%'").fetchall()
+            for tr in t_rows:
+                cleaned = re.sub(r'\s*\((member|Member)\)', '', tr['assignee_name'], flags=re.I).strip()
+                cursor.execute("UPDATE tasks SET assignee_name = ? WHERE id = ?", (cleaned, tr['id']))
+        except Exception:
+            pass
+
+        try:
+            u_rows = cursor.execute("SELECT id, full_name FROM users WHERE full_name LIKE '%(member)%' OR full_name LIKE '%(Member)%'").fetchall()
+            for ur in u_rows:
+                cleaned = re.sub(r'\s*\((member|Member)\)', '', ur['full_name'], flags=re.I).strip()
+                cursor.execute("UPDATE users SET full_name = ? WHERE id = ?", (cleaned, ur['id']))
         except Exception:
             pass
 

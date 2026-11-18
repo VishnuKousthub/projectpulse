@@ -24,6 +24,11 @@ const UI = {
 
 Object.assign(app, {
   // ------------------------------------------------------------------ setup
+  cleanAssigneeName(name) {
+    if (!name) return '';
+    return String(name).replace(/\s*\((member|Member)\)/i, '').trim();
+  },
+
   getLandingView() {
     const role = this.getUserRole();
     if (role === 'lead' || role === 'assignee' || role === 'member' || role === 'developer') {
@@ -177,7 +182,7 @@ Object.assign(app, {
           onclick="app.openProjectFromDashboard(${t.project_id}, 'table')">
         <td class="${UI.td}"><div class="font-semibold text-slate-900 dark:text-white truncate max-w-[240px]">${esc(t.title)}</div>
           <div class="text-[10px] text-slate-400 truncate max-w-[240px]">${esc(t.project_name)}</div></td>
-        <td class="${UI.td}">${esc(t.assignee)}</td>
+        <td class="${UI.td}">${esc(this.cleanAssigneeName(t.assignee))}</td>
         <td class="${UI.td} text-right text-rose-600 font-bold whitespace-nowrap">${t.days_late}d late</td>
       </tr>`).join('') : `<tr><td colspan="3" class="py-6 text-center text-xs text-slate-400">Nothing overdue 🎉</td></tr>`;
 
@@ -195,7 +200,7 @@ Object.assign(app, {
     const maxOpen = Math.max(1, ...d.workload.map(w => w.open));
     const workload = d.workload.length ? d.workload.map(w => `
       <div class="flex items-center gap-2 text-xs">
-        <div class="w-28 truncate text-slate-700 dark:text-slate-200" title="${esc(w.name)}">${esc(w.name)}</div>
+        <div class="w-28 truncate text-slate-700 dark:text-slate-200" title="${esc(this.cleanAssigneeName(w.name))}">${esc(this.cleanAssigneeName(w.name))}</div>
         <div class="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden flex">
           <div class="h-full bg-rose-500" style="width:${w.overdue / maxOpen * 100}%"></div>
           <div class="h-full bg-blue-500" style="width:${(w.open - w.overdue) / maxOpen * 100}%"></div>
@@ -874,7 +879,7 @@ Object.assign(app, {
               <td class="${UI.td} text-slate-400 font-bold">${i + 1}</td>
               <td class="${UI.td} font-bold text-slate-900 dark:text-white">${esc(t.title)}</td>
               <td class="${UI.td} whitespace-nowrap">${t.start_date || t.due_date ? `${this.fmtDate(t.start_date)} → ${this.fmtDate(t.due_date)}` : '<span class="text-slate-400 font-medium">Not declared</span>'}</td>
-              <td class="${UI.td}">${esc(this.cleanAssigneeName ? this.cleanAssigneeName(t.assignee_name) : t.assignee_name) || '<span class="text-slate-400">Unassigned</span>'}</td>
+              <td class="${UI.td}">${esc(this.cleanAssigneeName(t.assignee_name)) || '<span class="text-slate-400">Unassigned</span>'}</td>
               <td class="${UI.td}">${esc(String(t.status || '').replace('_', ' '))}</td>
             </tr>`).join('') : `<tr><td colspan="5" class="py-5 text-center text-xs font-semibold text-slate-400">${emptyText}</td></tr>`}
           </tbody></table></div>

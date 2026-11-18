@@ -637,7 +637,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
                 })
             ph = ",".join("?" * len(project_ids))
             tasks = conn.execute(f"""
-                SELECT t.id, t.project_id, t.title, t.status, t.priority, t.due_date, t.progress_pct,
+                SELECT t.id, t.project_id, t.title, t.status, t.priority, t.due_date, t.new_due_date, t.progress_pct,
                        m.name AS assignee_name
                 FROM tasks t LEFT JOIN members m ON t.assignee_id = m.id
                 WHERE t.project_id IN ({ph})
@@ -677,7 +677,8 @@ def register(app, *, get_db, json_response, request, get_current_user,
             next_due = None
             for t in pts:
                 st = (t["status"] or "todo").lower()
-                dd = _d(t["due_date"])
+                eff_due_str = t["new_due_date"] if (t["new_due_date"] and str(t["new_due_date"]).strip() not in ("", "null", "undefined", "None")) else t["due_date"]
+                dd = _d(eff_due_str)
                 if st in ("done", "completed"):
                     done += 1
                     continue
@@ -690,7 +691,7 @@ def register(app, *, get_db, json_response, request, get_current_user,
                     overdue_list.append({
                         "task_id": t["id"], "project_id": p["id"], "project_name": p["name"],
                         "title": t["title"], "assignee": name,
-                        "due_date": str(t["due_date"])[:10], "days_late": (today - dd).days,
+                        "due_date": str(eff_due_str)[:10], "days_late": (today - dd).days,
                     })
                 else:
                     if st in ("in_progress", "in progress", "doing"):

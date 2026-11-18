@@ -376,7 +376,7 @@ def get_all_projects_aggregated(conn, user=None):
                 p.*,
                 COUNT(t.id) as total_tasks,
                 SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
-                SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
+                SUM(CASE WHEN t.status != 'done' AND COALESCE(NULLIF(t.new_due_date, ''), t.due_date) < date('now') AND COALESCE(NULLIF(t.new_due_date, ''), t.due_date) IS NOT NULL AND COALESCE(NULLIF(t.new_due_date, ''), t.due_date) != '' THEN 1 ELSE 0 END) as overdue_tasks,
                 COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
                 COALESCE(SUM(t.estimated_hours), 0) as total_estimated_hours
             FROM projects p
@@ -392,7 +392,7 @@ def get_all_projects_aggregated(conn, user=None):
                 p.*,
                 COUNT(t.id) as total_tasks,
                 SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as completed_tasks,
-                SUM(CASE WHEN t.status != 'done' AND t.due_date < date('now') AND t.due_date IS NOT NULL AND t.due_date != '' THEN 1 ELSE 0 END) as overdue_tasks,
+                SUM(CASE WHEN t.status != 'done' AND COALESCE(NULLIF(t.new_due_date, ''), t.due_date) < date('now') AND COALESCE(NULLIF(t.new_due_date, ''), t.due_date) IS NOT NULL AND COALESCE(NULLIF(t.new_due_date, ''), t.due_date) != '' THEN 1 ELSE 0 END) as overdue_tasks,
                 COALESCE(SUM(t.actual_hours), 0) as total_actual_hours,
                 COALESCE(SUM(t.estimated_hours), 0) as total_estimated_hours
             FROM projects p
@@ -3133,7 +3133,7 @@ def get_analytics(project_id):
                 COUNT(*) as total_tasks,
                 COUNT(CASE WHEN status = 'done' THEN 1 END) as done_tasks,
                 COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
-                COUNT(CASE WHEN status != 'done' AND due_date < date('now') AND due_date IS NOT NULL THEN 1 END) as overdue_tasks,
+                COUNT(CASE WHEN status != 'done' AND COALESCE(NULLIF(new_due_date, ''), due_date) < date('now') AND COALESCE(NULLIF(new_due_date, ''), due_date) IS NOT NULL THEN 1 END) as overdue_tasks,
                 COALESCE(SUM(estimated_hours), 0) as total_est_hours,
                 COALESCE(SUM(actual_hours), 0) as total_act_hours
             FROM tasks
@@ -3443,7 +3443,9 @@ def build_cumulative_project_report(conn, project_id, current_user=None):
             progress_pct = 0
 
         start_d = t["start_date"]
-        due_d = t["due_date"]
+        raw_new_due = t["new_due_date"] if "new_due_date" in t.keys() else None
+        due_d = raw_new_due if (raw_new_due and str(raw_new_due).strip() not in ("", "null", "undefined", "None")) else t["due_date"]
+        actual_due_d = t["due_date"]
         duration_days = None
         is_overdue = False
         delay_days = 0

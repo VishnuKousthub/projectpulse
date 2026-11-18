@@ -766,15 +766,18 @@ const app = {
     let url = `/api/projects/${reqProjectId}/tasks?`;
     if (this.state.searchQuery) url += `search=${encodeURIComponent(this.state.searchQuery)}&`;
     if (this.state.filterAssignee) url += `assignee_id=${encodeURIComponent(this.state.filterAssignee)}&`;
-    if (this.state.filterPriority) url += `priority=${encodeURIComponent(this.state.filterPriority)}&`;
 
     try {
       const tasks = await this.api(url);
       if (seq !== this._projectSeq || Number(this.state.currentProjectId) !== reqProjectId) {
         return;
       }
-      this.state.tasks = tasks;
-      if (!this.state.searchQuery && !this.state.filterAssignee && !this.state.filterPriority) {
+      if (this.state.filterStatusFlag) {
+        this.state.tasks = (tasks || []).filter(t => this.getTaskStatusFlag(t).label === this.state.filterStatusFlag);
+      } else {
+        this.state.tasks = tasks || [];
+      }
+      if (!this.state.searchQuery && !this.state.filterAssignee && !this.state.filterStatusFlag) {
         this.syncCurrentProjectCache();
       }
       this.renderCurrentView();
@@ -795,7 +798,7 @@ const app = {
 
   handleFilterChange() {
     this.state.filterAssignee = document.getElementById('filter-assignee')?.value || '';
-    this.state.filterPriority = document.getElementById('filter-priority')?.value || '';
+    this.state.filterStatusFlag = document.getElementById('filter-status-flag')?.value || '';
     this.fetchTasks();
   },
 
@@ -919,19 +922,17 @@ const app = {
 
     const swimlane = this.state.kanbanSwimlane;
 
-    if (swimlane === 'priority') {
-      // Swimlanes Layout by Priority
-      const priorities = [
-        { id: 'urgent', title: 'Urgent Priority', color: '#EF4444' },
-        { id: 'high', title: 'High Priority', color: '#F97316' },
-        { id: 'medium', title: 'Medium Priority', color: '#F59E0B' },
-        { id: 'low', title: 'Low Priority', color: '#10B981' }
+    if (swimlane === 'status_flag' || swimlane === 'priority') {
+      // Swimlanes Layout by Status Flag (Overdue vs On Track)
+      const flags = [
+        { id: 'Overdue', title: 'Overdue Activities', color: '#EF4444' },
+        { id: 'On Track', title: 'On Track Activities', color: '#10B981' }
       ];
-      const swimlaneGroups = priorities.map(p => ({
-        id: p.id,
-        title: p.title,
-        color: p.color,
-        tasks: filteredTasks.filter(t => (t.priority || 'medium') === p.id)
+      const swimlaneGroups = flags.map(f => ({
+        id: f.id,
+        title: f.title,
+        color: f.color,
+        tasks: filteredTasks.filter(t => this.getTaskStatusFlag(t).label === f.id)
       })).filter(g => g.tasks.length > 0);
 
       boardContainer.innerHTML = swimlaneGroups.map(sg => {
@@ -1805,7 +1806,9 @@ const app = {
                     <input type="date" value="" onchange="app.inlineUpdateGanttTask(${t.id}, 'due_date', this.value)" title="Click to set actual due date" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                   </div>
                 `}
-                ${t.new_due_date ? `<div class="text-[9px] font-mono font-bold text-blue-600 dark:text-blue-400 truncate max-w-[105px] mt-0.5" title="New Due Date (Reason: ${this.escapeHtml(t.new_due_date_reason || '')})">New: ${this.escapeHtml(t.new_due_date)}</div>` : ''}
+                ${t.new_due_date ? `<div onclick="app.openTaskModal({id: ${t.id}})" class="text-[9px] font-mono font-bold text-blue-600 dark:text-blue-400 truncate max-w-[105px] mt-0.5 cursor-pointer hover:underline" title="New Due Date (Reason: ${this.escapeHtml(t.new_due_date_reason || '')}) - Click to edit">New: ${this.escapeHtml(t.new_due_date)}</div>` : (t.due_date && !this.isFullAccess() ? `
+                  <div onclick="app.openTaskModal({id: ${t.id}})" class="text-[8.5px] font-medium text-blue-600 dark:text-blue-400 truncate max-w-[105px] mt-0.5 cursor-pointer hover:underline" title="Set New Due Date">+ New Due Date</div>
+                ` : '')}
               </div>
 
               <!-- Column 4: Dedicated Direct Delete Action Column (30px) -->
@@ -2072,8 +2075,8 @@ const app = {
     const totalActHours = allTasks.reduce((acc, t) => acc + (parseFloat(t.actual_hours) || 0), 0);
     const inProgressCount = allTasks.filter(t => t.status === 'in_progress').length;
     const pendingCount = allTasks.filter(t => t.status === 'todo' || t.status === 'in_review' || t.status === 'backlog').length;
-    const criticalCount = allTasks.filter(t => t.priority === 'urgent' || t.priority === 'high').length;
-    const overdueCount = allTasks.filter(t => t.status !== 'done' && t.due_date && t.due_date < todayStr).length;
+    const onTrackCount = allTasks.filter(t => this.getTaskStatusFlag(t).label === 'On Track').length;
+    const overdueCount = allTasks.filter(t => this.getTaskStatusFlag(t).label === 'Overdue').length;
 
     // Update KPI Elements
     const statComp = document.getElementById('table-stat-completed');
@@ -2089,7 +2092,7 @@ const app = {
     if (statHrs) statHrs.textContent = `${totalEstHours.toFixed(1)}h est / ${totalActHours.toFixed(1)}h act`;
     if (statInProg) statInProg.textContent = `${inProgressCount} In Progress`;
     if (statTodo) statTodo.textContent = `${pendingCount} Pending / Review`;
-    if (statCrit) statCrit.textContent = `${criticalCount} High / Urgent`;
+    if (statCrit) statCrit.textContent = `${onTrackCount} On Track`;
     if (statOver) statOver.textContent = `${overdueCount} Overdue`;
 
     const statBudgetCard = document.getElementById('table-stat-budget-card');
@@ -2349,11 +2352,16 @@ const app = {
               </div>
             `}
             ${t.new_due_date ? `
-              <div class="mt-1 text-[11px] font-mono text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1" title="Reason for New Due Date: ${this.escapeHtml(t.new_due_date_reason || '')}">
+              <div onclick="app.openTaskModal({id: ${t.id}})" class="mt-1 text-[11px] font-mono text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1 cursor-pointer hover:underline" title="Reason for New Due Date: ${this.escapeHtml(t.new_due_date_reason || '')} (Click to edit)">
                 <i data-lucide="calendar-clock" class="w-3 h-3 text-blue-500"></i>
                 <span>New: ${this.escapeHtml(t.new_due_date)}</span>
               </div>
-            ` : ''}
+            ` : (t.due_date && !this.isFullAccess() ? `
+              <div onclick="app.openTaskModal({id: ${t.id}})" class="mt-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium hover:underline cursor-pointer flex items-center gap-0.5" title="Request or set a New Due Date with reason">
+                <i data-lucide="plus" class="w-2.5 h-2.5"></i>
+                <span>Set New Due Date</span>
+              </div>
+            ` : '')}
           </td>
 
           <!-- 8. Hours (Est & Act) -->
@@ -2427,7 +2435,7 @@ const app = {
   },
 
   async inlineUpdateTask(taskId, field, value, extraPayload = {}) {
-    const allowedRestricted = ['status', 'assignee_id', 'start_date', 'due_date', 'end_date', 'progress_pct', 'estimated_hours', 'actual_hours'];
+    const allowedRestricted = ['status', 'assignee_id', 'start_date', 'due_date', 'end_date', 'progress_pct', 'estimated_hours', 'actual_hours', 'new_due_date', 'new_due_date_reason'];
     if (this.isProgressOnly() && !allowedRestricted.includes(field)) {
       this.showToast('You do not have permission to edit this field.', 'warning');
       return;
