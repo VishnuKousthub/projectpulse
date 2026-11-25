@@ -1250,6 +1250,10 @@ Object.assign(app, {
     const users = this.state.usersList || [];
     const currentUserId = this.state.user?.id;
     const showAddForm = !!this.state.showAddUserForm;
+    if (this.state.showAllUserPasswords === undefined) {
+      this.state.showAllUserPasswords = true;
+    }
+    const showAllPwds = !!this.state.showAllUserPasswords;
     const esc = (s) => this.escapeHtml(s || '');
 
     root.innerHTML = `
@@ -1269,7 +1273,11 @@ Object.assign(app, {
                 Admin = everything, including Users and the advanced views; PM = everything except Users; Lead and Assignee = limited edit (status, assignee, dates, progress, hours, risks).
               </p>
             </div>
-            <div>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="app.toggleAllUserPasswords()" class="${UI.btn} ${UI.btnGhost}">
+                <i data-lucide="${showAllPwds ? 'eye-off' : 'eye'}" class="w-4 h-4"></i>
+                <span>${showAllPwds ? 'Hide passwords' : 'Show all passwords'}</span>
+              </button>
               <button onclick="app.toggleAddUserForm(${!showAddForm})" class="${UI.btn} ${UI.btnPrimary}">
                 <i data-lucide="${showAddForm ? 'x' : 'user-plus'}" class="w-4 h-4"></i>
                 <span>${showAddForm ? 'Close form' : 'Add user'}</span>
@@ -1373,14 +1381,25 @@ Object.assign(app, {
                       </td>
                       <td class="${UI.td}">
                         <div class="flex items-center gap-1.5 font-mono text-[11px]">
-                          <span id="user-pwd-text-${u.id}" class="text-slate-500 select-all tracking-wider font-semibold">••••••••</span>
-                          <button
-                            type="button"
-                            onclick="app.toggleUserPasswordPeek(${u.id}, '${esc(u.password_preview || '')}')"
-                            class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition"
-                            title="Reveal / Hide password">
-                            <i id="user-pwd-icon-${u.id}" data-lucide="eye" class="w-3.5 h-3.5"></i>
-                          </button>
+                          ${u.password_preview ? `
+                            <span id="user-pwd-text-${u.id}" data-revealed="${showAllPwds ? '1' : '0'}" class="${showAllPwds ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-500 font-semibold'} select-all tracking-wider">${showAllPwds ? esc(u.password_preview) : '••••••••'}</span>
+                            <button
+                              type="button"
+                              onclick="app.toggleUserPasswordPeek(${u.id})"
+                              class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                              title="Reveal / Hide password">
+                              <i id="user-pwd-icon-${u.id}" data-lucide="${showAllPwds ? 'eye-off' : 'eye'}" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button
+                              type="button"
+                              onclick="app.copyUserPassword(${u.id})"
+                              class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                              title="Copy password">
+                              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            </button>
+                          ` : `
+                            <span class="text-slate-400 italic text-[10px]" title="Legacy account created without stored preview. Use Reset password to set a visible password.">Not stored (reset to set)</span>
+                          `}
                           ${u.must_reset_password ? `
                             <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" title="User must reset temporary password on next login">Temp</span>
                           ` : ''}
@@ -1528,22 +1547,46 @@ Object.assign(app, {
     }
   },
 
-  toggleUserPasswordPeek(userId, plainPassword) {
+  toggleAllUserPasswords() {
+    this.state.showAllUserPasswords = !this.state.showAllUserPasswords;
+    this.paintUsers();
+  },
+
+  async copyUserPassword(userId) {
+    const u = (this.state.usersList || []).find(x => Number(x.id) === Number(userId));
+    const plainPassword = u?.password_preview || '';
+    if (!plainPassword) {
+      this.showToast('No password stored for this user', 'warning');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(plainPassword);
+      this.showToast(`Copied password for @${u.username}`, 'success');
+    } catch (e) {
+      this.showToast('Failed to copy password', 'error');
+    }
+  },
+
+  toggleUserPasswordPeek(userId) {
+    const u = (this.state.usersList || []).find(x => Number(x.id) === Number(userId));
+    const plainPassword = u?.password_preview || '';
     const textEl = document.getElementById(`user-pwd-text-${userId}`);
     const iconEl = document.getElementById(`user-pwd-icon-${userId}`);
     if (!textEl) return;
-    const isMasked = textEl.textContent === '••••••••';
-    if (isMasked) {
+    const isRevealed = textEl.dataset.revealed === '1';
+    if (!isRevealed) {
       textEl.textContent = plainPassword || '(none)';
-      textEl.classList.remove('text-slate-500');
+      textEl.dataset.revealed = '1';
+      textEl.classList.remove('text-slate-500', 'font-semibold');
       textEl.classList.add('text-blue-600', 'dark:text-blue-400', 'font-bold');
       if (iconEl) {
         iconEl.setAttribute('data-lucide', 'eye-off');
       }
     } else {
       textEl.textContent = '••••••••';
+      textEl.dataset.revealed = '0';
       textEl.classList.remove('text-blue-600', 'dark:text-blue-400', 'font-bold');
-      textEl.classList.add('text-slate-500');
+      textEl.classList.add('text-slate-500', 'font-semibold');
       if (iconEl) {
         iconEl.setAttribute('data-lucide', 'eye');
       }
