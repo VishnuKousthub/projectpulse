@@ -425,7 +425,7 @@ const app = {
         await this.selectProject(targetId);
         if (!this._landed) {
           this._landed = true;
-          this.switchView(FEATURES.landingView);
+          this.switchView(this.getLandingView ? this.getLandingView() : FEATURES.landingView);
         }
       } else {
         this.openProjectModal();
@@ -676,10 +676,10 @@ const app = {
       return this.switchView(this.getLandingView ? this.getLandingView() : (isProgress ? 'table' : 'dashboard'));
     }
     if (viewName === 'charter' && !this.isFullAccess()) {
-      return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
+      return this.switchView(this.getLandingView ? this.getLandingView() : 'gantt');
     }
-    if (viewName === 'dashboard' && isProgress) {
-      return this.switchView(this.getLandingView ? this.getLandingView() : 'table');
+    if (viewName === 'dashboard' && !this.isFullAccess()) {
+      return this.switchView(this.getLandingView ? this.getLandingView() : 'gantt');
     }
 
     if (window.innerWidth < 768) {
@@ -6665,10 +6665,10 @@ const app = {
       container.classList.add('hidden');
     }
     this.hideAuthError();
-    // Land on the Dashboard the first time the user gets in
+    // Land on the role-appropriate landing view the first time the user gets in
     if (!this._landed) {
       this._landed = true;
-      this.switchView(FEATURES.landingView);
+      this.switchView(this.getLandingView ? this.getLandingView() : FEATURES.landingView);
     }
   },
 
@@ -6831,6 +6831,7 @@ const app = {
         this.renderProjectsSidebar();
         this.populateFilterDropdowns();
         const landing = this.getLandingView ? this.getLandingView() : (typeof FEATURES !== 'undefined' && FEATURES.landingView ? FEATURES.landingView : 'dashboard');
+        this._landed = true;
         this.switchView(landing);
         this.hideAuthContainer();
         this.showToast(`Welcome back, ${res.user.full_name}!`, 'success');

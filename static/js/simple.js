@@ -30,9 +30,8 @@ Object.assign(app, {
   },
 
   getLandingView() {
-    const role = this.getUserRole();
-    if (role === 'lead' || role === 'assignee' || role === 'member' || role === 'developer') {
-      return 'table';
+    if (!this.isFullAccess()) {
+      return 'gantt';
     }
     return FEATURES.landingView || 'dashboard';
   },
